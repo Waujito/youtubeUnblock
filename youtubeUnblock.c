@@ -19,6 +19,12 @@
 #include <linux/if_ether.h>
 #include <sys/socket.h>
 
+#ifndef NOUSE_GSO
+
+#define USE_GSO
+
+#endif
+
 #define RAWSOCKET_MARK 0xfc70
 
 static struct {
@@ -142,7 +148,116 @@ static int close_raw_socket(void) {
 	return 0;
 }
 
+// split packet to two ipv4 fragments.
+static int ipv4_frag(struct pkt_buff *pktb, size_t payload_offset,
+		     struct pkt_buff **frag1, struct pkt_buff **frag2) {
+	uint8_t buff1[MNL_SOCKET_BUFFER_SIZE];
+	uint8_t buff2[MNL_SOCKET_BUFFER_SIZE];
+
+	struct iphdr *hdr = nfq_ip_get_hdr(pktb);
+	size_t hdr_len = hdr->ihl * 4;
+
+	uint8_t *payload = pktb_data(pktb) + hdr_len;
+	size_t plen = pktb_len(pktb) - hdr_len;
+
+	if (hdr == NULL || payload == NULL || plen <= payload_offset) {
+		errno = EINVAL;
+		return -1;
+	}
+
+	if (payload_offset & ((1 << 3) - 1)) {
+		fprintf(stderr, "Payload offset MUST be a multiply of 8!\n");
+		errno = EINVAL;
+		return -1;
+	}
+
+	size_t f1_plen = payload_offset;
+	size_t f1_dlen = f1_plen + hdr_len;
+
+	size_t f2_plen = plen - payload_offset;
+	size_t f2_dlen = f2_plen + hdr_len;
+
+	memcpy(buff1, hdr, hdr_len);
+	memcpy(buff2, hdr, hdr_len);
+
+	memcpy(buff1 + hdr_len, payload, f1_plen);
+	memcpy(buff2 + hdr_len, payload + payload_offset, f2_plen);
+
+	struct iphdr *f1_hdr = (void *)buff1;
+	struct iphdr *f2_hdr = (void *)buff2;
+
+	uint16_t f1_frag_off = ntohs(f1_hdr->frag_off);
+	uint16_t f2_frag_off = ntohs(f2_hdr->frag_off);
+
+	f1_frag_off &= IP_OFFMASK;
+	f1_frag_off |= IP_MF;
+	
+	if ((f2_frag_off & ~IP_OFFMASK) == IP_MF) {
+		f2_frag_off &= IP_OFFMASK;
+		f2_frag_off |= IP_MF;
+	} else {
+		f2_frag_off &= IP_OFFMASK;
+	}
+	
+	f2_frag_off += (uint16_t)payload_offset / 8;
+
+	f1_hdr->frag_off = htons(f1_frag_off);
+	f1_hdr->tot_len = htons(f1_dlen);
+
+	f2_hdr->frag_off = htons(f2_frag_off);
+	f2_hdr->tot_len = htons(f2_dlen);
+
+	*frag1 = pktb_alloc(AF_INET, buff1, f1_dlen, 256);
+	*frag2 = pktb_alloc(AF_INET, buff2, f2_dlen, 256);
+
+#ifdef DEBUG
+	printf("Packet split in portion %zu %zu\n", f1_dlen, f2_dlen);
+#endif
+
+	nfq_ip_set_checksum(f1_hdr);
+	nfq_ip_set_checksum(f2_hdr);
+
+	return 0;
+}
+
+#define AVAILABLE_MTU 1384
+
 static int send_raw_socket(struct pkt_buff *pktb) {
+	if (pktb_len(pktb) > AVAILABLE_MTU) {
+#ifdef DEBUG
+		printf("Split packet!\n");
+#endif
+
+		struct pkt_buff *buff1;
+		struct pkt_buff *buff2;
+
+		ipv4_frag(pktb, AVAILABLE_MTU-24, &buff1, &buff2);
+
+		int sent = 0;
+		int status = send_raw_socket(buff1);
+
+		if (status >= 0) sent += status;
+		else {
+			pktb_free(buff1);
+			pktb_free(buff2);
+			return status;
+		}
+
+		status = send_raw_socket(buff2);
+		if (status >= 0) sent += status;
+		else {
+			pktb_free(buff1);
+			pktb_free(buff2);
+			return status;
+		}
+
+		pktb_free(buff1);
+		pktb_free(buff2);
+
+		return sent;
+	}
+
+
 	struct iphdr *iph = nfq_ip_get_hdr(pktb);
 	if (iph == NULL)
 		return -1;
@@ -354,73 +469,7 @@ nextMessage:
 	return vrd;
 }
 
-// split packet to two ipv4 fragments.
-static int ipv4_frag(struct pkt_buff *pktb, size_t payload_offset,
-		     struct pkt_buff **frag1, struct pkt_buff **frag2) {
-	uint8_t buff1[MNL_SOCKET_BUFFER_SIZE];
-	uint8_t buff2[MNL_SOCKET_BUFFER_SIZE];
 
-	struct iphdr *hdr = nfq_ip_get_hdr(pktb);
-	size_t hdr_len = hdr->ihl * 4;
-
-	uint8_t *payload = pktb_data(pktb) + hdr_len;
-	size_t plen = pktb_len(pktb) - hdr_len;
-
-	if (hdr == NULL || payload == NULL || plen <= payload_offset) {
-		errno = EINVAL;
-		return -1;
-	}
-
-	if (payload_offset & ((1 << 3) - 1)) {
-		fprintf(stderr, "Payload offset MUST be a multiply of 8!\n");
-		errno = EINVAL;
-		return -1;
-	}
-
-	size_t f1_plen = payload_offset;
-	size_t f1_dlen = f1_plen + hdr_len;
-
-	size_t f2_plen = plen - payload_offset;
-	size_t f2_dlen = f2_plen + hdr_len;
-
-	memcpy(buff1, hdr, hdr_len);
-	memcpy(buff2, hdr, hdr_len);
-
-	memcpy(buff1 + hdr_len, payload, f1_plen);
-	memcpy(buff2 + hdr_len, payload + payload_offset, f2_plen);
-
-	struct iphdr *f1_hdr = (void *)buff1;
-	struct iphdr *f2_hdr = (void *)buff2;
-
-	uint16_t f1_frag_off = ntohs(f1_hdr->frag_off);
-	uint16_t f2_frag_off = ntohs(f2_hdr->frag_off);
-
-	f1_frag_off &= IP_OFFMASK;
-	f1_frag_off |= IP_MF;
-	
-	if ((f2_frag_off & ~IP_OFFMASK) == IP_MF) {
-		f2_frag_off &= IP_OFFMASK;
-		f2_frag_off |= IP_MF;
-	} else {
-		f2_frag_off &= IP_OFFMASK;
-	}
-	
-	f2_frag_off += (uint16_t)payload_offset / 8;
-
-	f1_hdr->frag_off = htons(f1_frag_off);
-	f1_hdr->tot_len = htons(f1_dlen);
-
-	f2_hdr->frag_off = htons(f2_frag_off);
-	f2_hdr->tot_len = htons(f2_dlen);
-
-	*frag1 = pktb_alloc(AF_INET, buff1, f1_dlen, 256);
-	*frag2 = pktb_alloc(AF_INET, buff2, f2_dlen, 256);
-
-	nfq_ip_set_checksum(f1_hdr);
-	nfq_ip_set_checksum(f2_hdr);
-
-	return 0;
-}
 		     
 static int process_packet(const struct packet_data packet) {
 	char buf[MNL_SOCKET_BUFFER_SIZE];
@@ -474,8 +523,6 @@ static int process_packet(const struct packet_data packet) {
 	void *data = nfq_tcp_get_payload(tcph, pktb);
 	ssize_t data_len = nfq_tcp_get_payload_len(tcph, pktb);
 
-
-
 	struct verdict vrd = 
 		process_tls_data(pktb, tcph, data, data_len);
 
@@ -488,9 +535,14 @@ static int process_packet(const struct packet_data packet) {
 #endif
 
 		if (data_len > 1480) {
-			fprintf(stderr, "WARNING! Google video packet is too big and may cause issues! Skipped!");
-			goto fallback;
+#ifdef DEBUG
+			fprintf(stderr, "WARNING! Google video packet is too big and may cause issues!\n");
+#endif
 		}
+		// GSO may turn kernel to not compute tcp checksum.
+		// Also it will never be meaningless to ensure the 
+		// checksum is right.
+		nfq_tcp_compute_checksum_ipv4(tcph, ip_header);
 
 		nfq_nlmsg_verdict_put(verdnlh, packet.id, NF_DROP);
 
@@ -557,6 +609,7 @@ static int queue_cb(const struct nlmsghdr *nlh, void *data) {
                 perror("Metaheader not set");
                 return MNL_CB_ERROR;
         }
+
 	
  
         ph = mnl_attr_get_payload(attr[NFQA_PACKET_HDR]);
@@ -567,18 +620,13 @@ static int queue_cb(const struct nlmsghdr *nlh, void *data) {
         packet.payload_len = mnl_attr_get_payload_len(attr[NFQA_PAYLOAD]);
         packet.payload = mnl_attr_get_payload(attr[NFQA_PAYLOAD]);
 
+	if (attr[NFQA_CAP_LEN] != NULL && ntohl(mnl_attr_get_u32(attr[NFQA_CAP_LEN])) != packet.payload_len) {
+		fprintf(stderr, "The packet was truncated! Skip!\n");
+		return fallback_accept_packet(packet.id);
+	}
+
 	uint32_t skbinfo = attr[NFQA_SKB_INFO] 
 		? ntohl(mnl_attr_get_u32(attr[NFQA_SKB_INFO])) : 0;
-
-	if (skbinfo & NFQA_SKB_GSO) {
-		printf("GSO!\n");
-		return fallback_accept_packet(packet.id);
-	}
-
-	if (skbinfo & NFQA_SKB_CSUMNOTREADY) {
-                printf("checksum not ready\n");
-		return fallback_accept_packet(packet.id);
-	}
 
 	if (attr[NFQA_MARK] != NULL) {
 		// Skip packets sent by rawsocket to escape infinity loop.
@@ -593,6 +641,9 @@ static int queue_cb(const struct nlmsghdr *nlh, void *data) {
 
 int main(int argc, const char *argv[]) 
 {
+#ifdef USE_GSO
+	printf("GSO is enabled!\n");
+#endif
 	if (parse_args(argc, argv)) {
 		perror("Unable to parse args");
 		exit(EXIT_FAILURE);
@@ -630,8 +681,10 @@ int main(int argc, const char *argv[])
 	nlh = nfq_nlmsg_put(buf, NFQNL_MSG_CONFIG, config.queue_num);
 	nfq_nlmsg_cfg_put_params(nlh, NFQNL_COPY_PACKET, 0xffff);
 
-        // mnl_attr_put_u32(nlh, NFQA_CFG_FLAGS, htonl(NFQA_CFG_F_GSO));
-        // mnl_attr_put_u32(nlh, NFQA_CFG_MASK, htonl(NFQA_CFG_F_GSO));
+#ifdef USE_GSO
+        mnl_attr_put_u32(nlh, NFQA_CFG_FLAGS, htonl(NFQA_CFG_F_GSO));
+        mnl_attr_put_u32(nlh, NFQA_CFG_MASK, htonl(NFQA_CFG_F_GSO));
+#endif
 
 	if (mnl_socket_sendto(config.nl, nlh, nlh->nlmsg_len) < 0) {
 		perror("mnl_socket_send");
