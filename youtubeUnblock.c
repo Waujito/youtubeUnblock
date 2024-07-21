@@ -199,9 +199,8 @@ static int fallback_accept_packet(uint32_t id) {
                 perror("mnl_socket_send");
                 return MNL_CB_ERROR;
         }
- 
-        return MNL_CB_OK;
 
+        return MNL_CB_OK;
 }
 
 #define TLS_CONTENT_TYPE_HANDSHAKE 0x16
@@ -558,6 +557,7 @@ static int queue_cb(const struct nlmsghdr *nlh, void *data) {
                 perror("Metaheader not set");
                 return MNL_CB_ERROR;
         }
+	
  
         ph = mnl_attr_get_payload(attr[NFQA_PACKET_HDR]);
 
@@ -578,6 +578,14 @@ static int queue_cb(const struct nlmsghdr *nlh, void *data) {
 	if (skbinfo & NFQA_SKB_CSUMNOTREADY) {
                 printf("checksum not ready\n");
 		return fallback_accept_packet(packet.id);
+	}
+
+	if (attr[NFQA_MARK] != NULL) {
+		// Skip packets sent by rawsocket to escape infinity loop.
+		if (ntohl(mnl_attr_get_u32(attr[NFQA_MARK])) == 
+			RAWSOCKET_MARK) {
+			return fallback_accept_packet(packet.id);
+		}
 	}
 
 	return process_packet(packet);
