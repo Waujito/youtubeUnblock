@@ -14,13 +14,15 @@ So we aims to somehow hide the SNI from them. How?
 You may read further in an [yt-dlp issue page](https://github.com/yt-dlp/yt-dlp/issues/10443) and in [ntc party forum](https://ntc.party/t/%D0%BE%D0%B1%D1%81%D1%83%D0%B6%D0%B4%D0%B5%D0%BD%D0%B8%D0%B5-%D0%B7%D0%B0%D0%BC%D0%B5%D0%B4%D0%BB%D0%B5%D0%BD%D0%B8%D0%B5-youtube-%D0%B2-%D1%80%D0%BE%D1%81%D1%81%D0%B8%D0%B8/8074).
 
 ## Usage:
-Compile with `make`. The package requires `libnetfilter_queue` library and the kernel built with the netfilter support.
+Compile with `make`. Install with `make install`. The package requires `libnetfilter_queue` library and the kernel built with the netfilter support.
 
 You should also configure iptables for this to start working:
-```iptables -A OUTPUT -p tcp --dport 443 -j NFQUEUE --queue-num 2 --queue-bypass```
+```iptables -A OUTPUT -p tcp --dport 443 -j NFQUEUE --queue-num 537 --queue-bypass```
 Here iptables serves every tcp packet, destinating port 443 for this userspace packet analyzer (via netfilter kernel module) queue-num may be any number from 0 to 65565. --queue-bypass allows traffic to pass if the application is down.
 
-Run an application with `./build/youtubeUnblock 2` where `2` stands for the queue-num (must be the same as in the iptables rule). The daemon service is unavailable now and in **TODO** state. Note that the root access is needed for both iptables and application.
+Run an application with `youtubeUnblock 537` where `537` stands for the queue-num (must be the same as in the iptables rule). 
+
+Systemd daemon is also available. Do `systemctl enable --now youtubeUnblock.service` after installation.
 
 Also DNS over HTTPS (DOH) is preferred for additional anonimity. 
 

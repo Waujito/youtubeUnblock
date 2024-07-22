@@ -8,12 +8,19 @@ APP:=$(BUILD_DIR)/youtubeUnblock
 SRCS := youtubeUnblock.c
 OBJS := $(SRCS:%.c=$(BUILD_DIR)/%.o)
 
+# PREFIX is environment variable, if not set default to /usr/local
+ifeq ($(PREFIX),)
+	PREFIX := /usr/local
+else
+	PREFIX := $(DESTDIR)
+endif
+
 .PHONY: default all dev dev_attrs prepare_dirs
 default: all
 
 
 run_dev: dev
-	bash -c "sudo ./$(APP) 2"
+	bash -c "sudo ./$(APP) 537"
 	
 
 dev: dev_attrs all
@@ -34,6 +41,20 @@ $(APP): $(OBJS)
 $(BUILD_DIR)/%.o: %.c
 	@echo 'CC $@'
 	@$(CC) -c $(CC_FLAGS) $^ -o $@
+
+install: all
+	install -d $(PREFIX)/bin/
+	install -m 755 $(APP) $(PREFIX)/bin/
+	install -d $(PREFIX)/lib/systemd/system/
+
+	@cp youtubeUnblock.service $(BUILD_DIR)
+	@sed -i 's/$$(PREFIX)/$(subst /,\/,$(PREFIX))/g' $(BUILD_DIR)/youtubeUnblock.service
+	install -m 644 $(BUILD_DIR)/youtubeUnblock.service $(PREFIX)/lib/systemd/system/
+
+uninstall:
+	rm $(PREFIX)/bin/youtubeUnblock
+	systemctl disable youtubeUnblock.service
+	rm $(PREFIX)/lib/systemd/system/youtubeUnblock.service
 
 clean:
 	rm -rf $(BUILD_DIR)

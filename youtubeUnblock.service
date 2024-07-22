@@ -1,0 +1,11 @@
+[Unit]
+Description=youtubeUnblock
+
+[Service]
+StandardError=journal
+StandardOutput=journal
+StandardInput=null
+ExecStart=$(PREFIX)/bin/youtubeUnblock 537
+
+[Install]
+WantedBy=multi-user.target
