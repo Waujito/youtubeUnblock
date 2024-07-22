@@ -1,3 +1,4 @@
+#define _GNU_SOURCE
 #include <libnetfilter_queue/linux_nfnetlink_queue.h>
 #include <stdio.h>
 #include <errno.h>
