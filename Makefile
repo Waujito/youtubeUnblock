@@ -43,17 +43,17 @@ prepare_dirs:
 	mkdir -p $(DEPSDIR)
 
 $(LIBNFNETLINK):
-	cd deps/libnfnetlink && ./autogen.sh && ./configure --prefix=$(DEPSDIR)
+	cd deps/libnfnetlink && ./autogen.sh && ./configure --prefix=$(DEPSDIR) $(if $(CROSS_COMPILE_PLATFORM),--host=$(CROSS_COMPILE_PLATFORM),)
 	$(MAKE) -C deps/libnfnetlink
 	$(MAKE) install -C deps/libnfnetlink
 	
 $(LIBMNL):
-	cd deps/libmnl && ./autogen.sh && ./configure --prefix=$(DEPSDIR)
+	cd deps/libmnl && ./autogen.sh && ./configure --prefix=$(DEPSDIR) $(if $(CROSS_COMPILE_PLATFORM),--host=$(CROSS_COMPILE_PLATFORM),)
 	$(MAKE) -C deps/libmnl
 	$(MAKE) install -C deps/libmnl
 
 $(LIBNETFILTER_QUEUE): $(LIBNFNETLINK) $(LIBMNL)
-	cd deps/libnetfilter_queue && ./autogen.sh && ./configure --prefix=$(DEPSDIR)
+	cd deps/libnetfilter_queue && ./autogen.sh && ./configure --prefix=$(DEPSDIR) $(if $(CROSS_COMPILE_PLATFORM),--host=$(CROSS_COMPILE_PLATFORM),)
 	$(MAKE) -C deps/libnetfilter_queue
 	$(MAKE) install -C deps/libnetfilter_queue
 
