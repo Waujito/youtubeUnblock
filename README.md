@@ -20,9 +20,9 @@ You should also configure iptables for this to start working:
 ```iptables -A OUTPUT -p tcp --dport 443 -j NFQUEUE --queue-num 537 --queue-bypass```
 Here iptables serves every tcp packet, destinating port 443 for this userspace packet analyzer (via netfilter kernel module) queue-num may be any number from 0 to 65565. --queue-bypass allows traffic to pass if the application is down.
 
-Run an application with `youtubeUnblock 537` where `537` stands for the queue-num (must be the same as in the iptables rule). 
+Run an application with `youtubeUnblock 537` where `537` stands for the queue-num (must be the same as in the iptables rule).
 
-Systemd daemon is also available. Do `systemctl enable --now youtubeUnblock.service` after installation.
+Systemd daemon is also available. Do `systemctl enable --now youtubeUnblock.service` after installation (uses queue-num `537`).
 
 Also DNS over HTTPS (DOH) is preferred for additional anonimity. 
 
