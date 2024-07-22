@@ -636,14 +636,13 @@ static int queue_cb(const struct nlmsghdr *nlh, void *data) {
 		}
 	}
 
+
 	return process_packet(packet);
 }
 
 int main(int argc, const char *argv[]) 
 {
-#ifdef USE_GSO
-	printf("GSO is enabled!\n");
-#endif
+
 	if (parse_args(argc, argv)) {
 		perror("Unable to parse args");
 		exit(EXIT_FAILURE);
@@ -682,6 +681,8 @@ int main(int argc, const char *argv[])
 	nfq_nlmsg_cfg_put_params(nlh, NFQNL_COPY_PACKET, 0xffff);
 
 #ifdef USE_GSO
+	printf("GSO is enabled!\n");
+
         mnl_attr_put_u32(nlh, NFQA_CFG_FLAGS, htonl(NFQA_CFG_F_GSO));
         mnl_attr_put_u32(nlh, NFQA_CFG_MASK, htonl(NFQA_CFG_F_GSO));
 #endif
