@@ -20,9 +20,11 @@
 #include <sys/socket.h>
 
 #ifndef NOUSE_GSO
-
 #define USE_GSO
+#endif
 
+#ifndef USE_IP_FRAGMENTATION
+#define USE_TCP_SEGMENTATION
 #endif
 
 #define RAWSOCKET_MARK 0xfc70
@@ -207,8 +209,6 @@ static int ipv4_frag(struct pkt_buff *pktb, size_t payload_offset,
 	f2_hdr->frag_off = htons(f2_frag_off);
 	f2_hdr->tot_len = htons(f2_dlen);
 
-	*frag1 = pktb_alloc(AF_INET, buff1, f1_dlen, 256);
-	*frag2 = pktb_alloc(AF_INET, buff2, f2_dlen, 256);
 
 #ifdef DEBUG
 	printf("Packet split in portion %zu %zu\n", f1_dlen, f2_dlen);
@@ -216,6 +216,97 @@ static int ipv4_frag(struct pkt_buff *pktb, size_t payload_offset,
 
 	nfq_ip_set_checksum(f1_hdr);
 	nfq_ip_set_checksum(f2_hdr);
+
+	*frag1 = pktb_alloc(AF_INET, buff1, f1_dlen, 0);
+	if (*frag1 == NULL) 
+		return -1;
+
+	*frag2 = pktb_alloc(AF_INET, buff2, f2_dlen, 0);
+	if (*frag2 == NULL) {
+		pktb_free(*frag1);
+		return -1;
+	}
+
+	return 0;
+}
+
+// split packet to two tcp-on-ipv4 segments.
+static int tcp4_frag(struct pkt_buff *pktb, size_t payload_offset,
+		     struct pkt_buff **seg1, struct pkt_buff **seg2) {
+	uint8_t buff1[MNL_SOCKET_BUFFER_SIZE];
+	uint8_t buff2[MNL_SOCKET_BUFFER_SIZE];
+
+	struct iphdr *hdr = nfq_ip_get_hdr(pktb);
+	size_t hdr_len = hdr->ihl * 4;
+	if (hdr == NULL) {errno = EINVAL; return -1;}
+	if (hdr->protocol != IPPROTO_TCP || !(ntohs(hdr->frag_off) & IP_DF)) {
+		errno = EINVAL;
+		return -1;
+	}
+
+	if (nfq_ip_set_transport_header(pktb, hdr)) 
+		return -1;
+	
+	struct tcphdr *tcph = nfq_tcp_get_hdr(pktb);
+	size_t tcph_len = tcph->doff * 4;
+	if (tcph == NULL) {
+		errno = EINVAL;
+		return -1;
+	}
+
+	uint8_t *payload = nfq_tcp_get_payload(tcph, pktb);
+	size_t plen = nfq_tcp_get_payload_len(tcph, pktb);
+
+	if (hdr == NULL || payload == NULL || plen <= payload_offset) {
+		errno = EINVAL;
+		return -1;
+	}
+
+	size_t s1_plen = payload_offset;
+	size_t s1_dlen = s1_plen + hdr_len + tcph_len;
+
+	size_t s2_plen = plen - payload_offset;
+	size_t s2_dlen = s2_plen + hdr_len + tcph_len;
+
+	memcpy(buff1, hdr, hdr_len);
+	memcpy(buff2, hdr, hdr_len);
+
+	memcpy(buff1 + hdr_len, tcph, tcph_len);
+	memcpy(buff2 + hdr_len, tcph, tcph_len);
+
+	memcpy(buff1 + hdr_len + tcph_len, payload, s1_plen);
+	memcpy(buff2 + hdr_len + tcph_len, payload + payload_offset, s2_plen);
+
+	struct iphdr *s1_hdr = (void *)buff1;
+	struct iphdr *s2_hdr = (void *)buff2;
+
+	struct tcphdr *s1_tcph = (void *)(buff1 + hdr_len);
+	struct tcphdr *s2_tcph = (void *)(buff2 + hdr_len);
+
+	s1_hdr->tot_len = htons(s1_dlen);
+	s2_hdr->tot_len = htons(s2_dlen);
+
+	// s2_hdr->id = htons(ntohs(s1_hdr->id) + 1);
+	s2_tcph->seq = htonl(ntohl(s2_tcph->seq) + payload_offset);
+	// printf("%zu %du %du\n", payload_offset, ntohs(s1_tcph->seq), ntohs(s2_tcph->seq));
+	
+#ifdef DEBUG
+	printf("Packet split in portion %zu %zu\n", s1_dlen, s2_dlen);
+#endif
+
+	nfq_tcp_compute_checksum_ipv4(s1_tcph, s1_hdr);
+	nfq_tcp_compute_checksum_ipv4(s2_tcph, s2_hdr);
+
+	*seg1 = pktb_alloc(AF_INET, buff1, s1_dlen, 0);
+	if (*seg1 == NULL) 
+		return -1;
+
+	*seg2 = pktb_alloc(AF_INET, buff2, s2_dlen, 0);
+	if (*seg2 == NULL) {
+		pktb_free(*seg1);
+		return -1;
+	}
+
 
 	return 0;
 }
@@ -231,7 +322,14 @@ static int send_raw_socket(struct pkt_buff *pktb) {
 		struct pkt_buff *buff1;
 		struct pkt_buff *buff2;
 
-		ipv4_frag(pktb, AVAILABLE_MTU-24, &buff1, &buff2);
+#ifdef USE_TCP_SEGMENTATION
+		if (tcp4_frag(pktb, AVAILABLE_MTU-128, &buff1, &buff2) < 0)
+			return -1;
+#else
+		if (ipv4_frag(pktb, AVAILABLE_MTU-128, &buff1, &buff2) < 0)
+			return -1;
+
+#endif
 
 		int sent = 0;
 		int status = send_raw_socket(buff1);
@@ -242,21 +340,18 @@ static int send_raw_socket(struct pkt_buff *pktb) {
 			pktb_free(buff2);
 			return status;
 		}
+		pktb_free(buff1);
 
 		status = send_raw_socket(buff2);
 		if (status >= 0) sent += status;
 		else {
-			pktb_free(buff1);
 			pktb_free(buff2);
 			return status;
 		}
-
-		pktb_free(buff1);
 		pktb_free(buff2);
 
 		return sent;
 	}
-
 
 	struct iphdr *iph = nfq_ip_get_hdr(pktb);
 	if (iph == NULL)
@@ -272,6 +367,7 @@ static int send_raw_socket(struct pkt_buff *pktb) {
 
 	if (tcph != NULL) {
 		sin_port = tcph->dest;
+		errno = 0;
 	} else if (udph != NULL) {
 		sin_port = udph->dest;
 	} else {
@@ -340,25 +436,23 @@ struct verdict {
  * data Payload data of TCP.
  * dlen Length of `data`.
  */
-static struct verdict process_tls_data(
-	struct pkt_buff *pktb, 
-	struct tcphdr *tcph, 
-	uint8_t *data, 
+static struct verdict analyze_tls_data(
+	const uint8_t *data, 
 	uint32_t dlen) 
 {
 	struct verdict vrd = {0};
 
 	size_t i = 0;
-	uint8_t *data_end = data + dlen;
+	const uint8_t *data_end = data + dlen;
 
 	while (i + 4 < dlen) {
-		uint8_t *msgData = data + i;
+		const uint8_t *msgData = data + i;
 
 		uint8_t tls_content_type = *msgData;
 		uint8_t tls_vmajor = *(msgData + 1);
 		uint8_t tls_vminor = *(msgData + 2);
 		uint16_t message_length = ntohs(*(uint16_t *)(msgData + 3));
-		uint8_t *message_length_ptr = msgData + 3;
+		const uint8_t *message_length_ptr = msgData + 3;
 
 
 		if (i + 5 + message_length > dlen) break;
@@ -367,7 +461,7 @@ static struct verdict process_tls_data(
 			goto nextMessage;
 
 
-		uint8_t *handshakeProto = msgData + 5;
+		const uint8_t *handshakeProto = msgData + 5;
 
 		if (handshakeProto + 1 >= data_end) break;
 
@@ -376,9 +470,9 @@ static struct verdict process_tls_data(
 		if (handshakeType != TLS_HANDSHAKE_TYPE_CLIENT_HELLO)
 			goto nextMessage;
 
-		uint8_t *msgPtr = handshakeProto;
+		const uint8_t *msgPtr = handshakeProto;
 		msgPtr += 1; 
-		uint8_t *handshakeProto_length_ptr = msgPtr + 1;
+		const uint8_t *handshakeProto_length_ptr = msgPtr + 1;
 		msgPtr += 3 + 2 + 32;
 
 		if (msgPtr + 1 >= data_end) break;
@@ -398,15 +492,15 @@ static struct verdict process_tls_data(
 
 		if (msgPtr + 2 >= data_end) break;
 		uint16_t extensionsLen = ntohs(*(uint16_t *)msgPtr);
-		uint8_t *extensionsLen_ptr = msgPtr;
+		const uint8_t *extensionsLen_ptr = msgPtr;
 		msgPtr += 2;
 
-		uint8_t *extensionsPtr = msgPtr;
-		uint8_t *extensions_end = extensionsPtr + extensionsLen;
+		const uint8_t *extensionsPtr = msgPtr;
+		const uint8_t *extensions_end = extensionsPtr + extensionsLen;
 		if (extensions_end > data_end) break;
 
 		while (extensionsPtr < extensions_end) {
-			uint8_t *extensionPtr = extensionsPtr;
+			const uint8_t *extensionPtr = extensionsPtr;
 			if (extensionPtr + 4 >= extensions_end) break;
 
 			uint16_t extensionType = 
@@ -415,7 +509,7 @@ static struct verdict process_tls_data(
 
 			uint16_t extensionLen = 
 				ntohs(*(uint16_t *)extensionPtr);
-			uint8_t *extensionLen_ptr = extensionPtr;
+			const uint8_t *extensionLen_ptr = extensionPtr;
 			extensionPtr += 2;
 
 
@@ -425,15 +519,15 @@ static struct verdict process_tls_data(
 			if (extensionType != TLS_EXTENSION_SNI) 
 				goto nextExtension;
 
-			uint8_t *sni_ext_ptr = extensionPtr;
+			const uint8_t *sni_ext_ptr = extensionPtr;
 
 			if (sni_ext_ptr + 2 >= extensions_end) break;
 			uint16_t sni_ext_dlen = ntohs(*(uint16_t *)sni_ext_ptr);
 
-			uint8_t *sni_ext_dlen_ptr = sni_ext_ptr;
+			const uint8_t *sni_ext_dlen_ptr = sni_ext_ptr;
 			sni_ext_ptr += 2;
 
-			uint8_t *sni_ext_end = sni_ext_ptr + sni_ext_dlen;
+			const uint8_t *sni_ext_end = sni_ext_ptr + sni_ext_dlen;
 			if (sni_ext_end >= extensions_end) break;
 			
 			if (sni_ext_ptr + 3 >= sni_ext_end) break;
@@ -485,46 +579,34 @@ static int process_packet(const struct packet_data packet) {
 	}
 
 	const int family = AF_INET;
+	const uint8_t *raw_payload = packet.payload;
+	size_t raw_payload_len = packet.payload_len;
 
-	struct pkt_buff *pktb = pktb_alloc(
-		family, 
-		packet.payload, 
-		packet.payload_len,
-		256
-	);
+	if (raw_payload == NULL) return MNL_CB_ERROR;
 
-	if (pktb == NULL) {
-		perror("pktb_alloc");
-		return MNL_CB_ERROR;
-	}
+	const struct iphdr *ip_header = (const void *)raw_payload;
 
-	struct iphdr *ip_header = nfq_ip_get_hdr(pktb);
+	if (ip_header->version != IPPROTO_IPIP || ip_header->protocol != IPPROTO_TCP) 
+		goto fallback;
 
-	if (ip_header == NULL) {
-		perror("get_ip_hdr");
-		goto error;
-	}
+	int iph_len = ip_header->ihl * 4;
 
-	if (ip_header->protocol != IPPROTO_TCP) {
+	const struct tcphdr *tcph = (const void *)(raw_payload + iph_len);
+	if ((const uint8_t *)tcph + 20 > raw_payload + raw_payload_len) {
+		printf("LZ\n");
 		goto fallback;
 	}
 
-	if (nfq_ip_set_transport_header(pktb, ip_header)) {
-		perror("set_transport_header\n");
+	int tcph_len = tcph->doff * 4;
+	if ((const uint8_t *)tcph + tcph_len > raw_payload + raw_payload_len) {
+		printf("LZ\n");
 		goto fallback;
 	}
 
-	struct tcphdr *tcph = nfq_tcp_get_hdr(pktb);
-	if (tcph == NULL) {
-		fprintf(stderr, "tcp_get_hdr\n");
-		goto fallback;
-	}
+	int data_len = ntohs(ip_header->tot_len) - iph_len - tcph_len;
+	const uint8_t *data = (const uint8_t *)(raw_payload + iph_len + tcph_len);
 
-	void *data = nfq_tcp_get_payload(tcph, pktb);
-	ssize_t data_len = nfq_tcp_get_payload_len(tcph, pktb);
-
-	struct verdict vrd = 
-		process_tls_data(pktb, tcph, data, data_len);
+	struct verdict vrd = analyze_tls_data(data, data_len);
 
 	verdnlh = nfq_nlmsg_put(buf, NFQNL_MSG_VERDICT, config.queue_num);
         nfq_nlmsg_verdict_put(verdnlh, packet.id, NF_ACCEPT);
@@ -539,21 +621,48 @@ static int process_packet(const struct packet_data packet) {
 			fprintf(stderr, "WARNING! Google video packet is too big and may cause issues!\n");
 #endif
 		}
-		// GSO may turn kernel to not compute tcp checksum.
-		// Also it will never be meaningless to ensure the 
-		// checksum is right.
-		nfq_tcp_compute_checksum_ipv4(tcph, ip_header);
-
-		nfq_nlmsg_verdict_put(verdnlh, packet.id, NF_DROP);
-
-		size_t ipd_offset = ((char *)data - (char *)tcph) + vrd.sni_offset;
-
-		size_t mid_offset = ipd_offset + vrd.sni_len / 2;
-		mid_offset += 8 - mid_offset % 8;
-
+		
 		struct pkt_buff *frag1;
 		struct pkt_buff *frag2;
+		nfq_nlmsg_verdict_put(verdnlh, packet.id, NF_DROP);
+
+
+#ifdef USE_TCP_SEGMENTATION
+		size_t ipd_offset = vrd.sni_offset;
+		size_t mid_offset = ipd_offset + vrd.sni_len / 2;
+
+		struct pkt_buff *pktb = pktb_alloc(
+			family,
+			packet.payload,
+			packet.payload_len,
+			0);
 		
+		if (tcp4_frag(pktb, mid_offset, &frag1, &frag2) < 0) {
+			perror("tcp4_frag");
+			pktb_free(pktb);
+			goto fallback;
+		}
+
+		if ((send_raw_socket(frag2) == -1) || (send_raw_socket(frag1) == -1)) {
+			perror("raw frags send");
+		}
+
+		pktb_free(frag1);
+		pktb_free(frag2);
+		pktb_free(pktb);
+
+#else
+		// TODO: Implement compute of tcp checksum
+		// GSO may turn kernel to not compute the tcp checksum.
+		// Also it will never be meaningless to ensure the 
+		// checksum is right.
+		// nfq_tcp_compute_checksum_ipv4(tcph, ip_header);
+
+		size_t ipd_offset = ((char *)data - (char *)tcph) + vrd.sni_offset;
+		size_t mid_offset = ipd_offset + vrd.sni_len / 2;
+		mid_offset += 8 - mid_offset % 8;
+		
+
 		if (ipv4_frag(pktb, mid_offset, &frag1, &frag2) < 0) {
 			perror("ipv4_frag");
 			goto fallback;
@@ -565,10 +674,12 @@ static int process_packet(const struct packet_data packet) {
 
 		pktb_free(frag1);
 		pktb_free(frag2);
+#endif
+
 	}
 
 
-        
+/*       
 	if (pktb_mangled(pktb)) {
 #ifdef DEBUG
 		printf("Mangled!\n");
@@ -576,6 +687,7 @@ static int process_packet(const struct packet_data packet) {
 		nfq_nlmsg_verdict_put_pkt(
 			verdnlh, pktb_data(pktb), pktb_len(pktb));
 	}
+*/
 
         if (mnl_socket_sendto(config.nl, verdnlh, verdnlh->nlmsg_len) < 0) {
                 perror("mnl_socket_send");
@@ -583,14 +695,11 @@ static int process_packet(const struct packet_data packet) {
 		goto error;
         }
  
-	pktb_free(pktb);
         return MNL_CB_OK;
 
 fallback:
-	pktb_free(pktb);
 	return fallback_accept_packet(packet.id);
 error:
-	pktb_free(pktb);
 	return MNL_CB_ERROR;
 }
 
@@ -610,8 +719,6 @@ static int queue_cb(const struct nlmsghdr *nlh, void *data) {
                 return MNL_CB_ERROR;
         }
 
-	
- 
         ph = mnl_attr_get_payload(attr[NFQA_PACKET_HDR]);
 
         packet.id = ntohl(ph->packet_id);
@@ -624,9 +731,6 @@ static int queue_cb(const struct nlmsghdr *nlh, void *data) {
 		fprintf(stderr, "The packet was truncated! Skip!\n");
 		return fallback_accept_packet(packet.id);
 	}
-
-	uint32_t skbinfo = attr[NFQA_SKB_INFO] 
-		? ntohl(mnl_attr_get_u32(attr[NFQA_SKB_INFO])) : 0;
 
 	if (attr[NFQA_MARK] != NULL) {
 		// Skip packets sent by rawsocket to escape infinity loop.
@@ -647,6 +751,12 @@ int main(int argc, const char *argv[])
 		perror("Unable to parse args");
 		exit(EXIT_FAILURE);
 	}
+
+#ifdef USE_TCP_SEGMENTATION
+	printf("Using TCP segmentation!\n");
+#else 
+	printf("Using IP fragmentation!\n");
+#endif 
 
 	if (open_socket()) {
 		perror("Unable to open socket");
