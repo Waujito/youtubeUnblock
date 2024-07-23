@@ -20,9 +20,11 @@
 #include <sys/socket.h>
 
 #ifndef NOUSE_GSO
-
 #define USE_GSO
+#endif
 
+#ifndef USE_IP_FRAGMENTATION
+#define USE_TCP_SEGMENTATION
 #endif
 
 #define RAWSOCKET_MARK 0xfc70
@@ -207,8 +209,6 @@ static int ipv4_frag(struct pkt_buff *pktb, size_t payload_offset,
 	f2_hdr->frag_off = htons(f2_frag_off);
 	f2_hdr->tot_len = htons(f2_dlen);
 
-	*frag1 = pktb_alloc(AF_INET, buff1, f1_dlen, 256);
-	*frag2 = pktb_alloc(AF_INET, buff2, f2_dlen, 256);
 
 #ifdef DEBUG
 	printf("Packet split in portion %zu %zu\n", f1_dlen, f2_dlen);
@@ -216,6 +216,82 @@ static int ipv4_frag(struct pkt_buff *pktb, size_t payload_offset,
 
 	nfq_ip_set_checksum(f1_hdr);
 	nfq_ip_set_checksum(f2_hdr);
+
+	*frag1 = pktb_alloc(AF_INET, buff1, f1_dlen, 256);
+	*frag2 = pktb_alloc(AF_INET, buff2, f2_dlen, 256);
+
+	return 0;
+}
+
+// split packet to two tcp-on-ipv4 segments.
+static int tcp4_frag(struct pkt_buff *pktb, size_t payload_offset,
+		     struct pkt_buff **seg1, struct pkt_buff **seg2) {
+	uint8_t buff1[MNL_SOCKET_BUFFER_SIZE];
+	uint8_t buff2[MNL_SOCKET_BUFFER_SIZE];
+
+	struct iphdr *hdr = nfq_ip_get_hdr(pktb);
+	size_t hdr_len = hdr->ihl * 4;
+	if (hdr == NULL) {errno = EINVAL; return -1;}
+	if (hdr->protocol != IPPROTO_TCP || !(ntohs(hdr->frag_off) & IP_DF)) {
+		errno = EINVAL;
+		return -1;
+	}
+
+	if (nfq_ip_set_transport_header(pktb, hdr)) 
+		return -1;
+	
+	struct tcphdr *tcph = nfq_tcp_get_hdr(pktb);
+	size_t tcph_len = tcph->doff * 4;
+	if (tcph == NULL) {
+		errno = EINVAL;
+		return -1;
+	}
+
+	uint8_t *payload = nfq_tcp_get_payload(tcph, pktb);
+	size_t plen = nfq_tcp_get_payload_len(tcph, pktb);
+
+	if (hdr == NULL || payload == NULL || plen <= payload_offset) {
+		errno = EINVAL;
+		return -1;
+	}
+
+	size_t s1_plen = payload_offset;
+	size_t s1_dlen = s1_plen + hdr_len + tcph_len;
+
+	size_t s2_plen = plen - payload_offset;
+	size_t s2_dlen = s2_plen + hdr_len + tcph_len;
+
+	memcpy(buff1, hdr, hdr_len);
+	memcpy(buff2, hdr, hdr_len);
+
+	memcpy(buff1 + hdr_len, tcph, tcph_len);
+	memcpy(buff2 + hdr_len, tcph, tcph_len);
+
+	memcpy(buff1 + hdr_len + tcph_len, payload, s1_plen);
+	memcpy(buff2 + hdr_len + tcph_len, payload + payload_offset, s2_plen);
+
+	struct iphdr *s1_hdr = (void *)buff1;
+	struct iphdr *s2_hdr = (void *)buff2;
+
+	struct tcphdr *s1_tcph = (void *)(buff1 + hdr_len);
+	struct tcphdr *s2_tcph = (void *)(buff2 + hdr_len);
+
+	s1_hdr->tot_len = htons(s1_dlen);
+	s2_hdr->tot_len = htons(s2_dlen);
+
+	// s2_hdr->id = htons(ntohs(s1_hdr->id) + 1);
+	s2_tcph->seq = htonl(ntohl(s2_tcph->seq) + payload_offset);
+	// printf("%zu %du %du\n", payload_offset, ntohs(s1_tcph->seq), ntohs(s2_tcph->seq));
+	
+#ifdef DEBUG
+	printf("Packet split in portion %zu %zu\n", s1_dlen, s2_dlen);
+#endif
+
+	nfq_tcp_compute_checksum_ipv4(s1_tcph, s1_hdr);
+	nfq_tcp_compute_checksum_ipv4(s2_tcph, s2_hdr);
+
+	*seg1 = pktb_alloc(AF_INET, buff1, s1_dlen, 256);
+	*seg2 = pktb_alloc(AF_INET, buff2, s2_dlen, 256);
 
 	return 0;
 }
@@ -231,7 +307,11 @@ static int send_raw_socket(struct pkt_buff *pktb) {
 		struct pkt_buff *buff1;
 		struct pkt_buff *buff2;
 
-		ipv4_frag(pktb, AVAILABLE_MTU-24, &buff1, &buff2);
+#ifdef USE_TCP_SEGMENTATION
+		tcp4_frag(pktb, AVAILABLE_MTU-128, &buff1, &buff2);
+#else
+		ipv4_frag(pktb, AVAILABLE_MTU-128, &buff1, &buff2);
+#endif
 
 		int sent = 0;
 		int status = send_raw_socket(buff1);
@@ -242,16 +322,14 @@ static int send_raw_socket(struct pkt_buff *pktb) {
 			pktb_free(buff2);
 			return status;
 		}
+		pktb_free(buff1);
 
 		status = send_raw_socket(buff2);
 		if (status >= 0) sent += status;
 		else {
-			pktb_free(buff1);
 			pktb_free(buff2);
 			return status;
 		}
-
-		pktb_free(buff1);
 		pktb_free(buff2);
 
 		return sent;
@@ -543,16 +621,34 @@ static int process_packet(const struct packet_data packet) {
 		// Also it will never be meaningless to ensure the 
 		// checksum is right.
 		nfq_tcp_compute_checksum_ipv4(tcph, ip_header);
-
 		nfq_nlmsg_verdict_put(verdnlh, packet.id, NF_DROP);
-
-		size_t ipd_offset = ((char *)data - (char *)tcph) + vrd.sni_offset;
-
-		size_t mid_offset = ipd_offset + vrd.sni_len / 2;
-		mid_offset += 8 - mid_offset % 8;
 
 		struct pkt_buff *frag1;
 		struct pkt_buff *frag2;
+
+
+#ifdef USE_TCP_SEGMENTATION
+		size_t ipd_offset = vrd.sni_offset;
+		size_t mid_offset = ipd_offset + vrd.sni_len / 2;
+		
+		if (tcp4_frag(pktb, mid_offset, &frag1, &frag2) < 0) {
+			perror("tcp4_frag");
+			goto fallback;
+		}
+
+		if ((send_raw_socket(frag2) == -1) || (send_raw_socket(frag1) == -1)) {
+			perror("raw frags send");
+		}
+
+		pktb_free(frag1);
+		pktb_free(frag2);
+
+#else
+		size_t ipd_offset = ((char *)data - (char *)tcph) + vrd.sni_offset;
+		size_t mid_offset = ipd_offset + vrd.sni_len / 2;
+		mid_offset += 8 - mid_offset % 8;
+
+		
 		
 		if (ipv4_frag(pktb, mid_offset, &frag1, &frag2) < 0) {
 			perror("ipv4_frag");
@@ -565,6 +661,8 @@ static int process_packet(const struct packet_data packet) {
 
 		pktb_free(frag1);
 		pktb_free(frag2);
+#endif
+
 	}
 
 
@@ -647,6 +745,12 @@ int main(int argc, const char *argv[])
 		perror("Unable to parse args");
 		exit(EXIT_FAILURE);
 	}
+
+#ifdef USE_TCP_SEGMENTATION
+	printf("Using TCP segmentation!\n");
+#else 
+	printf("Using IP fragmentation!\n");
+#endif 
 
 	if (open_socket()) {
 		perror("Unable to open socket");
