@@ -1,0 +1,4 @@
+doxyfile.stamp
+doxygen.cfg
+html/
+man/

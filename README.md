@@ -14,7 +14,7 @@ So we aims to somehow hide the SNI from them. How?
 You may read further in an [yt-dlp issue page](https://github.com/yt-dlp/yt-dlp/issues/10443) and in [ntc party forum](https://ntc.party/t/%D0%BE%D0%B1%D1%81%D1%83%D0%B6%D0%B4%D0%B5%D0%BD%D0%B8%D0%B5-%D0%B7%D0%B0%D0%BC%D0%B5%D0%B4%D0%BB%D0%B5%D0%BD%D0%B8%D0%B5-youtube-%D0%B2-%D1%80%D0%BE%D1%81%D1%81%D0%B8%D0%B8/8074).
 
 ## Usage:
-Compile with `make`. Install with `make install`. The package requires `libnetfilter_queue` library and the kernel built with the netfilter support.
+Compile with `make`. Install with `make install`. The package include libnetfilter_queue, libnfnetlink and libmnl as static dependencies. The package requires linux-headers and kernel built with netfilter nfqueue support.
 
 You should also configure iptables for this to start working:
 ```iptables -A OUTPUT -p tcp --dport 443 -j NFQUEUE --queue-num 537 --queue-bypass```
@@ -25,6 +25,13 @@ Run an application with `youtubeUnblock 537` where `537` stands for the queue-nu
 Systemd daemon is also available. Do `systemctl enable --now youtubeUnblock.service` after installation (uses queue-num `537`).
 
 Also DNS over HTTPS (DOH) is preferred for additional anonimity. 
+
+## OpenWRT case
+The package is also compatible with routers. The router should be running by free opensource linux-based system such as [OpenWRT](https://openwrt.org/). You should cross-compile it under your host machine. Be ready for compilation errors and a lot of googling about it. It is not such a trivial process! You can get crosscompilation toolsuite compatible with your router from OpenWRT repositories. For example, I have ramips/mt76x8 based router so for me the toolsuite is on https://downloads.openwrt.org/releases/23.05.3/targets/ramips/mt76x8/ and called `openwrt-toolchain-23.05.3-ramips-mt76x8_gcc-12.3.0_musl.Linux-x86_64.tar.xz`. You can find out more about your router model on it's openwrt page. When you download the toolsuite, untar it somewhere. Now we are ready for compilation. My cross gcc asked me to create a staging dir for it and pass it as an environment variable. Also you should notice toolsuite packages and replace my make command with yours. ```STAGING_DIR=temp make CC=/usr/bin/mipsel-openwrt-linux-gcc LD=/usr/bin/mipsel-openwrt-linux-gcc AR=/usr/bin/mipsel-openwrt-linux-ar OBJDUMP=/usr/bin/mipsel-openwrt-linux-objdump NM=/usr/bin/mipsel-openwrt-linux-nm STRIP=/usr/bin/mipsel-openwrt-linux-strip CROSS_COMPILE_PLATFORM=mipsel-buildroot-linux-gnu```. Take a look at `CROSS_COMPILE_PLATFORM` It is required by autotools but I think it is not necessary. Anyways I put `mipsel-buildroot-linux-gnu` in here. For your model may be an [automake cross-compile manual](https://www.gnu.org/software/automake/manual/html_node/Cross_002dCompilation.html) will be helpful. When compilation is done, the binary file will be in build directory. Copy it to your router. Note that an ssh access is likely to be required to proceed. sshfs don't work on my model so I injected the application to the router via Software Upload Package page. It has given me an error, but also a `/tmp/upload.ipk` file which I copied in root directory, `chmod +x`-ed and run.
+
+Now let's talk about a router configuration. I installed a normal iptables user-space app: `xtables-legacy iptables-zz-legacy` and kernel/iptables nfqueue extensions: `iptables-mod-nfqueue kmod-ipt-nfqueue` and add `iptables -t mangle -A FORWARD -p tcp -m tcp --dport 443 -j NFQUEUE --queue-num 537 --queue-bypass` rule.
+
+Next step is to daemonize the application in openwrt. Copy youtubeUnblock.owrt to /etc/init.d/youtubeUnblock and put the program into /usr/bin/. (Don't forget to `chmod +x` both). Now run `/etc/init.d/youtubeUnblock start`. You can alo run `/etc/init.d/youtubeUnblock enable` to force OpenWRT autostart the program on boot. 
 
 How it processes packets: When the packet is joining queue, the application checks sni payload to be googlevideo (right how the DPIs do), fragmentates and posts the packet. Note that it is impossible to post two fragmented packets from one netfilter queue verdict. Instead, the application drops an original packet and makes another linux raw socket to post the packets in the network. To escape infinity loops the socket marks outgoing packets and the application automatically accepts it. 
 

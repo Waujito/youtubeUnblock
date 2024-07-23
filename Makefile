@@ -1,12 +1,10 @@
+BUILD_DIR := $(CURDIR)/build
+DEPSDIR := $(BUILD_DIR)/deps
+
 CC := gcc
-CC_FLAGS:=-Wall -Wpedantic -Wno-unused-variable
-
-LD_FLAGS:=-lmnl -lnetfilter_queue
-BUILD_DIR:=build
-APP:=$(BUILD_DIR)/youtubeUnblock
-
-SRCS := youtubeUnblock.c
-OBJS := $(SRCS:%.c=$(BUILD_DIR)/%.o)
+LD := gcc
+CFLAGS:=-Wall -Wpedantic -Wno-unused-variable -I$(DEPSDIR)/include -Os 
+LDFLAGS:=-L$(DEPSDIR)/lib -static
 
 # PREFIX is environment variable, if not set default to /usr/local
 ifeq ($(PREFIX),)
@@ -15,46 +13,73 @@ else
 	PREFIX := $(DESTDIR)
 endif
 
+export CC LD CFLAGS LDFLAGS
+
+APP:=$(BUILD_DIR)/youtubeUnblock
+
+SRCS := youtubeUnblock.c
+OBJS := $(SRCS:%.c=$(BUILD_DIR)/%.o)
+
+LIBNFNETLINK := $(DEPSDIR)/lib/libnfnetlink.a
+LIBMNL := $(DEPSDIR)/lib/libmnl.a
+LIBNETFILTER_QUEUE := $(DEPSDIR)/lib/libnetfilter_queue.a
+
+
 .PHONY: default all dev dev_attrs prepare_dirs
 default: all
 
-
 run_dev: dev
-	bash -c "sudo ./$(APP) 537"
-	
+	bash -c "sudo $(APP) 537"
 
 dev: dev_attrs all
 
 dev_attrs:
-	$(eval CC_FLAGS := $(CC_FLAGS) -DDEBUG -ggdb -g3)
+	$(eval CFLAGS := $(CFLAGS) -DDEBUG -ggdb -g3)
 
 all: prepare_dirs $(APP)
 
-
 prepare_dirs:
 	mkdir -p $(BUILD_DIR)
+	mkdir -p $(DEPSDIR)
 
-$(APP): $(OBJS)
+$(LIBNFNETLINK):
+	cd deps/libnfnetlink && ./autogen.sh && ./configure --prefix=$(DEPSDIR) $(if $(CROSS_COMPILE_PLATFORM),--host=$(CROSS_COMPILE_PLATFORM),)
+	$(MAKE) -C deps/libnfnetlink
+	$(MAKE) install -C deps/libnfnetlink
+	
+$(LIBMNL):
+	cd deps/libmnl && ./autogen.sh && ./configure --prefix=$(DEPSDIR) $(if $(CROSS_COMPILE_PLATFORM),--host=$(CROSS_COMPILE_PLATFORM),)
+	$(MAKE) -C deps/libmnl
+	$(MAKE) install -C deps/libmnl
+
+$(LIBNETFILTER_QUEUE): $(LIBNFNETLINK) $(LIBMNL)
+	cd deps/libnetfilter_queue && ./autogen.sh && ./configure --prefix=$(DEPSDIR) $(if $(CROSS_COMPILE_PLATFORM),--host=$(CROSS_COMPILE_PLATFORM),)
+	$(MAKE) -C deps/libnetfilter_queue
+	$(MAKE) install -C deps/libnetfilter_queue
+
+$(APP): $(OBJS) $(LIBNETFILTER_QUEUE) $(LIBMNL)
 	@echo 'LD $(APP)'
-	@$(CC) $(OBJS) -o $(APP) $(LD_FLAGS) 
+	@$(LD) $(OBJS) -o $(APP) -L$(DEPSDIR)/lib -lmnl -lnetfilter_queue
 
-$(BUILD_DIR)/%.o: %.c
+$(BUILD_DIR)/%.o: %.c $(LIBNETFILTER_QUEUE) $(LIBMNL)
 	@echo 'CC $@'
-	@$(CC) -c $(CC_FLAGS) $^ -o $@
+	@$(CC) -c $(CFLAGS) $^ -o $@
 
 install: all
 	install -d $(PREFIX)/bin/
 	install -m 755 $(APP) $(PREFIX)/bin/
 	install -d $(PREFIX)/lib/systemd/system/
-
 	@cp youtubeUnblock.service $(BUILD_DIR)
 	@sed -i 's/$$(PREFIX)/$(subst /,\/,$(PREFIX))/g' $(BUILD_DIR)/youtubeUnblock.service
 	install -m 644 $(BUILD_DIR)/youtubeUnblock.service $(PREFIX)/lib/systemd/system/
 
 uninstall:
 	rm $(PREFIX)/bin/youtubeUnblock
-	systemctl disable youtubeUnblock.service
 	rm $(PREFIX)/lib/systemd/system/youtubeUnblock.service
+	systemctl disable youtubeUnblock.service
 
 clean:
 	rm -rf $(BUILD_DIR)
+	$(MAKE) distclean -C deps/libnetfilter_queue || true
+	$(MAKE) distclean -C deps/libmnl || true
+	$(MAKE) distclean -C deps/libnfnetlink || true

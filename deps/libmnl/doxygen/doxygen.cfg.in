@@ -1,0 +1,23 @@
+# Difference with default Doxyfile 1.8.20
+PROJECT_NAME           = @PACKAGE@
+PROJECT_NUMBER         = @VERSION@
+OUTPUT_DIRECTORY       = .
+ABBREVIATE_BRIEF       =
+FULL_PATH_NAMES        = NO
+TAB_SIZE               = 8
+OPTIMIZE_OUTPUT_FOR_C  = YES
+INPUT                  = @top_srcdir@
+FILE_PATTERNS          = */src/*.c
+RECURSIVE              = YES
+EXCLUDE_SYMBOLS        = EXPORT_SYMBOL mnl_nlmsg_batch mnl_socket
+EXAMPLE_PATTERNS       =
+INPUT_FILTER           = "sed 's/EXPORT_SYMBOL//g'"
+SOURCE_BROWSER         = YES
+ALPHABETICAL_INDEX     = NO
+SEARCHENGINE           = NO
+GENERATE_LATEX         = NO
+LATEX_CMD_NAME         = latex
+GENERATE_MAN           = YES
+MAN_LINKS              = YES
+HAVE_DOT               = @HAVE_DOT@
+DOT_TRANSPARENT        = YES
