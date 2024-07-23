@@ -218,7 +218,14 @@ static int ipv4_frag(struct pkt_buff *pktb, size_t payload_offset,
 	nfq_ip_set_checksum(f2_hdr);
 
 	*frag1 = pktb_alloc(AF_INET, buff1, f1_dlen, 0);
+	if (*frag1 == NULL) 
+		return -1;
+
 	*frag2 = pktb_alloc(AF_INET, buff2, f2_dlen, 0);
+	if (*frag2 == NULL) {
+		pktb_free(*frag1);
+		return -1;
+	}
 
 	return 0;
 }
@@ -291,7 +298,15 @@ static int tcp4_frag(struct pkt_buff *pktb, size_t payload_offset,
 	nfq_tcp_compute_checksum_ipv4(s2_tcph, s2_hdr);
 
 	*seg1 = pktb_alloc(AF_INET, buff1, s1_dlen, 0);
+	if (*seg1 == NULL) 
+		return -1;
+
 	*seg2 = pktb_alloc(AF_INET, buff2, s2_dlen, 0);
+	if (*seg2 == NULL) {
+		pktb_free(*seg1);
+		return -1;
+	}
+
 
 	return 0;
 }
@@ -308,9 +323,12 @@ static int send_raw_socket(struct pkt_buff *pktb) {
 		struct pkt_buff *buff2;
 
 #ifdef USE_TCP_SEGMENTATION
-		tcp4_frag(pktb, AVAILABLE_MTU-128, &buff1, &buff2);
+		if (tcp4_frag(pktb, AVAILABLE_MTU-128, &buff1, &buff2) < 0)
+			return -1;
 #else
-		ipv4_frag(pktb, AVAILABLE_MTU-128, &buff1, &buff2);
+		if (ipv4_frag(pktb, AVAILABLE_MTU-128, &buff1, &buff2) < 0)
+			return -1;
+
 #endif
 
 		int sent = 0;
@@ -335,7 +353,6 @@ static int send_raw_socket(struct pkt_buff *pktb) {
 		return sent;
 	}
 
-
 	struct iphdr *iph = nfq_ip_get_hdr(pktb);
 	if (iph == NULL)
 		return -1;
@@ -350,6 +367,7 @@ static int send_raw_socket(struct pkt_buff *pktb) {
 
 	if (tcph != NULL) {
 		sin_port = tcph->dest;
+		errno = 0;
 	} else if (udph != NULL) {
 		sin_port = udph->dest;
 	} else {
@@ -643,9 +661,8 @@ static int process_packet(const struct packet_data packet) {
 		size_t ipd_offset = ((char *)data - (char *)tcph) + vrd.sni_offset;
 		size_t mid_offset = ipd_offset + vrd.sni_len / 2;
 		mid_offset += 8 - mid_offset % 8;
+		
 
-		
-		
 		if (ipv4_frag(pktb, mid_offset, &frag1, &frag2) < 0) {
 			perror("ipv4_frag");
 			goto fallback;
