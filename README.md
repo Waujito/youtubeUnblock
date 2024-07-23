@@ -31,6 +31,8 @@ The package is also compatible with routers. The router should be running by fre
 
 Now let's talk about a router configuration. I installed a normal iptables user-space app: `xtables-legacy iptables-zz-legacy` and kernel/iptables nfqueue extensions: `iptables-mod-nfqueue kmod-ipt-nfqueue` and add `iptables -t mangle -A FORWARD -p tcp -m tcp --dport 443 -j NFQUEUE --queue-num 537 --queue-bypass` rule.
 
+Next step is to daemonize the application in openwrt. Copy youtubeUnblock.owrt to /etc/init.d/youtubeUnblock and put the program into /usr/bin/. (Don't forget to `chmod +x` both). Now run `/etc/init.d/youtubeUnblock start`. You can alo run `/etc/init.d/youtubeUnblock enable` to force OpenWRT autostart the program on boot. 
+
 How it processes packets: When the packet is joining queue, the application checks sni payload to be googlevideo (right how the DPIs do), fragmentates and posts the packet. Note that it is impossible to post two fragmented packets from one netfilter queue verdict. Instead, the application drops an original packet and makes another linux raw socket to post the packets in the network. To escape infinity loops the socket marks outgoing packets and the application automatically accepts it. 
 
 Please note that the application needs in further development. Some googlevideo servers may still be unabailable, some may drop out hello packets on Firefox while some may do so on Chrome. If you got in trouble try to disable GSO (Pass -DNOUSE-GSO as CC_FLAGS). If you have any questions/suggestions feel free to open an issue.
