@@ -11,6 +11,9 @@ So we aims to somehow hide the SNI from them. How?
 - We can encrypt it. Here are a lot of investigations about SNI, but the server should support the technique. Also ISPs may block encrypted SNI. [Check this Wikipedia page](https://en.wikipedia.org/wiki/Server_Name_Indication)
 - So what else can we do with the SNI info? If we can't hide it, let's rely on DPIs weak spots. The DPI is an extremly high loaded machine that analyzes every single packet sent to the Internet. And every performance-impacted feature should be avoided for them. One of this features is IP packet fragmentation. We can split the packet in the middle of SNI message and post it. For DPI fragmentation involves too much overhead: they should store a very big mapping table which maps IP id, Source ip and Destination ip. Also note that some packets may be lost and DPI should support auto-clean of that table. So just imagine how much memory and CPU time will this cost for DPI. But fragments are ok for clients and hosts. And that's the base idea behind this package. I have to mention here that the idea isn't mine, I get in here after some research for this side. Here already was a solution for Windows, GoodbyeDPI. I just made an alternative for Linux.
 
+## How it processes packets
+When the packet is joining the queue, the application checks sni payload to be googlevideo (right how the DPIs do), segmentates/fragmentates (both TCP and IP fragmentation techniques are supported) and posts the packet. Note that it is impossible to post two fragmented packets from one netfilter queue verdict. Instead, the application drops an original packet and makes another linux raw socket to post the packets in the network. To escape infinity loops the socket marks outgoing packets and the application automatically accepts it.
+
 You may read further in an [yt-dlp issue page](https://github.com/yt-dlp/yt-dlp/issues/10443) and in [ntc party forum](https://ntc.party/t/%D0%BE%D0%B1%D1%81%D1%83%D0%B6%D0%B4%D0%B5%D0%BD%D0%B8%D0%B5-%D0%B7%D0%B0%D0%BC%D0%B5%D0%B4%D0%BB%D0%B5%D0%BD%D0%B8%D0%B5-youtube-%D0%B2-%D1%80%D0%BE%D1%81%D1%81%D0%B8%D0%B8/8074).
 
 ## Usage:
@@ -33,6 +36,8 @@ Now let's talk about a router configuration. I installed a normal iptables user-
 
 Next step is to daemonize the application in openwrt. Copy youtubeUnblock.owrt to /etc/init.d/youtubeUnblock and put the program into /usr/bin/. (Don't forget to `chmod +x` both). Now run `/etc/init.d/youtubeUnblock start`. You can alo run `/etc/init.d/youtubeUnblock enable` to force OpenWRT autostart the program on boot. 
 
-How it processes packets: When the packet is joining queue, the application checks sni payload to be googlevideo (right how the DPIs do), fragmentates and posts the packet. Note that it is impossible to post two fragmented packets from one netfilter queue verdict. Instead, the application drops an original packet and makes another linux raw socket to post the packets in the network. To escape infinity loops the socket marks outgoing packets and the application automatically accepts it. 
 
-Please note that the application needs in further development. Some googlevideo servers may still be unabailable, some may drop out hello packets on Firefox while some may do so on Chrome. If you got in trouble try to disable GSO (Pass -DNOUSE-GSO as CC_FLAGS). If you have any questions/suggestions feel free to open an issue.
+## Further development
+Please note that the application needs in further development. Some googlevideo servers may still be unabailable, some may drop out hello packets on Firefox while some may do so on Chrome. If you got in trouble try to disable GSO (Pass -DNOUSE-GSO as CC_FLAGS). Also you may set the program to use IP fragmentation instead of TCP (-DUSE_IP_FRAGMENTATION).
+
+**If you have any questions/suggestions/problems feel free to open an issue.**
