@@ -6,6 +6,11 @@ LD := gcc
 CFLAGS:=-Wall -Wpedantic -Wno-unused-variable -I$(DEPSDIR)/include -Os 
 LDFLAGS:=-L$(DEPSDIR)/lib -static
 
+LIBNFNETLINK_CFLAGS := -I$(DEPSDIR)/include
+LIBNFNETLINK_LIBS := -L$(DEPSDIR)/lib
+LIBMNL_CFLAGS := -I$(DEPSDIR)/include
+LIBMNL_LIBS := -L$(DEPSDIR)/lib
+
 # PREFIX is environment variable, if not set default to /usr/local
 ifeq ($(PREFIX),)
 	PREFIX := /usr/local
@@ -13,7 +18,7 @@ else
 	PREFIX := $(DESTDIR)
 endif
 
-export CC LD CFLAGS LDFLAGS
+export CC LD CFLAGS LDFLAGS LIBNFNETLINK_CFLAGS LIBNFNETLINK_LIBS LIBMNL_CFLAGS LIBMNL_LIBS
 
 APP:=$(BUILD_DIR)/youtubeUnblock
 
@@ -43,17 +48,17 @@ prepare_dirs:
 	mkdir -p $(DEPSDIR)
 
 $(LIBNFNETLINK):
-	cd deps/libnfnetlink && ./autogen.sh && ./configure --prefix=$(DEPSDIR) $(if $(CROSS_COMPILE_PLATFORM),--host=$(CROSS_COMPILE_PLATFORM),)
+	cd deps/libnfnetlink && ./autogen.sh && ./configure --prefix=$(DEPSDIR) $(if $(CROSS_COMPILE_PLATFORM),--host=$(CROSS_COMPILE_PLATFORM),) --enable-static --disable-shared
 	$(MAKE) -C deps/libnfnetlink
 	$(MAKE) install -C deps/libnfnetlink
 	
 $(LIBMNL):
-	cd deps/libmnl && ./autogen.sh && ./configure --prefix=$(DEPSDIR) $(if $(CROSS_COMPILE_PLATFORM),--host=$(CROSS_COMPILE_PLATFORM),)
+	cd deps/libmnl && ./autogen.sh && ./configure --prefix=$(DEPSDIR) $(if $(CROSS_COMPILE_PLATFORM),--host=$(CROSS_COMPILE_PLATFORM),) --enable-static --disable-shared
 	$(MAKE) -C deps/libmnl
 	$(MAKE) install -C deps/libmnl
 
 $(LIBNETFILTER_QUEUE): $(LIBNFNETLINK) $(LIBMNL)
-	cd deps/libnetfilter_queue && ./autogen.sh && ./configure --prefix=$(DEPSDIR) $(if $(CROSS_COMPILE_PLATFORM),--host=$(CROSS_COMPILE_PLATFORM),)
+	cd deps/libnetfilter_queue && ./autogen.sh && ./configure --prefix=$(DEPSDIR) $(if $(CROSS_COMPILE_PLATFORM),--host=$(CROSS_COMPILE_PLATFORM),) --enable-static --disable-shared
 	$(MAKE) -C deps/libnetfilter_queue
 	$(MAKE) install -C deps/libnetfilter_queue
 
