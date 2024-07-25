@@ -17,6 +17,7 @@ You may read further in an [yt-dlp issue page](https://github.com/yt-dlp/yt-dlp/
 When the packet is joining the queue, the application checks sni payload to be googlevideo (right how the DPIs do), segmentates/fragmentates (both TCP and IP fragmentation techniques are supported) and posts the packet. Note that it is impossible to post two fragmented packets from one netfilter queue verdict. Instead, the application drops an original packet and makes another linux raw socket to post the packets in the network. To escape infinity loops the socket marks outgoing packets and the application automatically accepts it.
 
 ## Usage:
+Before compilation make sure `gcc`, `make`, `autoconf`, `automake`, `pkg-config` and `libtool` is installed. For Fedora `glibc-static` should be installed as well.
 Compile with `make`. Install with `make install`. The package include libnetfilter_queue, libnfnetlink and libmnl as static dependencies. The package requires linux-headers and kernel built with netfilter nfqueue support.
 
 You should also configure iptables for this to start working:
