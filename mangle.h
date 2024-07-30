@@ -16,10 +16,10 @@ typedef __u32 uint32_t;
 #include <linux/tcp.h>
 
 #include <asm/byteorder.h>
-#define ntohs(x) __constant_ntohs(x)
-#define ntohl(x) __constant_ntohl(x)
-#define htons(x) __constant_htons(x)
-#define htonl(x) __constant_htonl(x)
+// #define ntohs(x) __constant_ntohs(x)
+// #define ntohl(x) __constant_ntohl(x)
+// #define htons(x) __constant_htons(x)
+// #define htonl(x) __constant_htonl(x)
 
 #define	IP_RF 0x8000			/* reserved fragment flag */
 #define	IP_DF 0x4000			/* dont fragment flag */

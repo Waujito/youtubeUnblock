@@ -316,13 +316,11 @@ static int process_packet(const struct packet_data packet, struct queue_data qda
 
 	const struct tcphdr *tcph = (const void *)(raw_payload + iph_len);
 	if ((const uint8_t *)tcph + 20 > raw_payload + raw_payload_len) {
-		printf("LZ\n");
 		goto fallback;
 	}
 
 	int tcph_len = tcph->doff * 4;
 	if ((const uint8_t *)tcph + tcph_len > raw_payload + raw_payload_len) {
-		printf("LZ\n");
 		goto fallback;
 	}
 

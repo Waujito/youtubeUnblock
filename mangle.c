@@ -1,5 +1,4 @@
 #include "mangle.h"
-#include <endian.h>
 
 #ifdef KERNEL_SPACE
 static __u16 nfq_checksum(__u32 sum, __u16 *buf, int size)
@@ -9,7 +8,7 @@ static __u16 nfq_checksum(__u32 sum, __u16 *buf, int size)
                 size -= sizeof(__u16);
         }
         if (size) {
-#if __BYTE_ORDER == __BIG_ENDIAN
+#ifdef __LITTLE_ENDIAN
                 sum += (uint16_t)*(uint8_t *)buf << 8;
 #else
                 sum += (__u16)*(__u8 *)buf;
