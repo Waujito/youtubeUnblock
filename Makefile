@@ -17,7 +17,7 @@ export CC LD CFLAGS LDFLAGS
 
 APP:=$(BUILD_DIR)/youtubeUnblock
 
-SRCS := youtubeUnblock.c
+SRCS := youtubeUnblock.c mangle.c
 OBJS := $(SRCS:%.c=$(BUILD_DIR)/%.o)
 
 LIBNFNETLINK := $(DEPSDIR)/lib/libnfnetlink.a
