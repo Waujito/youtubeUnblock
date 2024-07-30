@@ -7,7 +7,7 @@ PKG_REV:=main
 PKG_SOURCE:=$(PKG_REV).tar.gz
 PKG_SOURCE_URL:=https://github.com/Waujito/youtubeUnblock/archive/
 PKG_HASH:=skip
-PKG_BUILD_DIR:=$(BUILD_DIR)/$(PKG_NAME)-$(PKG_REV)
+PKG_BUILD_DIR:=$(BUILD_DIR)/youtubeUnblock-$(PKG_REV)
 PKG_BUILD_PARALLEL:=1
 
 include $(INCLUDE_DIR)/package.mk

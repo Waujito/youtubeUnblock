@@ -14,8 +14,8 @@ jobs:
         include:
           - branch: SNAPSHOT
             arch: x86_64
-          - branch: openwrt-21.02
-            arch: mipsel_24kc
+          # - branch: openwrt-21.02
+          #   arch: mipsel_24kc
     container:
       image: openwrt/sdk:${{ matrix.arch }}-${{ matrix.branch }}
       options: --user root
@@ -78,6 +78,7 @@ jobs:
           path: ./**/logs-${{ matrix.branch }}-${{ matrix.arch }}.tar.xz
 
   release:
+    if: false
     needs: build
     permissions:
       contents: write
