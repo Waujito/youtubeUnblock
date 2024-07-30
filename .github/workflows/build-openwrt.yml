@@ -1,0 +1,110 @@
+name: build-openwrt
+
+on:
+  workflow_dispatch:
+  push:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    outputs:
+      date: ${{ steps.gh.outputs.date }}
+    strategy:
+      matrix:
+        include:
+          - branch: SNAPSHOT
+            arch: x86_64
+          - branch: openwrt-21.02
+            arch: mipsel_24kc
+    container:
+      image: openwrt/sdk:${{ matrix.arch }}-${{ matrix.branch }}
+      options: --user root
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: GH API
+        id: gh
+        env:
+          # REPO: ${{ github.repository }}
+          REPO: 'Waujito/youtubeUnblock'
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run : |
+          DATE=$(wget -qO- --header="Authorization: token $GH_TOKEN" http://api.github.com/repos/$REPO/commits/main | grep -Po -m1 '"date": "\K.*?(?=")' | date --utc -f - +%Y%m%d)
+          echo "date=$DATE" >> $GITHUB_ENV
+          echo "date=$DATE" >> $GITHUB_OUTPUT
+
+      - name: Build packages
+        id: build
+        working-directory: /builder
+        env:
+          ARCH: ${{ matrix.arch }}
+          BRANCH: ${{ matrix.branch }}
+          DATE: ${{ env.date }}
+        shell: bash
+        run: |
+          cp -va $GITHUB_WORKSPACE/openwrt/ytunblock package
+          sed 's|@VERSION@|$DATE|' -i package/ytunblock/Makefile
+          sed -e 's|base.*\.git|base https://github.com/openwrt/openwrt.git|' \
+              -e 's|packages.*\.git|packages https://github.com/openwrt/packages.git|' -i feeds.conf.default
+          ./scripts/feeds update base packages
+          ./scripts/feeds install -a
+          make defconfig
+          make package/ytunblock/compile V=s -j$(nproc) BUILD_LOG=1
+          find ./bin/packages/*/base -type f ! -name 'ytunblock*.ipk' -delete
+          tar -C ./bin/packages/*/base -cvf ipk-$BRANCH-$ARCH.tar --transform "s|^\./|${BRANCH/openwrt-}/$ARCH/|" --show-transformed-names .
+
+      - name: Compress build logs
+        if: always()
+        env:
+          ARCH: ${{ matrix.arch }}
+          BRANCH: ${{ matrix.branch }}
+        run: |
+          tar -cJvf logs-$BRANCH-$ARCH.tar.xz /builder/logs
+
+      - name: Upload packages
+        if: steps.build.outcome == 'success'
+        uses: actions/upload-artifact@v4
+        with:
+          name: ipk-${{ matrix.branch }}-${{ matrix.arch }}
+          path: /builder/ipk-${{ matrix.branch }}-${{ matrix.arch }}.tar
+          if-no-files-found: error
+
+      - name: Upload build logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: logs-${{ matrix.branch }}-${{ matrix.arch }}
+          path: ./**/logs-${{ matrix.branch }}-${{ matrix.arch }}.tar.xz
+
+  release:
+    needs: build
+    permissions:
+      contents: write
+    runs-on: ubuntu-latest
+    strategy:
+      max-parallel: 1
+      matrix:
+        branch: ['21.02']
+    steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: ipk-*
+
+      - name: Prepare files
+        env:
+          BRANCH: ${{ matrix.branch }}
+        run: |
+          find . -name "ipk-openwrt-$BRANCH-*.tar" -exec tar -xvf {} --wildcards '*.ipk' \;
+
+      - name: Upload release assets
+        uses: ncipollo/release-action@v1
+        with:
+          allowUpdates: true
+          prerelease: false
+          tag: latest
+          name: ${{ needs.build.outputs.date }}
+          body: |
+            ${{ needs.build.outputs.date }}
+          artifacts: ./**/*.ipk
