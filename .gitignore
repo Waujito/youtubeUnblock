@@ -5,17 +5,11 @@ build
 configure~
 
 # Kernel module files
-.Module.*
-.modules.*
-Module.*
-modules.*
-.youtubeKblock.*
-youtubeKblock.ko
-youtubeKblock.mod*
-youtubeKblock.o
-.mangle.*
-mangle.o
-.youtubeKUnblock.*
-youtubeKUnblock.ko
-youtubeKUnblock.mod*
-youtubeKUnblock.o
+*.o
+.*
+*.mod.*
+*.mod
+modules.order
+Module.symvers
+*.so
+*.ko

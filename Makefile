@@ -1,5 +1,5 @@
 USPACE_TARGETS := default all install uninstall dev run_dev
-KMAKE_TARGETS := kmake kload kunload kreload
+KMAKE_TARGETS := kmake kload kunload kreload xmod xtclean
 
 .PHONY: $(USPACE_TARGETS) $(KMAKE_TARGETS) clean
 $(USPACE_TARGETS):
