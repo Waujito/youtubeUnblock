@@ -1,6 +1,8 @@
 #include "mangle.h"
 
 #ifdef KERNEL_SPACE
+#include <linux/printk.h>
+
 static __u16 nfq_checksum(__u32 sum, __u16 *buf, int size)
 {
         while (size > 1) {
@@ -53,6 +55,8 @@ nfq_tcp_compute_checksum_ipv4(struct tcphdr *tcph, struct iphdr *iph)
         tcph->check = 0;
         tcph->check = nfq_checksum_tcpudp_ipv4(iph, IPPROTO_TCP);
 }
+
+#define printf pr_info
 #else 
 #include <stdio.h>
 #include <libnetfilter_queue/libnetfilter_queue_ipv4.h>
@@ -76,7 +80,7 @@ int ip4_payload_split(__u8 *pkt, __u32 buflen,
 
 	__u32 hdr_len = hdr->ihl * 4;
 	__u32 pktlen = ntohs(hdr->tot_len);
-	if (pktlen < buflen || hdr_len > pktlen) return -EINVAL;
+	if (buflen < pktlen || hdr_len > pktlen) return -EINVAL;
 
 	if (iph) 
 		*iph = hdr;
@@ -107,6 +111,7 @@ int tcp4_payload_split(__u8 *pkt, __u32 buflen,
 		return -EINVAL;
 	}
 
+
 	if (
 		hdr->protocol != IPPROTO_TCP || 
 		!(ntohs(hdr->frag_off) & IP_DF) ||
@@ -116,7 +121,7 @@ int tcp4_payload_split(__u8 *pkt, __u32 buflen,
 
 
 	thdr = (struct tcphdr *)(tcph_pl);
-	thdr_len = (*tcph)->doff * 4;
+	thdr_len = thdr->doff * 4;
 
 	if (thdr_len > tcph_plen) {
 		return -EINVAL;
@@ -205,7 +210,7 @@ int ip4_frag(const __u8 *pkt, __u32 buflen, __u32 payload_offset,
 	f2_hdr->tot_len = htons(f2_dlen);
 
 
-#if defined(DEBUG) && !defined(KERNEL_SPACE)
+#if defined(DEBUG)
 	printf("Packet split in portion %u %u\n", f1_plen, f2_plen);
 #endif
 
@@ -233,6 +238,7 @@ int tcp4_frag(const __u8 *pkt, __u32 buflen, __u32 payload_offset,
 				(__u8 **)&payload, &plen)) {
 		return -EINVAL;
 	}
+
 
 	if (plen <= payload_offset) {
 		return -EINVAL;
@@ -269,13 +275,12 @@ int tcp4_frag(const __u8 *pkt, __u32 buflen, __u32 payload_offset,
 
 	s2_tcph->seq = htonl(ntohl(s2_tcph->seq) + payload_offset);
 	
-#if defined(DEBUG) && !defined(KERNEL_SPACE)
+#if defined(DEBUG)
 	printf("Packet split in portion %u %u\n", s1_plen, s2_plen);
 #endif
 
 	nfq_tcp_compute_checksum_ipv4(s1_tcph, s1_hdr);
 	nfq_tcp_compute_checksum_ipv4(s2_tcph, s2_hdr);
-
 	return 0;
 }
 
