@@ -81,7 +81,7 @@ install: all
 uninstall:
 	rm $(PREFIX)/bin/youtubeUnblock
 	rm $(PREFIX)/lib/systemd/system/youtubeUnblock.service
-	systemctl disable youtubeUnblock.service
+	-systemctl disable youtubeUnblock.service
 
 clean:
 	rm -rf $(BUILD_DIR)
