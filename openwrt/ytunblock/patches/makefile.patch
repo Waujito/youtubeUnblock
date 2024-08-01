@@ -1,15 +1,17 @@
 diff --git a/Makefile b/Makefile
-index 988ffc9..6564ea4 100644
+index 988ffc9..5628b8d 100644
 --- a/Makefile
 +++ b/Makefile
-@@ -2,6 +2,7 @@ BUILD_DIR := $(CURDIR)/build
+@@ -2,7 +2,8 @@ BUILD_DIR := $(CURDIR)/build
  DEPSDIR := $(BUILD_DIR)/deps
  
  CC := gcc
-+CCLD := gcc
- LD := gcc
+-LD := gcc
++CCLD := $(CC)
++LD := ld
  CFLAGS:=-Wall -Wpedantic -Wno-unused-variable -I$(DEPSDIR)/include -Os 
  LDFLAGS:=-L$(DEPSDIR)/lib -static
+ 
 @@ -18,7 +19,7 @@ else
  	PREFIX := $(DESTDIR)
  endif

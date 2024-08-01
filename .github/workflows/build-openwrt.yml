@@ -44,7 +44,7 @@ jobs:
         shell: bash
         run: |
           cp -va $GITHUB_WORKSPACE/openwrt/ytunblock package
-          sed 's|@VERSION@|$DATE|' -i package/ytunblock/Makefile
+          sed "s|@VERSION@|$DATE|" -i package/ytunblock/Makefile
           sed -e 's|base.*\.git|base https://github.com/openwrt/openwrt.git|' \
               -e 's|packages.*\.git|packages https://github.com/openwrt/packages.git|' -i feeds.conf.default
           ./scripts/feeds update base packages

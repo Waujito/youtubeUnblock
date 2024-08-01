@@ -21,7 +21,7 @@ endef
 
 define Package/ytunblock/install
 	$(INSTALL_DIR) $(1)/usr/bin
-	$(INSTALL_BIN) $(PKG_BUILD_DIR)/youtubeUnblock $(1)/usr/bin/ytunblock
+	$(INSTALL_BIN) $(PKG_BUILD_DIR)/build/youtubeUnblock $(1)/usr/bin/ytunblock
 
 	$(INSTALL_DIR) $(1)/etc/init.d
 	$(INSTALL_BIN) ./files/ytunblock.init $(1)/etc/init.d/ytunblock
