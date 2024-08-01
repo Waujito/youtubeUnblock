@@ -19,6 +19,12 @@ define Package/ytunblock
 	URL:=https://github.com/Waujito/youtubeUnblock
 endef
 
+define Build/Compile
+	$(MAKE) -C $(PKG_BUILD_DIR) \
+	$(TARGET_CONFIGURE_OPTS) \
+	CROSS_COMPILE_PLATFORM=$(GNU_TARGET_NAME)
+endef
+
 define Package/ytunblock/install
 	$(INSTALL_DIR) $(1)/usr/bin
 	$(INSTALL_BIN) $(PKG_BUILD_DIR)/build/youtubeUnblock $(1)/usr/bin/ytunblock
