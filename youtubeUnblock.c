@@ -21,6 +21,8 @@
 #include <sys/socket.h>
 #include <pthread.h>
 
+#include "raw_replacements.h"
+
 #ifndef NOUSE_GSO
 #define USE_GSO
 #endif
@@ -30,7 +32,15 @@
 #endif
 
 #define RAWSOCKET_MARK 0xfc70
+
+#ifndef NO_SEG2_DELAY
 #define SEG2_DELAY 100
+#endif
+
+#ifndef NO_FAKE_SNI
+#define FAKE_SNI
+#endif
+
 
 static struct {
 	uint32_t queue_num;
@@ -566,6 +576,40 @@ nextMessage:
 	return vrd;
 }
 
+static struct pkt_buff *gen_fake_sni(const struct iphdr *iph, const struct tcphdr *tcph) {
+	int ip_len = iph->ihl * 4;
+	int tcp_len = tcph->doff * 4;
+
+	size_t pkt_size = ip_len + sizeof(fake_sni);
+	struct pkt_buff *pkt = pktb_alloc(AF_INET, NULL, 0, pkt_size);
+	if (pkt == NULL) return NULL;
+
+	pktb_mangle(pkt, 0, 0, 0, (const char *)iph, ip_len);
+	pktb_mangle(pkt, ip_len, 0, 0, fake_sni, sizeof(fake_sni));
+
+	int ret = 0;
+	struct iphdr *niph = nfq_ip_get_hdr(pkt);
+	if (!niph) goto err;
+
+	ret = nfq_ip_set_transport_header(pkt, niph);
+	if (ret < 0) goto err;
+
+	struct tcphdr *ntcph = nfq_tcp_get_hdr(pkt);
+	if (!ntcph) goto err;
+
+	niph->tot_len = htons(pkt_size);
+	ntcph->th_dport = tcph->th_dport;
+	ntcph->th_sport = tcph->th_sport;
+	nfq_ip_set_checksum(niph);
+	nfq_tcp_compute_checksum_ipv4(ntcph, niph);
+
+	return pkt;
+err:
+	fprintf(stderr, "Error in gen fake sni\n");
+	pktb_free(pkt);
+	return NULL;
+
+}
 struct dps_t {
 	struct pkt_buff *pkt;
 	// Time for the packet in milliseconds
@@ -647,6 +691,19 @@ static int process_packet(const struct packet_data packet) {
 
 
 #ifdef USE_TCP_SEGMENTATION
+		struct pkt_buff *fake_sni = gen_fake_sni(ip_header, tcph);
+		if (fake_sni == NULL) goto fallback;
+
+		int ret = 0;
+#ifdef FAKE_SNI
+		ret = send_raw_socket(fake_sni);
+#endif
+		if (ret < 0) {
+			perror("send fake sni\n");
+			pktb_free(fake_sni);
+			goto fallback;
+		}
+
 		size_t ipd_offset = vrd.sni_offset;
 		size_t mid_offset = ipd_offset + vrd.sni_len / 2;
 
@@ -659,10 +716,11 @@ static int process_packet(const struct packet_data packet) {
 		if (tcp4_frag(pktb, mid_offset, &frag1, &frag2) < 0) {
 			perror("tcp4_frag");
 			pktb_free(pktb);
+			pktb_free(fake_sni);
 			goto fallback;
 		}
 
-		int ret = send_raw_socket(frag2);
+		ret = send_raw_socket(frag2);
 		if (ret < 0) {
 			errno = ret;
 			perror("raw frags send");
@@ -689,6 +747,7 @@ static int process_packet(const struct packet_data packet) {
 err:
 		pktb_free(frag2);
 		pktb_free(pktb);
+		pktb_free(fake_sni);
 
 #else
 		// TODO: Implement compute of tcp checksum
