@@ -1,0 +1,32 @@
+diff --git a/Makefile b/Makefile
+index 988ffc9..6564ea4 100644
+--- a/Makefile
++++ b/Makefile
+@@ -2,6 +2,7 @@ BUILD_DIR := $(CURDIR)/build
+ DEPSDIR := $(BUILD_DIR)/deps
+ 
+ CC := gcc
++CCLD := gcc
+ LD := gcc
+ CFLAGS:=-Wall -Wpedantic -Wno-unused-variable -I$(DEPSDIR)/include -Os 
+ LDFLAGS:=-L$(DEPSDIR)/lib -static
+@@ -18,7 +19,7 @@ else
+ 	PREFIX := $(DESTDIR)
+ endif
+ 
+-export CC LD CFLAGS LDFLAGS LIBNFNETLINK_CFLAGS LIBNFNETLINK_LIBS LIBMNL_CFLAGS LIBMNL_LIBS
++export CC CCLD LD CFLAGS LDFLAGS LIBNFNETLINK_CFLAGS LIBNFNETLINK_LIBS LIBMNL_CFLAGS LIBMNL_LIBS
+ 
+ APP:=$(BUILD_DIR)/youtubeUnblock
+ 
+@@ -63,8 +64,8 @@ $(LIBNETFILTER_QUEUE): $(LIBNFNETLINK) $(LIBMNL)
+ 	$(MAKE) install -C deps/libnetfilter_queue
+ 
+ $(APP): $(OBJS) $(LIBNETFILTER_QUEUE) $(LIBMNL)
+-	@echo 'LD $(APP)'
+-	@$(LD) $(OBJS) -o $(APP) -L$(DEPSDIR)/lib -lmnl -lnetfilter_queue
++	@echo 'CCLD $(APP)'
++	@$(CCLD) $(OBJS) -o $(APP) -L$(DEPSDIR)/lib -lmnl -lnetfilter_queue
+ 
+ $(BUILD_DIR)/%.o: %.c $(LIBNETFILTER_QUEUE) $(LIBMNL)
+ 	@echo 'CC $@'
