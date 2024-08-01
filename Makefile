@@ -2,8 +2,8 @@ BUILD_DIR := $(CURDIR)/build
 DEPSDIR := $(BUILD_DIR)/deps
 
 CC := gcc
-CCLD := gcc
-LD := gcc
+CCLD := $(CC)
+LD := ld
 CFLAGS:=-Wall -Wpedantic -Wno-unused-variable -I$(DEPSDIR)/include -Os 
 LDFLAGS:=-L$(DEPSDIR)/lib -static
 
