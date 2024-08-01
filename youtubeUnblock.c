@@ -33,7 +33,7 @@
 
 #define RAWSOCKET_MARK 0xfc70
 
-#ifndef NO_SEG2_DELAY
+#ifdef USE_SEG2_DELAY
 #define SEG2_DELAY 100
 #endif
 
@@ -589,15 +589,26 @@ static struct pkt_buff *gen_fake_sni(const struct iphdr *iph, const struct tcphd
 
 	int ret = 0;
 	struct iphdr *niph = nfq_ip_get_hdr(pkt);
-	if (!niph) goto err;
+	if (!niph) {
+		perror("gen_fake_sni: ip header is null");
+		goto err;
+	}
+
+	niph->protocol = IPPROTO_TCP;
+	niph->tot_len = htons(pkt_size);
 
 	ret = nfq_ip_set_transport_header(pkt, niph);
-	if (ret < 0) goto err;
+	if (ret < 0) {
+		perror("gen_fake_sni: set transport header");
+		goto err;
+	}
 
 	struct tcphdr *ntcph = nfq_tcp_get_hdr(pkt);
-	if (!ntcph) goto err;
+	if (!ntcph) { 
+		perror("gen_fake_sni: nfq_tcp_get_hdr");
+		goto err;
+	}
 
-	niph->tot_len = htons(pkt_size);
 	ntcph->th_dport = tcph->th_dport;
 	ntcph->th_sport = tcph->th_sport;
 	nfq_ip_set_checksum(niph);
@@ -605,7 +616,6 @@ static struct pkt_buff *gen_fake_sni(const struct iphdr *iph, const struct tcphd
 
 	return pkt;
 err:
-	fprintf(stderr, "Error in gen fake sni\n");
 	pktb_free(pkt);
 	return NULL;
 
@@ -712,6 +722,12 @@ static int process_packet(const struct packet_data packet) {
 			packet.payload,
 			packet.payload_len,
 			0);
+
+		if (pktb == NULL) {
+			perror("pktb_alloc of payload");
+			pktb_free(fake_sni);
+			goto fallback;
+		}
 		
 		if (tcp4_frag(pktb, mid_offset, &frag1, &frag2) < 0) {
 			perror("tcp4_frag");
@@ -723,11 +739,10 @@ static int process_packet(const struct packet_data packet) {
 		ret = send_raw_socket(frag2);
 		if (ret < 0) {
 			errno = ret;
-			perror("raw frags send");
+			perror("raw frags send: frag2");
 			pktb_free(frag1);
 			goto err;
 		}
-
 		
 #ifdef SEG2_DELAY
 		struct dps_t *dpdt = malloc(sizeof(struct dps_t));
@@ -739,10 +754,12 @@ static int process_packet(const struct packet_data packet) {
 #else
 		ret = send_raw_socket(frag1);
 		if (ret < 0) {
-			free(frag1);
+			errno = ret;
+			perror("raw frags send: frag1");
+			pktb_free(frag1);
 			goto err;
 		}
-		free(frag1);
+		pktb_free(frag1);
 #endif
 err:
 		pktb_free(frag2);
@@ -851,9 +868,17 @@ int main(int argc, const char *argv[])
 	}
 
 #ifdef USE_TCP_SEGMENTATION
-	printf("Using TCP segmentation!\n");
+	printf("Using TCP segmentation\n");
 #else 
-	printf("Using IP fragmentation!\n");
+	printf("Using IP fragmentation\n");
+#endif 
+
+#ifdef SEG2_DELAY
+	printf("Some outgoing googlevideo request segments will be delayed for %d ms as of SEG2_DELAY define\n", SEG2_DELAY);
+#endif 
+
+#ifdef FAKE_SNI
+	printf("Fake SNI will be sent before each googlevideo request\n");
 #endif 
 
 	if (open_socket()) {
@@ -889,7 +914,7 @@ int main(int argc, const char *argv[])
 	nfq_nlmsg_cfg_put_params(nlh, NFQNL_COPY_PACKET, 0xffff);
 
 #ifdef USE_GSO
-	printf("GSO is enabled!\n");
+	printf("GSO is enabled\n");
 
         mnl_attr_put_u32(nlh, NFQA_CFG_FLAGS, htonl(NFQA_CFG_F_GSO));
         mnl_attr_put_u32(nlh, NFQA_CFG_MASK, htonl(NFQA_CFG_F_GSO));
