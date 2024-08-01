@@ -19,6 +19,7 @@
 #include <linux/netfilter.h>
 #include <linux/if_ether.h>
 #include <sys/socket.h>
+#include <pthread.h>
 
 #ifndef NOUSE_GSO
 #define USE_GSO
@@ -29,6 +30,7 @@
 #endif
 
 #define RAWSOCKET_MARK 0xfc70
+#define SEG2_DELAY 100
 
 static struct {
 	uint32_t queue_num;
@@ -564,7 +566,23 @@ nextMessage:
 	return vrd;
 }
 
+struct dps_t {
+	struct pkt_buff *pkt;
+	// Time for the packet in milliseconds
+	uint32_t timer;
+};
+// Note that the thread will automatically release dps_t and pkt_buff
+void *delay_packet_send(void *data) {
+	struct dps_t *dpdt = data;
+	struct pkt_buff *pkt = dpdt->pkt;
 
+	usleep(dpdt->timer * 1000);
+	send_raw_socket(pkt);
+
+	pktb_free(pkt);
+	free(dpdt);
+	return NULL;
+}
 		     
 static int process_packet(const struct packet_data packet) {
 	char buf[MNL_SOCKET_BUFFER_SIZE];
@@ -644,11 +662,31 @@ static int process_packet(const struct packet_data packet) {
 			goto fallback;
 		}
 
-		if ((send_raw_socket(frag2) == -1) || (send_raw_socket(frag1) == -1)) {
+		int ret = send_raw_socket(frag2);
+		if (ret < 0) {
+			errno = ret;
 			perror("raw frags send");
+			pktb_free(frag1);
+			goto err;
 		}
 
-		pktb_free(frag1);
+		
+#ifdef SEG2_DELAY
+		struct dps_t *dpdt = malloc(sizeof(struct dps_t));
+		dpdt->pkt = frag1;
+		dpdt->timer = SEG2_DELAY;
+		pthread_t thr;
+		pthread_create(&thr, NULL, delay_packet_send, dpdt); 
+		pthread_detach(thr);
+#else
+		ret = send_raw_socket(frag1);
+		if (ret < 0) {
+			free(frag1);
+			goto err;
+		}
+		free(frag1);
+#endif
+err:
 		pktb_free(frag2);
 		pktb_free(pktb);
 
