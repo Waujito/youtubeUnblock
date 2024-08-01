@@ -30,15 +30,18 @@ Systemd daemon is also available. Do `systemctl enable --now youtubeUnblock.serv
 
 Also DNS over HTTPS (DOH) is preferred for additional anonimity. 
 
+## Troubleshooting
+If you have any troubles with youtubeUnblock, here are some options to tune. If them don't work in your case, please, open an issue. You can pass these options in make CFLAGS (`make CFLAGS=...`) or edit CFLAGS variable in Makefile.
+Available flags:
+- -DUSE_SEG2_DELAY This flag forces youtubeUnblock to wait little bit before send the 2nd part of the split packet. You can tune the amount of time in `#define SEG2_DELAY 100` where 100 stands for milliseconds.
+- -DNO_FAKE_SNI This flag forces youtubeUnblock to send at least three packets instead of one with TLS ClientHello: Fake ClientHello, 1st part of original ClientHello, 2nd part of original ClientHello.
+- -DNOUSE_GSO This flag disables fix for Google Chrome fat ClientHello. The GSO is well tested now, so this flag probably won't fix anything.
+
 ## OpenWRT case
 The package is also compatible with routers. The router should be running by free opensource linux-based system such as [OpenWRT](https://openwrt.org/). You should cross-compile it under your host machine. Be ready for compilation errors and a lot of googling about it. It is not such a trivial process! You can get crosscompilation toolsuite compatible with your router from OpenWRT repositories. For example, I have ramips/mt76x8 based router so for me the toolsuite is on https://downloads.openwrt.org/releases/23.05.3/targets/ramips/mt76x8/ and called `openwrt-toolchain-23.05.3-ramips-mt76x8_gcc-12.3.0_musl.Linux-x86_64.tar.xz`. You can find out more about your router model on it's openwrt page. When you download the toolsuite, untar it somewhere. Now we are ready for compilation. My cross gcc asked me to create a staging dir for it and pass it as an environment variable. Also you should notice toolsuite packages and replace my make command with yours. ```STAGING_DIR=temp make CC=/usr/bin/mipsel-openwrt-linux-gcc LD=/usr/bin/mipsel-openwrt-linux-gcc AR=/usr/bin/mipsel-openwrt-linux-ar OBJDUMP=/usr/bin/mipsel-openwrt-linux-objdump NM=/usr/bin/mipsel-openwrt-linux-nm STRIP=/usr/bin/mipsel-openwrt-linux-strip CROSS_COMPILE_PLATFORM=mipsel-buildroot-linux-gnu```. Take a look at `CROSS_COMPILE_PLATFORM` It is required by autotools but I think it is not necessary. Anyways I put `mipsel-buildroot-linux-gnu` in here. For your model may be an [automake cross-compile manual](https://www.gnu.org/software/automake/manual/html_node/Cross_002dCompilation.html) will be helpful. When compilation is done, the binary file will be in build directory. Copy it to your router. Note that an ssh access is likely to be required to proceed. sshfs don't work on my model so I injected the application to the router via Software Upload Package page. It has given me an error, but also a `/tmp/upload.ipk` file which I copied in root directory, `chmod +x`-ed and run.
 
 Now let's talk about a router configuration. I installed a normal iptables user-space app: `xtables-legacy iptables-zz-legacy` and kernel/iptables nfqueue extensions: `iptables-mod-nfqueue kmod-ipt-nfqueue` and add `iptables -t mangle -A FORWARD -p tcp -m tcp --dport 443 -j NFQUEUE --queue-num 537 --queue-bypass` rule.
 
 Next step is to daemonize the application in openwrt. Copy youtubeUnblock.owrt to /etc/init.d/youtubeUnblock and put the program into /usr/bin/. (Don't forget to `chmod +x` both). Now run `/etc/init.d/youtubeUnblock start`. You can alo run `/etc/init.d/youtubeUnblock enable` to force OpenWRT autostart the program on boot. 
-
-
-## Further development
-Please note that the application needs in further development. Some googlevideo servers may still be unabailable, some may drop out hello packets on Firefox while some may do so on Chrome. If you got in trouble try to disable GSO (Pass -DNOUSE_GSO as CC_FLAGS). Also you may set the program to use IP fragmentation instead of TCP (-DUSE_IP_FRAGMENTATION).
 
 **If you have any questions/suggestions/problems feel free to open an issue.**
