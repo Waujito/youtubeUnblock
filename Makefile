@@ -4,7 +4,7 @@ DEPSDIR := $(BUILD_DIR)/deps
 CC := gcc
 CCLD := $(CC)
 LD := ld
-CFLAGS:=-Wall -Wpedantic -Wno-unused-variable -I$(DEPSDIR)/include -Os 
+CFLAGS:=-Wall -Wpedantic -Wno-unused-variable -I$(DEPSDIR)/include -Os
 LDFLAGS:=-L$(DEPSDIR)/lib -static
 
 LIBNFNETLINK_CFLAGS := -I$(DEPSDIR)/include
