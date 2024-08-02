@@ -34,7 +34,7 @@ Also DNS over HTTPS (DOH) is preferred for additional anonimity.
 If you have any troubles with youtubeUnblock, here are some options to tune. If them don't work in your case, please, open an issue. You can pass these options in make CFLAGS (`make CFLAGS=...`) or edit CFLAGS variable in Makefile.
 Available flags:
 - -DUSE_SEG2_DELAY This flag forces youtubeUnblock to wait little bit before send the 2nd part of the split packet. You can tune the amount of time in `#define SEG2_DELAY 100` where 100 stands for milliseconds.
-- -DNO_FAKE_SNI This flag forces youtubeUnblock to send at least three packets instead of one with TLS ClientHello: Fake ClientHello, 1st part of original ClientHello, 2nd part of original ClientHello.
+- -DNO_FAKE_SNI This flag disables -DFAKE_SNI which forces youtubeUnblock to send at least three packets instead of one with TLS ClientHello: Fake ClientHello, 1st part of original ClientHello, 2nd part of original ClientHello. Use this flag if you got gen_fake_sni error. Track this issue in https://github.com/Waujito/youtubeUnblock/issues/17
 - -DNOUSE_GSO This flag disables fix for Google Chrome fat ClientHello. The GSO is well tested now, so this flag probably won't fix anything.
 
 ## OpenWRT case

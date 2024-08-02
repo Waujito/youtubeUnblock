@@ -701,18 +701,18 @@ static int process_packet(const struct packet_data packet) {
 
 
 #ifdef USE_TCP_SEGMENTATION
+		int ret = 0;
+#ifdef FAKE_SNI
 		struct pkt_buff *fake_sni = gen_fake_sni(ip_header, tcph);
 		if (fake_sni == NULL) goto fallback;
 
-		int ret = 0;
-#ifdef FAKE_SNI
 		ret = send_raw_socket(fake_sni);
-#endif
 		if (ret < 0) {
 			perror("send fake sni\n");
 			pktb_free(fake_sni);
 			goto fallback;
 		}
+#endif
 
 		size_t ipd_offset = vrd.sni_offset;
 		size_t mid_offset = ipd_offset + vrd.sni_len / 2;
@@ -725,14 +725,19 @@ static int process_packet(const struct packet_data packet) {
 
 		if (pktb == NULL) {
 			perror("pktb_alloc of payload");
+#ifdef FAKE_SNI
 			pktb_free(fake_sni);
+#endif
 			goto fallback;
 		}
 		
 		if (tcp4_frag(pktb, mid_offset, &frag1, &frag2) < 0) {
 			perror("tcp4_frag");
 			pktb_free(pktb);
+#ifdef FAKE_SNI
 			pktb_free(fake_sni);
+#endif
+
 			goto fallback;
 		}
 
@@ -764,7 +769,9 @@ static int process_packet(const struct packet_data packet) {
 err:
 		pktb_free(frag2);
 		pktb_free(pktb);
+#ifdef FAKE_SNI
 		pktb_free(fake_sni);
+#endif
 
 #else
 		// TODO: Implement compute of tcp checksum
