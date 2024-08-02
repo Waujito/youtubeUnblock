@@ -31,7 +31,7 @@
 #define USE_TCP_SEGMENTATION
 #endif
 
-#define RAWSOCKET_MARK 0xfc70
+#define RAWSOCKET_MARK (1 << 15)
 
 #ifdef USE_SEG2_DELAY
 #define SEG2_DELAY 100
@@ -251,18 +251,27 @@ static int tcp4_frag(struct pkt_buff *pktb, size_t payload_offset,
 
 	struct iphdr *hdr = nfq_ip_get_hdr(pktb);
 	size_t hdr_len = hdr->ihl * 4;
-	if (hdr == NULL) {errno = EINVAL; return -1;}
+	if (hdr == NULL) {
+		perror("tcp4_frag: nfq_ip_get_hdr is null\n");
+		errno = EINVAL; 
+		return -1;
+	}
 	if (hdr->protocol != IPPROTO_TCP || !(ntohs(hdr->frag_off) & IP_DF)) {
+		perror("tcp4_frag: proto is tcp or request is fragmented");
 		errno = EINVAL;
 		return -1;
 	}
 
-	if (nfq_ip_set_transport_header(pktb, hdr)) 
+	if (nfq_ip_set_transport_header(pktb, hdr)) {
+		perror("tcp4_frag: ip_set_transport_header");
 		return -1;
+	}
+
 	
 	struct tcphdr *tcph = nfq_tcp_get_hdr(pktb);
 	size_t tcph_len = tcph->doff * 4;
 	if (tcph == NULL) {
+		perror("tcp4_frag: tcph is NULL");
 		errno = EINVAL;
 		return -1;
 	}
@@ -270,7 +279,8 @@ static int tcp4_frag(struct pkt_buff *pktb, size_t payload_offset,
 	uint8_t *payload = nfq_tcp_get_payload(tcph, pktb);
 	size_t plen = nfq_tcp_get_payload_len(tcph, pktb);
 
-	if (hdr == NULL || payload == NULL || plen <= payload_offset) {
+	if (payload == NULL || plen <= payload_offset) {
+		perror("tcp4_frag: payload is too small or NULL");
 		errno = EINVAL;
 		return -1;
 	}
@@ -280,6 +290,10 @@ static int tcp4_frag(struct pkt_buff *pktb, size_t payload_offset,
 
 	size_t s2_plen = plen - payload_offset;
 	size_t s2_dlen = s2_plen + hdr_len + tcph_len;
+	if (s1_dlen > MNL_SOCKET_BUFFER_SIZE || s2_dlen > MNL_SOCKET_BUFFER_SIZE) {
+		errno = ENOMEM;
+		return -1;
+	}
 
 	memcpy(buff1, hdr, hdr_len);
 	memcpy(buff2, hdr, hdr_len);
@@ -711,7 +725,7 @@ static int process_packet(const struct packet_data packet) {
 
 		ret = send_raw_socket(fake_sni);
 		if (ret < 0) {
-			perror("send fake sni\n");
+			perror("send fake sni");
 			pktb_free(fake_sni);
 			goto fallback;
 		}
@@ -859,7 +873,7 @@ static int queue_cb(const struct nlmsghdr *nlh, void *data) {
 
 	if (attr[NFQA_MARK] != NULL) {
 		// Skip packets sent by rawsocket to escape infinity loop.
-		if (ntohl(mnl_attr_get_u32(attr[NFQA_MARK])) == 
+		if ((ntohl(mnl_attr_get_u32(attr[NFQA_MARK])) & RAWSOCKET_MARK) == 
 			RAWSOCKET_MARK) {
 			return fallback_accept_packet(packet.id);
 		}
