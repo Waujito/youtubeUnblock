@@ -41,6 +41,9 @@
 #define FAKE_SNI
 #endif
 
+#ifndef SILENT 
+#define DEBUG
+#endif
 
 static struct {
 	uint32_t queue_num;
@@ -721,7 +724,10 @@ static int process_packet(const struct packet_data packet) {
 		int ret = 0;
 #ifdef FAKE_SNI
 		struct pkt_buff *fake_sni = gen_fake_sni(ip_header, tcph);
-		if (fake_sni == NULL) goto fallback;
+		if (fake_sni == NULL) {
+			perror("gen_fake_sni");
+			goto fallback;
+		}
 
 		ret = send_raw_socket(fake_sni);
 		if (ret < 0) {

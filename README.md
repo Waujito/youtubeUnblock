@@ -30,6 +30,8 @@ Run an application with `youtubeUnblock 537` where `537` stands for the queue-nu
 
 Systemd daemon is also available. Do `systemctl enable --now youtubeUnblock.service` after installation (uses queue-num `537`). Please, note that systemd will configure iptables automatically. If you have troubles with it, delete ExecStartPre and ExecStop from youtubeUnblock.service and configure iptables manually (may be a useful case for nftables).
 
+If you don't want youtubeUnblock to log on each googlevideo request pass -DSILENT as CFLAGS.
+
 Also DNS over HTTPS (DOH) is preferred for additional anonimity. 
 
 ## Troubleshooting
