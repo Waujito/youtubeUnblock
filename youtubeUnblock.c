@@ -577,14 +577,20 @@ nextMessage:
 }
 
 static struct pkt_buff *gen_fake_sni(const struct iphdr *iph, const struct tcphdr *tcph) {
+	uint8_t sniph_buf[60];
 	int ip_len = iph->ihl * 4;
-	int tcp_len = tcph->doff * 4;
-
 	size_t pkt_size = ip_len + sizeof(fake_sni);
+
+	memcpy(sniph_buf, iph, ip_len);
+	struct iphdr *sniph = (struct iphdr *)sniph_buf;
+
+	sniph->protocol = IPPROTO_TCP;
+	sniph->tot_len = htons(pkt_size);
+
 	struct pkt_buff *pkt = pktb_alloc(AF_INET, NULL, 0, pkt_size);
 	if (pkt == NULL) return NULL;
 
-	pktb_mangle(pkt, 0, 0, 0, (const char *)iph, ip_len);
+	pktb_mangle(pkt, 0, 0, 0, (char *)sniph_buf, ip_len);
 	pktb_mangle(pkt, ip_len, 0, 0, fake_sni, sizeof(fake_sni));
 
 	int ret = 0;
@@ -593,9 +599,6 @@ static struct pkt_buff *gen_fake_sni(const struct iphdr *iph, const struct tcphd
 		perror("gen_fake_sni: ip header is null");
 		goto err;
 	}
-
-	niph->protocol = IPPROTO_TCP;
-	niph->tot_len = htons(pkt_size);
 
 	ret = nfq_ip_set_transport_header(pkt, niph);
 	if (ret < 0) {
