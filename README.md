@@ -21,8 +21,10 @@ Before compilation make sure `gcc`, `make`, `autoconf`, `automake`, `pkg-config`
 Compile with `make`. Install with `make install`. The package include libnetfilter_queue, libnfnetlink and libmnl as static dependencies. The package requires linux-headers and kernel built with netfilter nfqueue support.
 
 You should also configure iptables for this to start working:
-```iptables -A OUTPUT -p tcp --dport 443 -j NFQUEUE --queue-num 537 --queue-bypass```
+```iptables -A OUTPUT -p tcp --dport 443 -j NFQUEUE --queue-num 537 --queue-bypass``` (or do ```nft add rule ip mangle OUTPUT tcp dport 443 counter queue num 537 bypass``` for nftables.)
 Here iptables serves every tcp packet, destinating port 443 for this userspace packet analyzer (via netfilter kernel module) queue-num may be any number from 0 to 65565. --queue-bypass allows traffic to pass if the application is down.
+
+Also tips to explicitly accept all important outgoing raw packets from youtubeUnblock from [Troubleshooting EPERMS](https://github.com/Waujito/youtubeUnblock?tab=readme-ov-file#troubleshooting-eperms-operation-not-permitted) may be useful to avoid issues.
 
 Run an application with `youtubeUnblock 537` where `537` stands for the queue-num (must be the same as in the iptables rule).
 
@@ -37,7 +39,7 @@ Available flags:
 - -DNO_FAKE_SNI This flag disables -DFAKE_SNI which forces youtubeUnblock to send at least three packets instead of one with TLS ClientHello: Fake ClientHello, 1st part of original ClientHello, 2nd part of original ClientHello. This flag may be related to some Operation not permitted error messages, so befor open an issue refer to FAQ for EPERMS.
 - -DNOUSE_GSO This flag disables fix for Google Chrome fat ClientHello. The GSO is well tested now, so this flag probably won't fix anything.
 
-### FAQ for EPERMS (Operation not permitted)
+### Troubleshooting EPERMS (Operation not permitted)
 EPERM may occur in a lot of places but generally here are two: mnl_cb_run and when sending the packet via rawsocket (raw_frags_send and send fake sni).
 - mnl_cb_run Operation not permitted indicates that another instance of youtubeUnblock is running on the specified queue-num.
 - rawsocket Operation not permitted indicates that the packet is being dropped by nefilter rules. In fact this is a hint from the kernel that something wrong is going on and we should check the firewall rules. Before dive into the problem let's make it clean how the mangled packets are being sent. Nefilter queue provides us with the ability to mangle the packet on fly but that is not suitable for this program because we need to split the packet to at least two independent packets. So we are using [linux raw sockets](https://man7.org/linux/man-pages/man7/raw.7.html) which allows us to send any ipv4 packet. **The packet goes from the OUTPUT chain even when NFQUEUE is set up on FORWARD (suitable for OpenWRT).** So we need to escape packet rejects here.
@@ -48,8 +50,13 @@ EPERM may occur in a lot of places but generally here are two: mnl_cb_run and wh
 ## OpenWRT case
 The package is also compatible with routers. The router should be running by free opensource linux-based system such as [OpenWRT](https://openwrt.org/). You should cross-compile it under your host machine. Be ready for compilation errors and a lot of googling about it. It is not such a trivial process! You can get crosscompilation toolsuite compatible with your router from OpenWRT repositories. For example, I have ramips/mt76x8 based router so for me the toolsuite is on https://downloads.openwrt.org/releases/23.05.3/targets/ramips/mt76x8/ and called `openwrt-toolchain-23.05.3-ramips-mt76x8_gcc-12.3.0_musl.Linux-x86_64.tar.xz`. You can find out more about your router model on it's openwrt page. When you download the toolsuite, untar it somewhere. Now we are ready for compilation. My cross gcc asked me to create a staging dir for it and pass it as an environment variable. Also you should notice toolsuite packages and replace my make command with yours. ```STAGING_DIR=temp make CC=/usr/bin/mipsel-openwrt-linux-gcc LD=/usr/bin/mipsel-openwrt-linux-ld AR=/usr/bin/mipsel-openwrt-linux-ar OBJDUMP=/usr/bin/mipsel-openwrt-linux-objdump NM=/usr/bin/mipsel-openwrt-linux-nm STRIP=/usr/bin/mipsel-openwrt-linux-strip CROSS_COMPILE_PLATFORM=mipsel-buildroot-linux-gnu```. Take a look at `CROSS_COMPILE_PLATFORM` It is required by autotools but I think it is not necessary. Anyways I put `mipsel-buildroot-linux-gnu` in here. For your model may be an [automake cross-compile manual](https://www.gnu.org/software/automake/manual/html_node/Cross_002dCompilation.html) will be helpful. When compilation is done, the binary file will be in build directory. Copy it to your router. Note that an ssh access is likely to be required to proceed. sshfs don't work on my model so I injected the application to the router via Software Upload Package page. It has given me an error, but also a `/tmp/upload.ipk` file which I copied in root directory, `chmod +x`-ed and run.
 
-Now let's talk about a router configuration. I installed a normal iptables user-space app: `xtables-legacy iptables-zz-legacy` and kernel/iptables nfqueue extensions: `iptables-mod-nfqueue kmod-ipt-nfqueue` and add `iptables -t mangle -A FORWARD -p tcp -m tcp --dport 443 -j NFQUEUE --queue-num 537 --queue-bypass` rule.
+Now let's talk about a router configuration. I installed a normal iptables user-space app: `xtables-legacy iptables-zz-legacy` and kernel/iptables nfqueue extensions: `iptables-mod-nfqueue kmod-ipt-nfqueue` and add `iptables -t mangle -A FORWARD -p tcp -m tcp --dport 443 -j NFQUEUE --queue-num 537 --queue-bypass` rule. 
+
+If you prefer nftables this should work: `nft add rule inet fw4 mangle_forward tcp dport 443 counter queue num 537 bypass`. Note that kmod-nft-queue should be installed.
 
 Next step is to daemonize the application in openwrt. Copy youtubeUnblock.owrt to /etc/init.d/youtubeUnblock and put the program into /usr/bin/. (Don't forget to `chmod +x` both). Now run `/etc/init.d/youtubeUnblock start`. You can alo run `/etc/init.d/youtubeUnblock enable` to force OpenWRT autostart the program on boot. 
+
+## Performance 
+If you have bad performance you can queue to youtubeUnblock only first, say, 20 packets. To do so, use nftables conntrack packets counter: `nft add rule inet fw4 mangle_forward tcp dport 443 ct "packets < 20" counter queue num 537 bypass`. For my 1 CPU core device it worked pretty well. This works because we do care about only first packets with ClientHello. We don't need to process others.
 
 **If you have any questions/suggestions/problems feel free to open an issue.**
