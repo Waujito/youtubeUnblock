@@ -41,6 +41,8 @@ Available flags:
 - -DNO_FAKE_SNI This flag disables -DFAKE_SNI which forces youtubeUnblock to send at least three packets instead of one with TLS ClientHello: Fake ClientHello, 1st part of original ClientHello, 2nd part of original ClientHello. This flag may be related to some Operation not permitted error messages, so befor open an issue refer to FAQ for EPERMS.
 - -DNOUSE_GSO This flag disables fix for Google Chrome fat ClientHello. The GSO is well tested now, so this flag probably won't fix anything.
 
+If you are on Chromium you may have to disable kyber (the feature that makes the TLS ClientHello very fat). I've got the problem with it on router, so to escape possibly errors it is better to just disable it: in chrome://flags search for kyber and switch it to disabled state. 
+
 ### Troubleshooting EPERMS (Operation not permitted)
 EPERM may occur in a lot of places but generally here are two: mnl_cb_run and when sending the packet via rawsocket (raw_frags_send and send fake sni).
 - mnl_cb_run Operation not permitted indicates that another instance of youtubeUnblock is running on the specified queue-num.
