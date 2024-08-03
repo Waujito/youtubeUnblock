@@ -47,13 +47,6 @@ static int open_raw_socket(void) {
 	int one = 1;
 	optval.kernel = &one;
 
-	// ret = sock_setsockopt(rawsocket, IPPROTO_IP, IP_HDRINCL, optval, sizeof(one));
-	// if (ret < 0)
-	// {
-	// 	pr_alert("setsockopt(IP_HDRINCL, 1) failed\n");
-	// 	goto err;
-	// }
-
 	return 0;
 sr_err:
 	sock_release(rawsocket);
@@ -71,7 +64,6 @@ static int send_raw_socket(const uint8_t *pkt, uint32_t pktlen) {
 	
 	if (pktlen > AVAILABLE_MTU) {
 		pr_alert("The packet is too big!");
-		return -ENOMEM;
 #ifdef DEBUG
 		printf("Split packet!\n");
 #endif
@@ -123,12 +115,6 @@ static int send_raw_socket(const uint8_t *pkt, uint32_t pktlen) {
 		return sent;
 	}
 
-	// TODO: Implement packet send via kernel 
-	//https://stackoverflow.com/questions/25958715/linux-kernel-module-how-to-reinject-packets-the-kernel-considers-as-nf-stolen
-	//https://stackoverflow.com/questions/15934513/cannot-send-out-packets-by-dev-queue-xmit
-	//https://stackoverflow.com/questions/66846959/send-packet-in-linux-kernel
-	return 0;
-/*
 	struct iphdr *iph;
 
 	int ret;
@@ -137,15 +123,9 @@ static int send_raw_socket(const uint8_t *pkt, uint32_t pktlen) {
 		return ret;
 	}
 
-	int sin_port = 0;
-
-	struct tcphdr *tcph;
-	if (tcp4_payload_split((uint8_t *)pkt, pktlen, NULL, NULL, &tcph, NULL, NULL, NULL) == 0)
-		sin_port = tcph->dest;
-
 	struct sockaddr_in daddr = {
 		.sin_family = AF_INET,
-		.sin_port = sin_port,
+		.sin_port = 0,
 		.sin_addr = {
 			.s_addr = iph->daddr
 		}
@@ -158,20 +138,18 @@ static int send_raw_socket(const uint8_t *pkt, uint32_t pktlen) {
 	iov_iter_kvec(&msg.msg_iter, READ, &iov, 1, 1);
 
 	msg.msg_flags = 0;
-	msg.msg_name = (struct sockaddr *)&daddr;
-	msg.msg_namelen = sizeof(daddr);
+	msg.msg_name = &daddr;
+	msg.msg_namelen = sizeof(struct sockaddr_in);
 	msg.msg_control = NULL;
 	msg.msg_controllen = 0;
 
 	mutex_lock(&rslock);
-	// ret = sock_sendmsg(rawsocket, &msg);
-	ret = kernel_sendmsg(rawsocket, &msg, &iov, 1, 1);
+	ret = kernel_sendmsg(rawsocket, &msg, &iov, 1, pktlen);
 	mutex_unlock(&rslock);
 
 	pr_info("%d\n", ret);
 
 	return ret;
-*/
 }
 static unsigned int ykb_tg(struct sk_buff *skb, const struct xt_action_param *par) 
 {

@@ -2,6 +2,8 @@
 #define YU_MANGLE_H
 #define RAWSOCKET_MARK 0xfc70
 
+#define DEBUG
+
 #ifdef KERNEL_SPACE
 #include <linux/types.h>
 typedef __u8 uint8_t;
@@ -23,6 +25,8 @@ typedef __u32 uint32_t;
 #define	IP_MF 0x2000			/* more fragments flag */
 #define	IP_OFFMASK 0x1fff		/* mask for fragmenting bits */
 #else
+#define USER_SPACE
+
 #include <stdint.h>
 #include <string.h>
 #include <errno.h>

@@ -57,6 +57,7 @@ nfq_tcp_compute_checksum_ipv4(struct tcphdr *tcph, struct iphdr *iph)
 }
 
 #define printf pr_info
+#define perror pr_err
 #else 
 #include <stdio.h>
 #include <libnetfilter_queue/libnetfilter_queue_ipv4.h>
@@ -158,11 +159,10 @@ int ip4_frag(const __u8 *pkt, __u32 buflen, __u32 payload_offset,
 	}
 
 	if (payload_offset & ((1 << 3) - 1)) {
-#ifdef KERNEL_SPACE 
-#else
+#ifdef USER_SPACE
 		errno = EINVAL;
-		perror("Payload offset MUST be a multiply of 8!");
 #endif
+		perror("Payload offset MUST be a multiply of 8!");
 
 		return -EINVAL;
 	}
@@ -291,8 +291,6 @@ int tcp4_frag(const __u8 *pkt, __u32 buflen, __u32 payload_offset,
 
 const char googlevideo_ending[] = "googlevideo.com";
 const int googlevideo_len = 15;
-
-#define GOOGLEVIDEO_MARK 0xfc74
 
 
 typedef __u8 uint8_t;
