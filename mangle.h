@@ -1,8 +1,5 @@
 #ifndef YU_MANGLE_H
 #define YU_MANGLE_H
-#define RAWSOCKET_MARK 0xfc70
-
-#define DEBUG
 
 #ifdef KERNEL_SPACE
 #include <linux/types.h>
@@ -61,4 +58,7 @@ int tcp4_payload_split(uint8_t *pkt, uint32_t buflen,
 		       struct iphdr **iph, uint32_t *iph_len,
 		       struct tcphdr **tcph, uint32_t *tcph_len,
 		       uint8_t **payload, uint32_t *plen);
+
+int gen_fake_sni(const struct iphdr *iph, const struct tcphdr *tcph, 
+		 uint8_t *buf, uint32_t *buflen);
 #endif /* YU_MANGLE_H */

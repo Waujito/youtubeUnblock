@@ -24,29 +24,10 @@
 #include <linux/netfilter.h>
 #include <linux/if_ether.h>
 #include <sys/socket.h>
-
 #include <pthread.h>
+
 #include "mangle.h"
-
-#ifndef NOUSE_GSO
-#define USE_GSO
-#endif
-
-#ifndef USE_IP_FRAGMENTATION
-#define USE_TCP_SEGMENTATION
-#endif
-
-#define RAWSOCKET_MARK 0xfc70
-#define MAX_THREADS 16
-
-#ifndef THREADS_NUM
-#define THREADS_NUM 1
-#endif
-
-#if THREADS_NUM > MAX_THREADS
-#error "Too much threads"
-#endif
-
+#include "config.h"
 
 static struct {
 	uint32_t queue_start_num;
@@ -176,7 +157,6 @@ static int close_raw_socket(void) {
 	return 0;
 }
 
-
 #define AVAILABLE_MTU 1384
 
 static int send_raw_socket(const uint8_t *pkt, uint32_t pktlen) {
@@ -190,15 +170,20 @@ static int send_raw_socket(const uint8_t *pkt, uint32_t pktlen) {
 		uint8_t buff2[MNL_SOCKET_BUFFER_SIZE];
 		uint32_t buff2_size = MNL_SOCKET_BUFFER_SIZE;
 
-#ifdef USE_TCP_SEGMENTATION
+#if defined(USE_TCP_SEGMENTATION) || defined(RAWSOCK_TCP_FSTRAT)
 		if ((errno = tcp4_frag(pkt, pktlen, AVAILABLE_MTU-128, 
 			buff1, &buff1_size, buff2, &buff2_size)) < 0)
 			return -1;
-#else
+#elif defined(USE_IP_FRAGMENTATION) || defined(RAWSOCK_IP_FSTRAT)
 		if ((errno = ip4_frag(pkt, pktlen, AVAILABLE_MTU-128, 
 			buff1, &buff1_size, buff2, &buff2_size)) < 0)
 			return -1;
-
+#else
+		errno = EINVAL;
+		printf("send_raw_socket: Packet is too big but fragmentation is disabled! "
+			"Pass -DRAWSOCK_TCP_FSTRAT or -DRAWSOCK_IP_FSTRAT as CFLAGS "
+			"To enable it only for raw socket\n");
+		return -1;
 #endif
 
 		int sent = 0;
@@ -287,8 +272,29 @@ static int fallback_accept_packet(uint32_t id, struct queue_data qdata) {
         return MNL_CB_OK;
 }
 
-static int process_packet(const struct packet_data packet, struct queue_data qdata) {
 
+struct dps_t {
+	uint8_t *pkt;
+	uint32_t pktlen;
+	// Time for the packet in milliseconds
+	uint32_t timer;
+};
+// Note that the thread will automatically release dps_t and pkt_buff
+void *delay_packet_send(void *data) {
+	struct dps_t *dpdt = data;
+
+	uint8_t *pkt = dpdt->pkt;
+	uint32_t pktlen = dpdt->pktlen;
+
+	usleep(dpdt->timer * 1000);
+	send_raw_socket(pkt, pktlen);
+
+	free(pkt);
+	free(dpdt);
+	return NULL;
+}
+		     
+static int process_packet(const struct packet_data packet, struct queue_data qdata) {
 	char buf[MNL_SOCKET_BUFFER_SIZE];
         struct nlmsghdr *verdnlh;
 
@@ -343,50 +349,93 @@ static int process_packet(const struct packet_data packet, struct queue_data qda
 #endif
 		}
 		
+#ifdef FAKE_SNI
+		uint8_t fake_sni[MNL_SOCKET_BUFFER_SIZE];
+		uint32_t fsn_len = MNL_SOCKET_BUFFER_SIZE;
+#endif
+
 		uint8_t frag1[MNL_SOCKET_BUFFER_SIZE];
 		uint8_t frag2[MNL_SOCKET_BUFFER_SIZE];
 		uint32_t f1len = MNL_SOCKET_BUFFER_SIZE;
 		uint32_t f2len = MNL_SOCKET_BUFFER_SIZE;
 		nfq_nlmsg_verdict_put(verdnlh, packet.id, NF_DROP);
+		int ret = 0;
 
+		nfq_ip_set_checksum((struct iphdr *)ip_header);
+		nfq_tcp_compute_checksum_ipv4(
+			(struct tcphdr *)tcph, (struct iphdr *)ip_header);
 
-#ifdef USE_TCP_SEGMENTATION
-		size_t ipd_offset = vrd.sni_offset;
-		size_t mid_offset = ipd_offset + vrd.sni_len / 2;
-
-		if ((errno = tcp4_frag(raw_payload, raw_payload_len, 
-			 mid_offset, frag1, &f1len, frag2, &f2len)) < 0) {
-			errno *= -1;
-			perror("tcp4_frag");
+#ifdef FAKE_SNI
+		ret = gen_fake_sni(ip_header, tcph, fake_sni, &fsn_len);
+		if (ret < 0) {
+			errno = -ret;
+			perror("gen_fake_sni");
 			goto fallback;
 		}
 
-		if ((send_raw_socket(frag2, f2len) < 0) || 
-			(send_raw_socket(frag1, f1len) < 0)) {
-			perror("raw frags send");
+		ret = send_raw_socket(fake_sni, fsn_len);
+		if (ret < 0) {
+			errno = -ret;
+			perror("send fake sni");
+			goto fallback;
+		}
+#endif
+
+
+#if defined(USE_TCP_SEGMENTATION)
+		size_t ipd_offset = vrd.sni_offset;
+		size_t mid_offset = ipd_offset + vrd.sni_len / 2;
+
+		if ((ret = tcp4_frag(raw_payload, raw_payload_len, 
+			 mid_offset, frag1, &f1len, frag2, &f2len)) < 0) {
+			errno = -ret;
+			perror("tcp4_frag");
+			goto send_verd;
 		}
 
-#else
-		// TODO: Implement compute of tcp checksum
-		// GSO may turn kernel to not compute the tcp checksum.
-		// Also it will never be meaningless to ensure the 
-		// checksum is right.
-		// nfq_tcp_compute_checksum_ipv4(tcph, ip_header);
-
+#elif defined(USE_IP_FRAGMENTATION)
 		size_t ipd_offset = ((char *)data - (char *)tcph) + vrd.sni_offset;
 		size_t mid_offset = ipd_offset + vrd.sni_len / 2;
 		mid_offset += 8 - mid_offset % 8;
 
-		if ((errno = ip4_frag(raw_payload, raw_payload_len, 
+		if ((ret = ip4_frag(raw_payload, raw_payload_len, 
 			 mid_offset, frag1, &f1len, frag2, &f2len)) < 0) {
-			errno *= -1;
+			errno = -ret;
 			perror("ip4_frag");
-			goto fallback;
+			goto send_verd;
 		}
 
-		if ((send_raw_socket(frag2, f2len) < 0) || 
-			(send_raw_socket(frag1, f1len) < 0)) {
-			perror("raw frags send");
+#else
+		ret = send_raw_socket(raw_payload, raw_payload_len);
+		if (ret < 0) {
+			errno = -ret;
+			perror("raw pack send");
+		}
+		goto send_verd;
+#endif
+
+		ret = send_raw_socket(frag2, f2len);
+		if (ret < 0) {
+			errno = -ret;
+			perror("raw frags send: frag2");
+
+			goto send_verd;
+		}
+		
+#ifdef SEG2_DELAY
+		struct dps_t *dpdt = malloc(sizeof(struct dps_t));
+		dpdt->pkt = malloc(f1len);
+		dpdt->timer = SEG2_DELAY;
+		pthread_t thr;
+		pthread_create(&thr, NULL, delay_packet_send, dpdt); 
+		pthread_detach(thr);
+#else
+		ret = send_raw_socket(frag1, f1len);
+		if (ret < 0) {
+			errno = -ret;
+			perror("raw frags send: frag1");
+
+			goto send_verd;
 		}
 
 #endif
@@ -404,6 +453,7 @@ static int process_packet(const struct packet_data packet, struct queue_data qda
 	}
 */
 
+send_verd:
         if (mnl_socket_sendto(*qdata._nl, verdnlh, verdnlh->nlmsg_len) < 0) {
                 perror("mnl_socket_send");
 		
@@ -452,7 +502,7 @@ static int queue_cb(const struct nlmsghdr *nlh, void *data) {
 
 	if (attr[NFQA_MARK] != NULL) {
 		// Skip packets sent by rawsocket to escape infinity loop.
-		if (ntohl(mnl_attr_get_u32(attr[NFQA_MARK])) == 
+		if ((ntohl(mnl_attr_get_u32(attr[NFQA_MARK])) & RAWSOCKET_MARK) == 
 			RAWSOCKET_MARK) {
 			return fallback_accept_packet(packet.id, *qdata);
 		}
@@ -564,10 +614,20 @@ int main(int argc, const char *argv[]) {
 		exit(EXIT_FAILURE);
 	}
 
-#ifdef USE_TCP_SEGMENTATION
-	printf("Using TCP segmentation!\n");
-#else 
-	printf("Using IP fragmentation!\n");
+#if defined(USE_TCP_SEGMENTATION)
+	printf("Using TCP segmentation\n");
+#elif defined(USE_IP_FRAGMENTATION)
+	printf("Using IP fragmentation\n");
+#else
+	printf("SNI fragmentation is disabled\n");
+#endif 
+
+#ifdef SEG2_DELAY
+	printf("Some outgoing googlevideo request segments will be delayed for %d ms as of SEG2_DELAY define\n", SEG2_DELAY);
+#endif 
+
+#ifdef FAKE_SNI
+	printf("Fake SNI will be sent before each googlevideo request\n");
 #endif 
 
 #ifdef USE_GSO
@@ -578,6 +638,8 @@ int main(int argc, const char *argv[]) {
 		perror("Unable to open raw socket");
 		exit(EXIT_FAILURE);
 	}
+
+
 
 #if THREADS_NUM == 1
 	struct queue_conf tconf = {
@@ -600,10 +662,11 @@ int main(int argc, const char *argv[]) {
 	}
 
 	void *res;
+	struct queue_res *qres
 	for (int i = 0; i < config.threads; i++) {
 		pthread_join(threads[i], &res);
 
-		struct queue_res *qres = res;
+		qres = res;
 	}
 #endif
 

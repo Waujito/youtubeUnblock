@@ -5,7 +5,9 @@ Description=youtubeUnblock
 StandardError=journal
 StandardOutput=journal
 StandardInput=null
+ExecStartPre=iptables -t mangle -A OUTPUT -p tcp --dport 443 -j NFQUEUE --queue-num 537 --queue-bypass
 ExecStart=$(PREFIX)/bin/youtubeUnblock 537
+ExecStop=iptables -t mangle -D OUTPUT -p tcp --dport 443 -j NFQUEUE --queue-num 537 --queue-bypass
 
 [Install]
 WantedBy=multi-user.target

@@ -1,4 +1,5 @@
 #include "mangle.h"
+#include "raw_replacements.h"
 
 #ifdef KERNEL_SPACE
 #include <linux/printk.h>
@@ -430,3 +431,42 @@ nextMessage:
 	return vrd;
 }
 
+int gen_fake_sni(const struct iphdr *iph, const struct tcphdr *tcph, 
+		 uint8_t *buf, uint32_t *buflen) {
+
+	if (iph == NULL || tcph == NULL || buf == NULL || buflen == NULL)
+		return -EINVAL;
+
+	int ip_len = iph->ihl * 4;
+	size_t data_len = sizeof(fake_sni);
+
+	size_t dlen = data_len + ip_len;
+
+	if (*buflen < dlen) 
+		return -ENOMEM;
+
+	memcpy(buf, iph, ip_len);
+	memcpy(buf + ip_len, fake_sni, data_len);
+	struct iphdr *niph = (struct iphdr *)buf;
+
+	niph->protocol = IPPROTO_TCP;
+	niph->tot_len = htons(dlen);
+
+	int ret = 0;
+	struct tcphdr *ntcph = (struct tcphdr *)(buf + ip_len);
+
+#ifdef KERNEL_SPACE
+	ntcph->dest = tcph->dest;
+	ntcph->source = tcph->source;
+#else 
+	ntcph->th_dport = tcph->th_dport;
+	ntcph->th_sport = tcph->th_sport;
+#endif 
+
+	nfq_ip_set_checksum(niph);
+	nfq_tcp_compute_checksum_ipv4(ntcph, niph);
+
+	*buflen = dlen;
+
+	return 0;
+}
