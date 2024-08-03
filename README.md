@@ -65,6 +65,6 @@ Next step is to daemonize the application in openwrt. Copy `owrt/youtubeUnblock.
 ## Performance 
 If you have bad performance you can queue to youtubeUnblock only first, say, 20 packets from the connection. To do so, use nftables conntrack packets counter: `nft add rule inet fw4 mangle_forward tcp dport 443 ct original "packets < 20" counter queue num 537 bypass`. For my 1 CPU core device it worked pretty well. This works because we do care about only first packets with ClientHello. We don't need to process others.
 
-The same behavior is also possible in iptables: `iptables -t mangle -A FORWARD -p tcp -m tcp --dport 443 -m connbytes --connbytes-dir original --connbytes-mode packets --connbytes 0:19 -j NFQUEUE --queue-num 537 --queue-bypass`
+The same behavior is also possible in iptables: `iptables -t mangle -A FORWARD -p tcp -m tcp --dport 443 -m connbytes --connbytes-dir original --connbytes-mode packets --connbytes 0:19 -j NFQUEUE --queue-num 537 --queue-bypass`. (The package iptables-mod-conntrack-extra is required for connbytes on OpenWRT)
 
 ## If you have any questions/suggestions/problems feel free to open an issue.
