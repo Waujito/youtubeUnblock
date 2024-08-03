@@ -27,9 +27,18 @@
 #define USE_GSO
 #endif
 
-#ifndef USE_IP_FRAGMENTATION
-#define USE_TCP_SEGMENTATION
-#endif
+#define FRAG_STRAT_TCP	0
+#define FRAG_STRAT_IP	1
+#define FRAG_STRAT_NONE	2
+
+#define FRAGMENTATION_STRATEGY FRAG_STRAT_TCP
+
+#if FRAGMENTATION_STRATEGY == FRAG_STRAT_TCP
+	#define USE_TCP_SEGMENTATION
+#elif FRAGMENTATION_STRATEGY == FRAG_STRAT_IP
+	#define USE_IP_FRAGMENTATION
+#elif FRAGMENTATION_STRATEGY == FRAG_STRAT_NONE
+#endif 
 
 #define RAWSOCKET_MARK (1 << 15)
 
@@ -173,12 +182,17 @@ static int ipv4_frag(struct pkt_buff *pktb, size_t payload_offset,
 	uint8_t buff2[MNL_SOCKET_BUFFER_SIZE];
 
 	struct iphdr *hdr = nfq_ip_get_hdr(pktb);
+	if (hdr == NULL) {
+		errno = EINVAL;
+		return -1;
+	}
+
 	size_t hdr_len = hdr->ihl * 4;
 
 	uint8_t *payload = pktb_data(pktb) + hdr_len;
 	size_t plen = pktb_len(pktb) - hdr_len;
 
-	if (hdr == NULL || payload == NULL || plen <= payload_offset) {
+	if (payload == NULL || plen <= payload_offset) {
 		errno = EINVAL;
 		return -1;
 	}
@@ -255,15 +269,25 @@ static int tcp4_frag(struct pkt_buff *pktb, size_t payload_offset,
 	struct iphdr *hdr = nfq_ip_get_hdr(pktb);
 	size_t hdr_len = hdr->ihl * 4;
 	if (hdr == NULL) {
+		errno = EINVAL; 
 		perror("tcp4_frag: nfq_ip_get_hdr is null\n");
 		errno = EINVAL; 
 		return -1;
 	}
-	if (hdr->protocol != IPPROTO_TCP || !(ntohs(hdr->frag_off) & IP_DF)) {
-		perror("tcp4_frag: proto is tcp or request is fragmented");
+	if (hdr->protocol != IPPROTO_TCP) {		
+		errno = EINVAL;
+		perror("tcp4_frag: proto is not tcp");
 		errno = EINVAL;
 		return -1;
 	}
+	if (!(ntohs(hdr->frag_off) & IP_DF)) {
+		errno = EINVAL;
+		perror("tcp4_frag: request is ip-fragmented");
+		fprintf(stderr, "tcp4_frag: frag_off: %04x\n", ntohs(hdr->frag_off)); 
+		errno = EINVAL;
+		return -1;
+	}
+
 
 	if (nfq_ip_set_transport_header(pktb, hdr)) {
 		perror("tcp4_frag: ip_set_transport_header");
@@ -274,6 +298,7 @@ static int tcp4_frag(struct pkt_buff *pktb, size_t payload_offset,
 	struct tcphdr *tcph = nfq_tcp_get_hdr(pktb);
 	size_t tcph_len = tcph->doff * 4;
 	if (tcph == NULL) {
+		errno = EINVAL;
 		perror("tcp4_frag: tcph is NULL");
 		errno = EINVAL;
 		return -1;
@@ -283,6 +308,7 @@ static int tcp4_frag(struct pkt_buff *pktb, size_t payload_offset,
 	size_t plen = nfq_tcp_get_payload_len(tcph, pktb);
 
 	if (payload == NULL || plen <= payload_offset) {
+		errno = EINVAL;
 		perror("tcp4_frag: payload is too small or NULL");
 		errno = EINVAL;
 		return -1;
@@ -352,13 +378,18 @@ static int send_raw_socket(struct pkt_buff *pktb) {
 		struct pkt_buff *buff1;
 		struct pkt_buff *buff2;
 
-#ifdef USE_TCP_SEGMENTATION
+#if defined(USE_TCP_SEGMENTATION) || defined(RAWSOCK_TCP_FSTRAT)
 		if (tcp4_frag(pktb, AVAILABLE_MTU-128, &buff1, &buff2) < 0)
 			return -1;
-#else
+#elif defined(USE_IP_FRAGMENTATION) || defined(RAWSOCK_IP_FSTRAT)
 		if (ipv4_frag(pktb, AVAILABLE_MTU-128, &buff1, &buff2) < 0)
 			return -1;
-
+#else
+		errno = EINVAL;
+		printf("send_raw_socket: Packet is too big but fragmentation is disabled! "
+			"Pass -DRAWSOCK_TCP_FSTRAT or -DRAWSOCK_IP_FSTRAT as CFLAGS "
+			"To enable it only for raw socket\n");
+		return -1;
 #endif
 
 		int sent = 0;
@@ -451,8 +482,6 @@ static int fallback_accept_packet(uint32_t id) {
 
 const char googlevideo_ending[] = "googlevideo.com";
 const int googlevideo_len = 15;
-
-#define GOOGLEVIDEO_MARK 0xfc74
 
 struct verdict {
 	int gvideo_hello; /* google video hello packet */
@@ -718,10 +747,9 @@ static int process_packet(const struct packet_data packet) {
 		struct pkt_buff *frag1;
 		struct pkt_buff *frag2;
 		nfq_nlmsg_verdict_put(verdnlh, packet.id, NF_DROP);
-
-
-#ifdef USE_TCP_SEGMENTATION
 		int ret = 0;
+
+
 #ifdef FAKE_SNI
 		struct pkt_buff *fake_sni = gen_fake_sni(ip_header, tcph);
 		if (fake_sni == NULL) {
@@ -736,15 +764,13 @@ static int process_packet(const struct packet_data packet) {
 			goto fallback;
 		}
 #endif
-
-		size_t ipd_offset = vrd.sni_offset;
-		size_t mid_offset = ipd_offset + vrd.sni_len / 2;
-
 		struct pkt_buff *pktb = pktb_alloc(
 			family,
 			packet.payload,
 			packet.payload_len,
-			0);
+		0);
+		
+
 
 		if (pktb == NULL) {
 			perror("pktb_alloc of payload");
@@ -753,23 +779,55 @@ static int process_packet(const struct packet_data packet) {
 #endif
 			goto fallback;
 		}
+
+
+		struct iphdr *piph = nfq_ip_get_hdr(pktb);
+		ret = nfq_ip_set_transport_header(pktb, piph);
+		struct tcphdr *ptcph = nfq_tcp_get_hdr(pktb);
+		if (!piph || ret < 0 || !ptcph) {
+			perror("cannot parse pktb");
+			goto gv_free;
+		}
+			
+		nfq_ip_set_checksum(piph);
+		nfq_tcp_compute_checksum_ipv4(ptcph, piph);
+
+#if defined(USE_TCP_SEGMENTATION)
+		size_t ipd_offset = vrd.sni_offset;
+		size_t mid_offset = ipd_offset + vrd.sni_len / 2;
+
 		
 		if (tcp4_frag(pktb, mid_offset, &frag1, &frag2) < 0) {
 			perror("tcp4_frag");
-			pktb_free(pktb);
-#ifdef FAKE_SNI
-			pktb_free(fake_sni);
-#endif
-
-			goto fallback;
+			
+			goto gv_free;
 		}
+
+#elif defined(USE_IP_FRAGMENTATION)
+		size_t ipd_offset = ((char *)data - (char *)tcph) + vrd.sni_offset;
+		size_t mid_offset = ipd_offset + vrd.sni_len / 2;
+		mid_offset += 8 - mid_offset % 8;
+
+		if (ipv4_frag(pktb, mid_offset, &frag1, &frag2) < 0) {
+			perror("ipv4_frag");
+
+			goto gv_free;
+		}
+
+#else
+		ret = send_raw_socket(pktb);
+		if (ret < 0) {
+			perror("raw pack send");
+		}
+		goto gv_free;
+#endif
 
 		ret = send_raw_socket(frag2);
 		if (ret < 0) {
-			errno = ret;
 			perror("raw frags send: frag2");
 			pktb_free(frag1);
-			goto err;
+
+			goto free_frags;
 		}
 		
 #ifdef SEG2_DELAY
@@ -782,45 +840,22 @@ static int process_packet(const struct packet_data packet) {
 #else
 		ret = send_raw_socket(frag1);
 		if (ret < 0) {
-			errno = ret;
 			perror("raw frags send: frag1");
 			pktb_free(frag1);
-			goto err;
+
+			goto free_frags;
 		}
+
 		pktb_free(frag1);
 #endif
-err:
+
+free_frags:
 		pktb_free(frag2);
+gv_free:
 		pktb_free(pktb);
 #ifdef FAKE_SNI
 		pktb_free(fake_sni);
 #endif
-
-#else
-		// TODO: Implement compute of tcp checksum
-		// GSO may turn kernel to not compute the tcp checksum.
-		// Also it will never be meaningless to ensure the 
-		// checksum is right.
-		// nfq_tcp_compute_checksum_ipv4(tcph, ip_header);
-
-		size_t ipd_offset = ((char *)data - (char *)tcph) + vrd.sni_offset;
-		size_t mid_offset = ipd_offset + vrd.sni_len / 2;
-		mid_offset += 8 - mid_offset % 8;
-		
-
-		if (ipv4_frag(pktb, mid_offset, &frag1, &frag2) < 0) {
-			perror("ipv4_frag");
-			goto fallback;
-		}
-
-		if ((send_raw_socket(frag1) == -1) || (send_raw_socket(frag2) == -1)) {
-			perror("raw frags send");
-		}
-
-		pktb_free(frag1);
-		pktb_free(frag2);
-#endif
-
 	}
 
 
@@ -897,10 +932,12 @@ int main(int argc, const char *argv[])
 		exit(EXIT_FAILURE);
 	}
 
-#ifdef USE_TCP_SEGMENTATION
+#if defined(USE_TCP_SEGMENTATION)
 	printf("Using TCP segmentation\n");
-#else 
+#elif defined(USE_IP_FRAGMENTATION)
 	printf("Using IP fragmentation\n");
+#else
+	printf("SNI fragmentation is disabled\n");
 #endif 
 
 #ifdef SEG2_DELAY
