@@ -146,6 +146,12 @@ bool parse_option(const char* option) {
 		return errno == 0 && *end == '\0';
 	}
 
+	if ((value = get_value(option, "--mark=")) != 0) {
+		char* end;
+		rawsocket_mark = strtoul(value, &end, 10);
+		return errno == 0 && *end == '\0';
+	}
+
 	return false;
 }
 
@@ -180,6 +186,7 @@ errormsg_help:
 	printf("\t--frag={tcp,ip,none}\n");
 	printf("\t--seg2delay=<delay>\n");
 	printf("\t--mtu=<available mtu size>\n");
+	printf("\t--mark=<raw soket mark>\n");
 	printf("\t--debug={0,1}\n");
 	printf("\t--verbose={0,1}\n");
 	errno = err;
