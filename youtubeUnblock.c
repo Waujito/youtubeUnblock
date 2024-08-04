@@ -21,22 +21,22 @@
 #include <netinet/tcp.h>
 #include <netinet/udp.h>
 
-#include <linux/netfilter.h>
 #include <linux/if_ether.h>
-#include <sys/socket.h>
+#include <linux/netfilter.h>
 #include <pthread.h>
+#include <sys/socket.h>
 
-#include "mangle.h"
 #include "config.h"
+#include "mangle.h"
 
 static struct {
-	uint32_t queue_start_num;
-	int rawsocket;
-	pthread_mutex_t rawsocket_lock;
-	int threads;
+  uint32_t queue_start_num;
+  int rawsocket;
+  pthread_mutex_t rawsocket_lock;
+  int threads;
 } config = {
-	.rawsocket = -2,
-	.threads=THREADS_NUM
+	.rawsocket = -2, 
+	.threads = THREADS_NUM
 };
 
 static int parse_args(int argc, const char *argv[]) {
@@ -160,6 +160,8 @@ static int close_raw_socket(void) {
 #define AVAILABLE_MTU 1384
 
 static int send_raw_socket(const uint8_t *pkt, uint32_t pktlen) {
+	int ret;
+
 	if (pktlen > AVAILABLE_MTU) {
 #ifdef DEBUG
 		printf("Split packet!\n");
@@ -171,19 +173,25 @@ static int send_raw_socket(const uint8_t *pkt, uint32_t pktlen) {
 		uint32_t buff2_size = MNL_SOCKET_BUFFER_SIZE;
 
 #if defined(USE_TCP_SEGMENTATION) || defined(RAWSOCK_TCP_FSTRAT)
-		if ((errno = tcp4_frag(pkt, pktlen, AVAILABLE_MTU-128, 
-			buff1, &buff1_size, buff2, &buff2_size)) < 0)
-			return -1;
+		if ((ret = tcp4_frag(pkt, pktlen, AVAILABLE_MTU-128, 
+			buff1, &buff1_size, buff2, &buff2_size)) < 0) {
+
+			errno = -ret;
+			return ret;
+		}
 #elif defined(USE_IP_FRAGMENTATION) || defined(RAWSOCK_IP_FSTRAT)
-		if ((errno = ip4_frag(pkt, pktlen, AVAILABLE_MTU-128, 
-			buff1, &buff1_size, buff2, &buff2_size)) < 0)
-			return -1;
+		if ((ret = ip4_frag(pkt, pktlen, AVAILABLE_MTU-128, 
+			buff1, &buff1_size, buff2, &buff2_size)) < 0) {
+
+			errno = -ret;
+			return ret;
+		}
 #else
 		errno = EINVAL;
 		printf("send_raw_socket: Packet is too big but fragmentation is disabled! "
 			"Pass -DRAWSOCK_TCP_FSTRAT or -DRAWSOCK_IP_FSTRAT as CFLAGS "
 			"To enable it only for raw socket\n");
-		return -1;
+		return -EINVAL;
 #endif
 
 		int sent = 0;
@@ -206,22 +214,16 @@ static int send_raw_socket(const uint8_t *pkt, uint32_t pktlen) {
 
 	struct iphdr *iph;
 
-	if ((errno = ip4_payload_split(
+	if ((ret = ip4_payload_split(
 	(uint8_t *)pkt, pktlen, &iph, NULL, NULL, NULL)) < 0) {
-		errno *= -1;
-		return -1;
+		errno = -ret;
+		return ret;
 	}
-
-
-	int sin_port = 0;
-
-	struct tcphdr *tcph;
-	if (tcp4_payload_split((uint8_t *)pkt, pktlen, NULL, NULL, &tcph, NULL, NULL, NULL) == 0)
-		sin_port = tcph->dest;
 
 	struct sockaddr_in daddr = {
 		.sin_family = AF_INET,
-		.sin_port = sin_port,
+		/* Always 0 for raw socket */
+		.sin_port = 0,
 		.sin_addr = {
 			.s_addr = iph->daddr
 		}
@@ -234,6 +236,9 @@ static int send_raw_socket(const uint8_t *pkt, uint32_t pktlen) {
 	    (struct sockaddr *)&daddr, sizeof(daddr));
 
 	pthread_mutex_unlock(&config.rawsocket_lock);
+
+	/* The function will return -errno on error as well as errno value set itself */
+	if (sent < 0) sent = -errno;
 
 	return sent;
 }
@@ -287,7 +292,11 @@ void *delay_packet_send(void *data) {
 	uint32_t pktlen = dpdt->pktlen;
 
 	usleep(dpdt->timer * 1000);
-	send_raw_socket(pkt, pktlen);
+	int ret = send_raw_socket(pkt, pktlen);
+	if (ret < 0) {
+		errno = -ret;
+		perror("send delayed raw packet");
+	}
 
 	free(pkt);
 	free(dpdt);
@@ -425,6 +434,8 @@ static int process_packet(const struct packet_data packet, struct queue_data qda
 #ifdef SEG2_DELAY
 		struct dps_t *dpdt = malloc(sizeof(struct dps_t));
 		dpdt->pkt = malloc(f1len);
+		memcpy(dpdt->pkt, frag1, f1len);
+		dpdt->pktlen = f1len;
 		dpdt->timer = SEG2_DELAY;
 		pthread_t thr;
 		pthread_create(&thr, NULL, delay_packet_send, dpdt); 

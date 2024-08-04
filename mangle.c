@@ -59,6 +59,7 @@ nfq_tcp_compute_checksum_ipv4(struct tcphdr *tcph, struct iphdr *iph)
 
 #define printf pr_info
 #define perror pr_err
+#define lgerror(msg, ret) (pr_err(msg ": %d\n", ret))
 #else 
 #include <stdio.h>
 #include <libnetfilter_queue/libnetfilter_queue_ipv4.h>
@@ -67,6 +68,8 @@ nfq_tcp_compute_checksum_ipv4(struct tcphdr *tcph, struct iphdr *iph)
 typedef uint8_t __u8;
 typedef uint32_t __u32;
 typedef uint16_t __u16;
+
+#define lgerror(msg, ret) ({errno = -ret; perror(msg);})
 #endif
 
 
@@ -116,7 +119,6 @@ int tcp4_payload_split(__u8 *pkt, __u32 buflen,
 
 	if (
 		hdr->protocol != IPPROTO_TCP || 
-		!(ntohs(hdr->frag_off) & IP_DF) ||
 		tcph_plen < sizeof(struct tcphdr)) {
 		return -EINVAL;
 	}
@@ -148,10 +150,15 @@ int ip4_frag(const __u8 *pkt, __u32 buflen, __u32 payload_offset,
 	const __u8 *payload;
 	__u32 plen;
 	__u32 hdr_len;
+	int ret;
 
-	if (ip4_payload_split(
+	if (!frag1 || !f1len || !frag2 || !f2len)
+		return -EINVAL;
+
+	if ((ret = ip4_payload_split(
 		(__u8 *)pkt, buflen, 
-		&hdr, &hdr_len, (__u8 **)&payload, &plen)) {
+		&hdr, &hdr_len, (__u8 **)&payload, &plen)) < 0) {
+		lgerror("ipv4_frag: TCP Header extract error", ret);
 		return -EINVAL;
 	}
 
@@ -160,10 +167,7 @@ int ip4_frag(const __u8 *pkt, __u32 buflen, __u32 payload_offset,
 	}
 
 	if (payload_offset & ((1 << 3) - 1)) {
-#ifdef USER_SPACE
-		errno = EINVAL;
-#endif
-		perror("Payload offset MUST be a multiply of 8!");
+		lgerror("ipv4_frag: Payload offset MUST be a multiply of 8!", -EINVAL);
 
 		return -EINVAL;
 	}
@@ -232,11 +236,23 @@ int tcp4_frag(const __u8 *pkt, __u32 buflen, __u32 payload_offset,
 	__u32 tcph_len;
 	__u32 plen;
 	const __u8 *payload;
+	int ret;
 
-	if (tcp4_payload_split((__u8 *)pkt, buflen,
+	if (!seg1 || !s1len || !seg2 || !s2len)
+		return -EINVAL;
+
+	if ((ret = tcp4_payload_split((__u8 *)pkt, buflen,
 				&hdr, &hdr_len,
 				&tcph, &tcph_len,
-				(__u8 **)&payload, &plen)) {
+				(__u8 **)&payload, &plen)) < 0) {
+		lgerror("tcp4_frag: tcp4_payload_split", ret);
+
+		return -EINVAL;
+	}
+
+
+	if (!(ntohs(hdr->frag_off) & IP_DF)) {
+		lgerror("tcp4_frag: ip fragmentation is set", -EINVAL);
 		return -EINVAL;
 	}
 
@@ -251,7 +267,8 @@ int tcp4_frag(const __u8 *pkt, __u32 buflen, __u32 payload_offset,
 	__u32 s2_plen = plen - payload_offset;
 	__u32 s2_dlen = s2_plen + hdr_len + tcph_len;
 
-	if (*s1len < s1_dlen || *s2len < s2_dlen) return -ENOMEM;
+	if (*s1len < s1_dlen || *s2len < s2_dlen) 
+		return -ENOMEM;
 
 	*s1len = s1_dlen;
 	*s2len = s2_dlen;
@@ -434,7 +451,7 @@ nextMessage:
 int gen_fake_sni(const struct iphdr *iph, const struct tcphdr *tcph, 
 		 uint8_t *buf, uint32_t *buflen) {
 
-	if (iph == NULL || tcph == NULL || buf == NULL || buflen == NULL)
+	if (!iph || !tcph || !buf || !buflen)
 		return -EINVAL;
 
 	int ip_len = iph->ihl * 4;
@@ -444,6 +461,7 @@ int gen_fake_sni(const struct iphdr *iph, const struct tcphdr *tcph,
 
 	if (*buflen < dlen) 
 		return -ENOMEM;
+	*buflen = dlen;
 
 	memcpy(buf, iph, ip_len);
 	memcpy(buf + ip_len, fake_sni, data_len);
@@ -465,8 +483,6 @@ int gen_fake_sni(const struct iphdr *iph, const struct tcphdr *tcph,
 
 	nfq_ip_set_checksum(niph);
 	nfq_tcp_compute_checksum_ipv4(ntcph, niph);
-
-	*buflen = dlen;
 
 	return 0;
 }

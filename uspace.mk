@@ -68,9 +68,9 @@ $(APP): $(OBJS) $(LIBNETFILTER_QUEUE) $(LIBMNL)
 	@echo 'CCLD $(APP)'
 	@$(CCLD) $(OBJS) -o $(APP) -L$(DEPSDIR)/lib -lmnl -lnetfilter_queue
 
-$(BUILD_DIR)/%.o: %.c $(LIBNETFILTER_QUEUE) $(LIBMNL)
+$(BUILD_DIR)/%.o: %.c $(LIBNETFILTER_QUEUE) $(LIBMNL) config.h
 	@echo 'CC $@'
-	@$(CC) -c $(CFLAGS) $^ -o $@
+	@$(CC) -c $(CFLAGS) $< -o $@
 
 install: all
 	install -d $(PREFIX)/bin/
