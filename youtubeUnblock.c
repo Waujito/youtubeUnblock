@@ -110,13 +110,13 @@ static int open_raw_socket(void) {
 		return -1;
 	}
 
-	int one = 1;
-	const int *val = &one;
-	if (setsockopt(config.rawsocket, IPPROTO_IP, IP_HDRINCL, val, sizeof(one)) < 0)
-	{
-		fprintf(stderr, "setsockopt(IP_HDRINCL, 1) failed\n");
-		return -1;
-	}
+	// int one = 1;
+	// const int *val = &one;
+	// if (setsockopt(config.rawsocket, IPPROTO_IP, IP_HDRINCL, val, sizeof(one)) < 0)
+	// {
+	// 	fprintf(stderr, "setsockopt(IP_HDRINCL, 1) failed\n");
+	// 	return -1;
+	// }
 
 	int mark = RAWSOCKET_MARK;
 	if (setsockopt(config.rawsocket, SOL_SOCKET, SO_MARK, &mark, sizeof(mark)) < 0)

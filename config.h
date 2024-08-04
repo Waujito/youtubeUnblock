@@ -23,6 +23,7 @@
 #elif FRAGMENTATION_STRATEGY == FRAG_STRAT_IP
 	#define USE_IP_FRAGMENTATION
 #elif FRAGMENTATION_STRATEGY == FRAG_STRAT_NONE
+	#define USE_NO_FRAGMENTATION
 #endif 
 
 #define RAWSOCKET_MARK (1 << 15)
@@ -35,6 +36,7 @@
 #define FAKE_SNI
 #endif
 
-#ifndef SILENT 
+#if !defined(SILENT) && !defined(KERNEL_SPACE)
 #define DEBUG
 #endif
+

@@ -59,6 +59,9 @@ int tcp4_payload_split(uint8_t *pkt, uint32_t buflen,
 		       struct tcphdr **tcph, uint32_t *tcph_len,
 		       uint8_t **payload, uint32_t *plen);
 
+void tcp4_set_checksum(struct tcphdr *tcph, struct iphdr *iph);
+void ip4_set_checksum(struct iphdr *iph);
+
 int gen_fake_sni(const struct iphdr *iph, const struct tcphdr *tcph, 
 		 uint8_t *buf, uint32_t *buflen);
 #endif /* YU_MANGLE_H */

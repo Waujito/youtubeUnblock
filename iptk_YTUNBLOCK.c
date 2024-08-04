@@ -1,4 +1,3 @@
-//
 // Kernel module for youtubeUnblock.
 // Make with make kmake && sudo iptables -t mangle -D OUTPUT 1 && sudo make kreload && sudo iptables -t mangle -I OUTPUT -p tcp -j YTUNBLOCK
 #include <linux/module.h>
@@ -9,14 +8,15 @@
 #include <linux/net.h>
 #include <linux/netfilter/x_tables.h>
 #include "ipt_YTUNBLOCK.h"
+
 #include "mangle.h"
+#include "config.h"
+#include "raw_replacements.h"
 
 MODULE_LICENSE("GPL");
 MODULE_VERSION("0.1");
 MODULE_AUTHOR("Vadim Vetrov <vetrovvd@gmail.com>");
 MODULE_DESCRIPTION("Linux kernel module for youtube unblock");
-
-#define USE_TCP_SEGMENTATION
 
 static int rsfd;
 static struct socket *rawsocket;
@@ -63,16 +63,13 @@ static void close_raw_socket(void) {
 static int send_raw_socket(const uint8_t *pkt, uint32_t pktlen) {
 	
 	if (pktlen > AVAILABLE_MTU) {
-		pr_alert("The packet is too big!");
-#ifdef DEBUG
-		printf("Split packet!\n");
-#endif
+		pr_warn("The packet is too big and may cause issues!");
 
 		__u32 buff1_size = pktlen;
 		__u32 buff2_size = pktlen;
-		__u8 *buff1 = kmalloc(pktlen, GFP_KERNEL);
+		__u8 *buff1 = kmalloc(pktlen, GFP_ATOMIC);
 		if (buff1 == NULL) return -1;
-		__u8 *buff2 = kmalloc(pktlen, GFP_KERNEL);
+		__u8 *buff2 = kmalloc(pktlen, GFP_ATOMIC);
 		if (buff2 == NULL) {
 			kfree(buff1);
 			return -1;
@@ -80,15 +77,19 @@ static int send_raw_socket(const uint8_t *pkt, uint32_t pktlen) {
 
 		int ret;
 
-#ifdef USE_TCP_SEGMENTATION
+#if defined(USE_TCP_SEGMENTATION) || defined(RAWSOCK_TCP_FSTRAT)
 		if ((ret = tcp4_frag(pkt, pktlen, AVAILABLE_MTU-128, 
 			buff1, &buff1_size, buff2, &buff2_size)) < 0)
 			return ret;
-#else
+#elif defined(USE_IP_FRAGMENTATION) || defined(RAWSOCK_IP_FSTRAT)
 		if ((ret = ip4_frag(pkt, pktlen, AVAILABLE_MTU-128, 
 			buff1, &buff1_size, buff2, &buff2_size)) < 0)
 			return ret;
-
+#else
+		pr_warn("send_raw_socket: Packet is too big but fragmentation is disabled! "
+			"Pass -DRAWSOCK_TCP_FSTRAT or -DRAWSOCK_IP_FSTRAT as CFLAGS "
+			"To enable it only for raw socket\n");
+		return -EINVAL;
 #endif
 
 		int sent = 0;
@@ -147,100 +148,147 @@ static int send_raw_socket(const uint8_t *pkt, uint32_t pktlen) {
 	ret = kernel_sendmsg(rawsocket, &msg, &iov, 1, pktlen);
 	mutex_unlock(&rslock);
 
-	pr_info("%d\n", ret);
-
 	return ret;
 }
 static unsigned int ykb_tg(struct sk_buff *skb, const struct xt_action_param *par) 
 {
+	if ((skb->mark & RAWSOCKET_MARK) == RAWSOCKET_MARK) 
+		return XT_CONTINUE;
+	
 	if (skb->head == NULL) return XT_CONTINUE;
-	struct iphdr *iph = ip_hdr(skb);
-	if (iph == NULL) {
-		pr_alert("iph is NULL!\n");
-		goto accept;
-	}
-	__u32 iph_len = iph->ihl * 4;
-
-	struct tcphdr *tcph = tcp_hdr(skb);
-	if (tcph == NULL) {
-		pr_alert("tcph is NULL!\n");
-		goto accept;
-	}
-	__u32 tcph_len = tcp_hdrlen(skb);
-
-	// Mallocs are bad!
-	__u8 *buf = kmalloc(skb->len, GFP_KERNEL);
+	
+	// TODO: Mallocs are bad!
+	uint32_t buflen = skb->len;
+	__u8 *buf = kmalloc(skb->len, GFP_ATOMIC);
 	if (buf == NULL) {
-		pr_alert("Cannot alloc enough buffer");
+		pr_err("Cannot alloc enough buffer space");
 		goto accept;
 	}
 	if (skb_copy_bits(skb, 0, buf, skb->len) < 0) {
-		pr_alert("Unable copy bits\n");
+		pr_err("Unable copy bits\n");
 		goto ac_fkb;
 	}
+	struct iphdr *iph;
+	uint32_t iph_len;
+	struct tcphdr *tcph;
+	uint32_t tcph_len;
+	__u8 *payload;
+	uint32_t plen;
 
-	const __u8 *payload = buf + iph_len + tcph_len;
-	__u32 plen = skb->len - iph_len - tcph_len;
+	int ret = tcp4_payload_split(buf, buflen, &iph, &iph_len, 
+		    &tcph, &tcph_len, &payload, &plen);
+
+	if (ret < 0) 
+		goto ac_fkb;
 
 	struct verdict vrd = analyze_tls_data(payload, plen);
 
 	if (vrd.gvideo_hello) {
-		pr_alert("Googlevideo detected!\n");
+		int ret;
+		pr_info("Googlevideo detected\n");
+
+		ip4_set_checksum(iph);
+		tcp4_set_checksum(tcph, iph);
+
 		uint32_t f1len = skb->len;
 		uint32_t f2len = skb->len;
-		__u8 *frag1 = kmalloc(f1len, GFP_KERNEL);
-		__u8 *frag2 = kmalloc(f2len, GFP_KERNEL);
+		__u8 *frag1 = kmalloc(f1len, GFP_ATOMIC);
+		if (!frag1) {
+			pr_err("Cannot alloc enough gv frag1 buffer space");
+			goto ac_fkb;
+		}
+		__u8 *frag2 = kmalloc(f2len, GFP_ATOMIC);
+		if (!frag2) {
+			pr_err("Cannot alloc enough gv frag1 buffer space");
+			kfree(frag1);
+			goto ac_fkb;
+		}
 
-#ifdef USE_TCP_SEGMENTATION
+
+#ifdef FAKE_SNI
+		uint32_t fksn_len = FAKE_SNI_MAXLEN;
+		__u8 *fksn_buf = kmalloc(fksn_len, GFP_ATOMIC);
+		if (!fksn_buf) {
+			pr_err("Cannot alloc enough gksn buffer space");
+			goto fallback;
+		}
+		
+		ret = gen_fake_sni(iph, tcph, fksn_buf, &fksn_len);
+		if (ret < 0) {
+			pr_err("Cannot alloc enough gksn buffer space");
+			goto fksn_fb;
+		}
+#endif
+
+#if defined(USE_TCP_SEGMENTATION)
 		size_t ipd_offset = vrd.sni_offset;
 		size_t mid_offset = ipd_offset + vrd.sni_len / 2;
 
 
-		int ret;
 		if ((ret = tcp4_frag(buf, skb->len, 
 			 mid_offset, frag1, &f1len, frag2, &f2len)) < 0) {
-			pr_err("tcp4_frag");
+			pr_err("tcp4_frag: %d", ret);
+			goto fksn_fb;
 		}
-
-		if ((ret = send_raw_socket(frag2, f2len) < 0) || 
-			(ret = send_raw_socket(frag1, f1len) < 0)) {
-			pr_err("raw frags send");
-			goto fallback;
-		}
-			
-#else
-// TODO: Implement ip fragmentation
-/*
-		// TODO: Implement compute of tcp checksum
-		// GSO may turn kernel to not compute the tcp checksum.
-		// Also it will never be meaningless to ensure the 
-		// checksum is right.
-		// nfq_tcp_compute_checksum_ipv4(tcph, ip_header);
-
-		size_t ipd_offset = ((char *)data - (char *)tcph) + vrd.sni_offset;
+#elif defined(USE_IP_FRAGMENTATION)
+		size_t ipd_offset = tcph_len + vrd.sni_offset;
 		size_t mid_offset = ipd_offset + vrd.sni_len / 2;
 		mid_offset += 8 - mid_offset % 8;
 
-		if ((errno = ip4_frag(raw_payload, raw_payload_len, 
+		if ((ret = ip4_frag(buf, skb->len, 
 			 mid_offset, frag1, &f1len, frag2, &f2len)) < 0) {
-			errno *= -1;
-			perror("ip4_frag");
-			goto fallback;
+			pr_err("ip4_frag: %d", ret);
+			goto fksn_fb;
 		}
-
-		if ((send_raw_socket(frag2, f2len) < 0) || 
-			(send_raw_socket(frag1, f1len) < 0)) {
-			perror("raw frags send");
-		}
-*/
 #endif
 
+#ifdef FAKE_SNI
+		ret = send_raw_socket(fksn_buf, fksn_len);
+		if (ret < 0) {
+			pr_err("fksn_send: %d", ret);
+			goto fksn_fb;
+		}
+#endif
+
+#if defined(USE_NO_FRAGMENTATION)
+#ifdef SEG2_DELAY
+#error "SEG2_DELAY is incompatible with NO FRAGMENTATION"
+#endif
+		ret = send_raw_socket(buf, buflen);
+		if (ret < 0) {
+			pr_err("nofrag_send: %d", ret);
+		}
+		goto fksn_fb;
+#endif
+
+		ret = send_raw_socket(frag2, f2len);
+		if (ret < 0) {
+			pr_err("raw frag2 send: %d", ret);
+			goto fksn_fb;
+		}
+
+#ifdef SEG2_DELAY
+#error "Seg2 delay is unsupported yet for kmod"
+#else
+		ret = send_raw_socket(frag1, f1len);
+		if (ret < 0) {
+			pr_err("raw frag1 send: %d", ret);
+			goto fksn_fb;
+		}
+#endif
+
+fksn_fb:
+#ifdef FAKE_SNI
+		kfree(fksn_buf);
+#endif 
 fallback:
+#ifndef SEG2_DELAY
 		kfree(frag1);
+#endif
 		kfree(frag2);
 		kfree(buf);
-		return XT_CONTINUE;
-		// return NF_DROP;
+		kfree_skb(skb);
+		return NF_STOLEN;
 	}
 ac_fkb:
 	kfree(buf);

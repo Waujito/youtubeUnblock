@@ -1,61 +1,10 @@
 #include "mangle.h"
 #include "raw_replacements.h"
+#include "config.h"
 
 #ifdef KERNEL_SPACE
 #include <linux/printk.h>
-
-static __u16 nfq_checksum(__u32 sum, __u16 *buf, int size)
-{
-        while (size > 1) {
-                sum += *buf++;
-                size -= sizeof(__u16);
-        }
-        if (size) {
-#ifdef __LITTLE_ENDIAN
-                sum += (uint16_t)*(uint8_t *)buf << 8;
-#else
-                sum += (__u16)*(__u8 *)buf;
-#endif
-        }
-
-        sum = (sum >> 16) + (sum & 0xffff);
-        sum += (sum >> 16);
-
-        return (__u16)(~sum);
-}
-
-static __u16 nfq_checksum_tcpudp_ipv4(struct iphdr *iph, __u16 protonum)
-{
-        __u32 sum = 0;
-        __u32 iph_len = iph->ihl*4;
-        __u32 len = ntohs(iph->tot_len) - iph_len;
-        __u8 *payload = (__u8 *)iph + iph_len;
-
-        sum += (iph->saddr >> 16) & 0xFFFF;
-        sum += (iph->saddr) & 0xFFFF;
-        sum += (iph->daddr >> 16) & 0xFFFF;
-        sum += (iph->daddr) & 0xFFFF;
-        sum += htons(protonum);
-        sum += htons(len);
-
-        return nfq_checksum(sum, (__u16 *)payload, len);
-}
-
-static void nfq_ip_set_checksum(struct iphdr *iph)
-{
-        __u32 iph_len = iph->ihl * 4;
-
-        iph->check = 0;
-        iph->check = nfq_checksum(0, (__u16 *)iph, iph_len);
-}
-
-static void 
-nfq_tcp_compute_checksum_ipv4(struct tcphdr *tcph, struct iphdr *iph)
-{
-        /* checksum field in header needs to be zero for calculation. */
-        tcph->check = 0;
-        tcph->check = nfq_checksum_tcpudp_ipv4(iph, IPPROTO_TCP);
-}
+#include <linux/ip.h>
 
 #define printf pr_info
 #define perror pr_err
@@ -69,8 +18,32 @@ typedef uint8_t __u8;
 typedef uint32_t __u32;
 typedef uint16_t __u16;
 
-#define lgerror(msg, ret) ({errno = -ret; perror(msg);})
+#define lgerror(msg, ret) __extension__ ({errno = -ret; perror(msg);})
 #endif
+
+void tcp4_set_checksum(struct tcphdr *tcph, struct iphdr *iph) 
+{
+#ifdef KERNEL_SPACE
+	uint32_t tcp_packet_len = ntohs(iph->tot_len) - (iph->ihl << 2);
+	tcph->check = 0;
+	tcph->check = csum_tcpudp_magic(
+		iph->saddr, iph->daddr, tcp_packet_len,
+		IPPROTO_TCP, 
+		csum_partial(tcph, tcp_packet_len, 0));
+#else
+	nfq_tcp_compute_checksum_ipv4(tcph, iph);
+#endif
+}
+
+void ip4_set_checksum(struct iphdr *iph) 
+{
+#ifdef KERNEL_SPACE
+	iph->check = 0;
+	iph->check = ip_fast_csum(iph, iph->ihl);
+#else
+	nfq_ip_set_checksum(iph);
+#endif
+}
 
 
 int ip4_payload_split(__u8 *pkt, __u32 buflen,
@@ -219,8 +192,8 @@ int ip4_frag(const __u8 *pkt, __u32 buflen, __u32 payload_offset,
 	printf("Packet split in portion %u %u\n", f1_plen, f2_plen);
 #endif
 
-	nfq_ip_set_checksum(f1_hdr);
-	nfq_ip_set_checksum(f2_hdr);
+	ip4_set_checksum(f1_hdr);
+	ip4_set_checksum(f2_hdr);
 
 	return 0;
 }
@@ -297,8 +270,9 @@ int tcp4_frag(const __u8 *pkt, __u32 buflen, __u32 payload_offset,
 	printf("Packet split in portion %u %u\n", s1_plen, s2_plen);
 #endif
 
-	nfq_tcp_compute_checksum_ipv4(s1_tcph, s1_hdr);
-	nfq_tcp_compute_checksum_ipv4(s2_tcph, s2_hdr);
+	tcp4_set_checksum(s1_tcph, s1_hdr);
+	tcp4_set_checksum(s2_tcph, s2_hdr);
+
 	return 0;
 }
 
@@ -481,8 +455,8 @@ int gen_fake_sni(const struct iphdr *iph, const struct tcphdr *tcph,
 	ntcph->th_sport = tcph->th_sport;
 #endif 
 
-	nfq_ip_set_checksum(niph);
-	nfq_tcp_compute_checksum_ipv4(ntcph, niph);
+	ip4_set_checksum(niph);
+	tcp4_set_checksum(ntcph, niph);
 
 	return 0;
 }
