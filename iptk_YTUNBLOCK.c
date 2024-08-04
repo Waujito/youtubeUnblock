@@ -1,3 +1,4 @@
+#define _GNU_SOURCE
 // Kernel module for youtubeUnblock.
 // Make with make kmake && sudo iptables -t mangle -D OUTPUT 1 && sudo make kreload && sudo iptables -t mangle -I OUTPUT -p tcp -j YTUNBLOCK
 #include <linux/module.h>

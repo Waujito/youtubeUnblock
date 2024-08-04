@@ -23,7 +23,6 @@ typedef __u32 uint32_t;
 #define	IP_OFFMASK 0x1fff		/* mask for fragmenting bits */
 #else
 #define USER_SPACE
-
 #include <stdint.h>
 #include <string.h>
 #include <errno.h>

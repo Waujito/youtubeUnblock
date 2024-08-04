@@ -1,3 +1,5 @@
+#define _GNU_SOURCE
+
 #include "mangle.h"
 #include "raw_replacements.h"
 #include "config.h"
