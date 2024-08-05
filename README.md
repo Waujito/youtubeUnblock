@@ -56,6 +56,9 @@ If you have bad performance you can queue to youtubeUnblock only first, say, 20 
 
 The same behavior is also possible in iptables: `iptables -t mangle -A FORWARD -p tcp -m tcp --dport 443 -m connbytes --connbytes-dir original --connbytes-mode packets --connbytes 0:19 -j NFQUEUE --queue-num 537 --queue-bypass`. (The package iptables-mod-conntrack-extra is required for connbytes on OpenWRT)
 
+For hosts change FORWARD to OUTPUT.
+
+
 ## OpenWRT case
 The package is also compatible with routers. The router should be running by linux-based system such as [OpenWRT](https://openwrt.org/).
 You can build under openwrt with two options: first - through the SDK, which is preferred way and second is cross-compile manually with openwrt toolchain.
