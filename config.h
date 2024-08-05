@@ -16,7 +16,9 @@
 #define FRAG_STRAT_IP	1
 #define FRAG_STRAT_NONE	2
 
+#ifndef FRAGMENTATION_STRATEGY
 #define FRAGMENTATION_STRATEGY FRAG_STRAT_TCP
+#endif
 
 #if FRAGMENTATION_STRATEGY == FRAG_STRAT_TCP
 	#define USE_TCP_SEGMENTATION
@@ -44,7 +46,9 @@
 // Thus, Fake Client Hello will be eliminated automatically.
 #define FKSN_STRAT_TTL 1
 
+#ifndef FAKE_SNI_STRATEGY
 #define FAKE_SNI_STRATEGY FKSN_STRAT_ACK_SEQ
+#endif
 
 #if !defined(SILENT) && !defined(KERNEL_SPACE)
 #define DEBUG
