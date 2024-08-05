@@ -1,11 +1,11 @@
 BUILD_DIR := $(CURDIR)/build
 DEPSDIR := $(BUILD_DIR)/deps
 
-CC := gcc
-CCLD := $(CC)
-LD := ld
-CFLAGS:=-Wall -Wpedantic -Wno-unused-variable -I$(DEPSDIR)/include -Os
-LDFLAGS:=-L$(DEPSDIR)/lib -static
+CC:=gcc
+CCLD:=$(CC)
+LD:=ld
+override CFLAGS += -Wall -Wpedantic -Wno-unused-variable -I$(DEPSDIR)/include
+override LDFLAGS += -L$(DEPSDIR)/lib
 
 LIBNFNETLINK_CFLAGS := -I$(DEPSDIR)/include
 LIBNFNETLINK_LIBS := -L$(DEPSDIR)/lib
@@ -65,11 +65,11 @@ $(LIBNETFILTER_QUEUE): $(LIBNFNETLINK) $(LIBMNL)
 
 $(APP): $(OBJS) $(LIBNETFILTER_QUEUE) $(LIBMNL)
 	@echo 'CCLD $(APP)'
-	@$(CCLD) $(OBJS) -o $(APP) -L$(DEPSDIR)/lib -lmnl -lnetfilter_queue
+	$(CCLD) $(OBJS) -o $(APP) $(LDFLAGS) -lmnl -lnetfilter_queue
 
 $(BUILD_DIR)/%.o: %.c $(LIBNETFILTER_QUEUE) $(LIBMNL)
 	@echo 'CC $@'
-	@$(CC) -c $(CFLAGS) $^ -o $@
+	$(CC) -c $(CFLAGS) $(LDFLAGS) $< -o $@
 
 install: all
 	install -d $(PREFIX)/bin/
