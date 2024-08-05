@@ -639,6 +639,14 @@ int main(int argc, const char *argv[]) {
 
 #ifdef FAKE_SNI
 	printf("Fake SNI will be sent before each googlevideo request\n");
+
+	printf("Fake SNI will use strategy: "
+#if FAKE_SNI_STRATEGY == FKSN_STRAT_TTL
+	"TTL"
+#else
+	"Ack-Seq"
+#endif
+	"\n");
 #endif 
 
 #ifdef USE_GSO

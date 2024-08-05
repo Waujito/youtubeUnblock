@@ -24,7 +24,7 @@ export CC CCLD LD CFLAGS LDFLAGS LIBNFNETLINK_CFLAGS LIBNFNETLINK_LIBS LIBMNL_CF
 
 APP:=$(BUILD_DIR)/youtubeUnblock
 
-SRCS := youtubeUnblock.c
+SRCS := youtubeUnblock.c mangle.c
 OBJS := $(SRCS:%.c=$(BUILD_DIR)/%.o)
 
 LIBNFNETLINK := $(DEPSDIR)/lib/libnfnetlink.a
@@ -68,7 +68,7 @@ $(APP): $(OBJS) $(LIBNETFILTER_QUEUE) $(LIBMNL)
 	@echo 'CCLD $(APP)'
 	$(CCLD) $(OBJS) -o $(APP) $(LDFLAGS) -lmnl -lnetfilter_queue
 
-$(BUILD_DIR)/%.o: %.c $(LIBNETFILTER_QUEUE) $(LIBMNL)
+$(BUILD_DIR)/%.o: %.c $(LIBNETFILTER_QUEUE) $(LIBMNL) config.h
 	@echo 'CC $@'
 	$(CC) -c $(CFLAGS) $(LDFLAGS) $< -o $@
 

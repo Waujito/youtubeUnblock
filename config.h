@@ -36,6 +36,16 @@
 #define FAKE_SNI
 #endif
 
+#define FAKE_SNI_TTL 8
+
+// Will invalidate fake client hello by out-of-ack_seq out-of-seq request
+#define FKSN_STRAT_ACK_SEQ 0
+// Will assume that GGC server is located further than FAKE_SNI_TTL
+// Thus, Fake Client Hello will be eliminated automatically.
+#define FKSN_STRAT_TTL 1
+
+#define FAKE_SNI_STRATEGY FKSN_STRAT_ACK_SEQ
+
 #if !defined(SILENT) && !defined(KERNEL_SPACE)
 #define DEBUG
 #endif

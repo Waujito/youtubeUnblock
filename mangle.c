@@ -455,6 +455,13 @@ int gen_fake_sni(const struct iphdr *iph, const struct tcphdr *tcph,
 #else 
 	ntcph->th_dport = tcph->th_dport;
 	ntcph->th_sport = tcph->th_sport;
+
+#if FAKE_SNI_STRATEGY == FKSN_STRAT_TTL
+	ntcph->ack = tcph->ack;
+	ntcph->ack_seq = tcph->ack_seq;
+	niph->ttl = FAKE_SNI_TTL;
+#endif 
+
 #endif 
 
 	ip4_set_checksum(niph);
