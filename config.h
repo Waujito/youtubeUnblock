@@ -54,3 +54,6 @@
 #define DEBUG
 #endif
 
+// The Maximum Transmission Unit size for rawsocket
+// Larger packets will be fragmented. Applicable for Chrome's kyber.
+#define AVAILABLE_MTU 1384

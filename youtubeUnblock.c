@@ -110,14 +110,6 @@ static int open_raw_socket(void) {
 		return -1;
 	}
 
-	// int one = 1;
-	// const int *val = &one;
-	// if (setsockopt(config.rawsocket, IPPROTO_IP, IP_HDRINCL, val, sizeof(one)) < 0)
-	// {
-	// 	fprintf(stderr, "setsockopt(IP_HDRINCL, 1) failed\n");
-	// 	return -1;
-	// }
-
 	int mark = RAWSOCKET_MARK;
 	if (setsockopt(config.rawsocket, SOL_SOCKET, SO_MARK, &mark, sizeof(mark)) < 0)
 	{
@@ -157,7 +149,6 @@ static int close_raw_socket(void) {
 	return 0;
 }
 
-#define AVAILABLE_MTU 1384
 
 static int send_raw_socket(const uint8_t *pkt, uint32_t pktlen) {
 	int ret;
@@ -252,13 +243,11 @@ struct packet_data {
 	uint16_t payload_len;
 };
 
-
 // Per-queue data. Passed to queue_cb.
 struct queue_data {
 	struct mnl_socket **_nl;
 	int queue_num;
 };
-
 
 /**
  * Used to accept unsupported packets (GSOs)
@@ -317,32 +306,27 @@ static int process_packet(const struct packet_data packet, struct queue_data qda
 	}
 
 	const int family = AF_INET;
+
 	const uint8_t *raw_payload = packet.payload;
 	size_t raw_payload_len = packet.payload_len;
 
-	if (raw_payload == NULL) return MNL_CB_ERROR;
+	const struct iphdr *iph;
+	uint32_t iph_len;
+	const struct tcphdr *tcph;
+	uint32_t tcph_len;
+	const uint8_t *data;
+	uint32_t dlen;
 
-	const struct iphdr *ip_header = (const void *)raw_payload;
+	int ret = tcp4_payload_split((uint8_t *)raw_payload, raw_payload_len,
+			      (struct iphdr **)&iph, &iph_len, (struct tcphdr **)&tcph, &tcph_len,
+			      (uint8_t **)&data, &dlen);
 
-	if (ip_header->version != IPPROTO_IPIP || ip_header->protocol != IPPROTO_TCP) 
-		goto fallback;
-
-	int iph_len = ip_header->ihl * 4;
-
-	const struct tcphdr *tcph = (const void *)(raw_payload + iph_len);
-	if ((const uint8_t *)tcph + 20 > raw_payload + raw_payload_len) {
-		goto fallback;
-	}
-
-	int tcph_len = tcph->doff * 4;
-	if ((const uint8_t *)tcph + tcph_len > raw_payload + raw_payload_len) {
+	if (ret < 0) {
 		goto fallback;
 	}
 
-	int data_len = ntohs(ip_header->tot_len) - iph_len - tcph_len;
-	const uint8_t *data = (const uint8_t *)(raw_payload + iph_len + tcph_len);
 
-	struct verdict vrd = analyze_tls_data(data, data_len);
+	struct verdict vrd = analyze_tls_data(data, dlen);
 
 	verdnlh = nfq_nlmsg_put(buf, NFQNL_MSG_VERDICT, qdata.queue_num);
         nfq_nlmsg_verdict_put(verdnlh, packet.id, NF_ACCEPT);
@@ -352,7 +336,7 @@ static int process_packet(const struct packet_data packet, struct queue_data qda
 		printf("Google video!\n");
 #endif
 
-		if (data_len > 1480) {
+		if (dlen > 1480) {
 #ifdef DEBUG
 			fprintf(stderr, "WARNING! Google video packet is too big and may cause issues!\n");
 #endif
@@ -370,12 +354,12 @@ static int process_packet(const struct packet_data packet, struct queue_data qda
 		nfq_nlmsg_verdict_put(verdnlh, packet.id, NF_DROP);
 		int ret = 0;
 
-		nfq_ip_set_checksum((struct iphdr *)ip_header);
+		nfq_ip_set_checksum((struct iphdr *)iph);
 		nfq_tcp_compute_checksum_ipv4(
-			(struct tcphdr *)tcph, (struct iphdr *)ip_header);
+			(struct tcphdr *)tcph, (struct iphdr *)iph);
 
 #ifdef FAKE_SNI
-		ret = gen_fake_sni(ip_header, tcph, fake_sni, &fsn_len);
+		ret = gen_fake_sni(iph, tcph, fake_sni, &fsn_len);
 		if (ret < 0) {
 			errno = -ret;
 			perror("gen_fake_sni");
