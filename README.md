@@ -40,6 +40,7 @@ Available flags:
 - -DUSE_SEG2_DELAY This flag forces youtubeUnblock to wait little bit before send the 2nd part of the split packet. You can tune the amount of time in `#define SEG2_DELAY 100` where 100 stands for milliseconds.
 - -DNO_FAKE_SNI This flag disables -DFAKE_SNI which forces youtubeUnblock to send at least three packets instead of one with TLS ClientHello: Fake ClientHello, 1st part of original ClientHello, 2nd part of original ClientHello. This flag may be related to some Operation not permitted error messages, so befor open an issue refer to FAQ for EPERMS.
 - -DNOUSE_GSO This flag disables fix for Google Chrome fat ClientHello. The GSO is well tested now, so this flag probably won't fix anything.
+- -DFAKE_SNI_STRATEGY It is possible that your ISP has conntrack/some custom stuff enabled. So if it is enabled as well as firewall rule to drop tcp packets considered invalid (I'm not sure who and how does that, may be TSPU does so only for google domains). So fake Client Hello won't work normally. The solution is to invalidate client hello by TTL. Use -DFAKE_SNI_STRATEGY=FKSN_STRAT_TTL to enable this and -FKSN_STRAT_TTL=8 to change the TTL (based on hops number between you and the google server).
 
 If you are on Chromium you may have to disable kyber (the feature that makes the TLS ClientHello very fat). I've got the problem with it on router, so to escape possibly errors it is better to just disable it: in chrome://flags search for kyber and switch it to disabled state. 
 
@@ -55,6 +56,8 @@ EPERM may occur in a lot of places but generally here are two: mnl_cb_run and wh
 If you have bad performance you can queue to youtubeUnblock only first, say, 20 packets from the connection. To do so, use nftables conntrack packets counter: `nft add rule inet fw4 mangle_forward tcp dport 443 ct original "packets < 20" counter queue num 537 bypass`. For my 1 CPU core device it worked pretty well. This works because we do care about only first packets with ClientHello. We don't need to process others.
 
 The same behavior is also possible in iptables: `iptables -t mangle -A FORWARD -p tcp -m tcp --dport 443 -m connbytes --connbytes-dir original --connbytes-mode packets --connbytes 0:19 -j NFQUEUE --queue-num 537 --queue-bypass`. (The package iptables-mod-conntrack-extra is required for connbytes on OpenWRT)
+
+You can use `--queue-balance` with multiple instances of youtubeUnblock. This behavior is supported via multithreading. Just pass -DTHREADS_NUM=n where n stands for an amount of threads you want to be enabled. The n defaults to 1. The maximum threads defaults to 16 but may be altered programatically. Note, that if you are about to increase it, here is 100% chance that you are on the wrong way.
 
 ## OpenWRT case
 The package is also compatible with routers. The router should be running by free opensource linux-based system such as [OpenWRT](https://openwrt.org/).
