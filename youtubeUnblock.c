@@ -502,9 +502,6 @@ static int process_packet(const struct packet_data packet, struct queue_data qda
 				fprintf(stderr, "WARNING! Google video packet is too big and may cause issues!\n");
 		}
 		
-		uint8_t fake_sni[MNL_SOCKET_BUFFER_SIZE];
-		uint32_t fsn_len = MNL_SOCKET_BUFFER_SIZE;
-
 		uint8_t frag1[MNL_SOCKET_BUFFER_SIZE];
 		uint8_t frag2[MNL_SOCKET_BUFFER_SIZE];
 		uint32_t f1len = MNL_SOCKET_BUFFER_SIZE;
@@ -517,6 +514,9 @@ static int process_packet(const struct packet_data packet, struct queue_data qda
 			(struct tcphdr *)tcph, (struct iphdr *)iph);
 
 		if (config.fake_sni_strategy != FKSN_STRAT_NONE) {
+			uint8_t fake_sni[MNL_SOCKET_BUFFER_SIZE];
+			uint32_t fsn_len = MNL_SOCKET_BUFFER_SIZE;
+
 			ret = gen_fake_sni(iph, tcph, fake_sni, &fsn_len);
 			if (ret < 0) {
 				errno = -ret;
@@ -545,7 +545,7 @@ static int process_packet(const struct packet_data packet, struct queue_data qda
 
 					errno = -ret;
 					perror("tcp4_frag");
-					goto send_verd;
+					goto fallback;
 				}
 
 				break;
@@ -559,7 +559,7 @@ static int process_packet(const struct packet_data packet, struct queue_data qda
 
 					errno = -ret;
 					perror("ip4_frag");
-					goto send_verd;
+					goto fallback;
 				}
 
 				break;
@@ -569,7 +569,7 @@ static int process_packet(const struct packet_data packet, struct queue_data qda
 					errno = -ret;
 					perror("raw pack send");
 				}
-				goto send_verd;
+				goto fallback;
 		}
 
 		ret = send_raw_socket(frag2, f2len);
@@ -577,7 +577,7 @@ static int process_packet(const struct packet_data packet, struct queue_data qda
 			errno = -ret;
 			perror("raw frags send: frag2");
 
-			goto send_verd;
+			goto fallback;
 		}
 
 		if (config.seg2_delay) {
@@ -591,11 +591,12 @@ static int process_packet(const struct packet_data packet, struct queue_data qda
 			pthread_detach(thr);
 		} else {
 			ret = send_raw_socket(frag1, f1len);
+
 			if (ret < 0) {
 				errno = -ret;
 				perror("raw frags send: frag1");
 
-				goto send_verd;
+				goto fallback;
 			}
 		}
 	}
