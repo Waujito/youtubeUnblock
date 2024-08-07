@@ -37,7 +37,7 @@
 #define FKSN_STRAT_TTL 2
 
 
-#ifndef NO_FAKE_SNI
+#ifdef NO_FAKE_SNI
 #define FAKE_SNI_STRATEGY FKSN_STRAT_NONE
 #endif
 
