@@ -1,3 +1,17 @@
+
+struct config_t {
+	unsigned int queue_start_num;
+	int rawsocket;
+	int threads;
+	int use_gso;
+	int fragmentation_strategy;
+	unsigned char fake_sni_ttl;
+	int  fake_sni_strategy;
+	int verbose;
+	unsigned int seg2_delay;
+};
+extern struct config_t config;
+
 #define MAX_THREADS 16
 
 #ifndef THREADS_NUM
