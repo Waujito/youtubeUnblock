@@ -34,13 +34,15 @@ If you don't want youtubeUnblock to log on each googlevideo request pass -DSILEN
 
 Also DNS over HTTPS (DOH) is preferred for additional anonimity. 
 
-## Troubleshooting
-If you have any troubles with youtubeUnblock, here are some options to tune. If them don't work in your case, please, open an issue. You can pass these options in make CFLAGS (`make CFLAGS=...`) or edit CFLAGS variable in Makefile.
+## Flags
 Available flags:
-- -DUSE_SEG2_DELAY This flag forces youtubeUnblock to wait little bit before send the 2nd part of the split packet. You can tune the amount of time in `#define SEG2_DELAY 100` where 100 stands for milliseconds.
-- -DNO_FAKE_SNI This flag disables -DFAKE_SNI which forces youtubeUnblock to send at least three packets instead of one with TLS ClientHello: Fake ClientHello, 1st part of original ClientHello, 2nd part of original ClientHello. This flag may be related to some Operation not permitted error messages, so befor open an issue refer to FAQ for EPERMS.
-- -DNOUSE_GSO This flag disables fix for Google Chrome fat ClientHello. The GSO is well tested now, so this flag probably won't fix anything.
-- -DFAKE_SNI_STRATEGY It is possible that your ISP has conntrack/some custom stuff enabled. So if it is enabled as well as firewall rule to drop tcp packets considered invalid (I'm not sure who and how does that, may be TSPU does so only for google domains). So fake Client Hello won't work normally. The solution is to invalidate client hello by TTL. Use -DFAKE_SNI_STRATEGY=FKSN_STRAT_TTL to enable this and -FKSN_STRAT_TTL=8 to change the TTL (based on hops number between you and the google server).
+- `--seg2delay=<delay>` - This flag forces youtubeUnblock to wait little bit before send the 2nd part of the split packet.
+- `--fake-sni={ack,ttl, none}` This flag enables fake-sni which forces youtubeUnblock to send at least three packets instead of one with TLS ClientHello: Fake ClientHello, 1st part of original ClientHello, 2nd part of original ClientHello. This flag may be related to some Operation not permitted error messages, so befor open an issue refer to FAQ for EPERMS. Note, that this flag is set to `ack` by default. You may disable fake sni by setting it to `none`. Note, that your ISP may have conntrack drop on invalid state enabled, so this flag won't work. Use `ttl` to escape that.
+- `--fake-sni-ttl=<ttl>` Tunes the time to live of fake sni messages. TTL is specified like that the packet will go through the TSPU and captured by it, but will not reach the destination server. Defaults to 8.
+- `--no-gso` Disables support for Google Chrome fat packets which uses GSO. This feature is well tested now, so this flag probably won't fix anything.
+- `--threads=<threads number>` Specifies the amount of threads you want to be running for your program. This defaults to 1 and shouldn't be edited for normal use. If you have performance issues, consult [performance chaptr](https://github.com/Waujito/youtubeUnblock?tab=readme-ov-file#performance)
+- `--silent` - Disables Google video detected debug logs.
+- `--frag={tcp,ip,none}` Specifies the fragmentation strategy for the packet. tcp is used by default. Ip fragmentation may be blocked by TSPU. None specifies no fragmentation. Probably this won't work, but may be will work for some fake sni strategies.
 
 If you are on Chromium you may have to disable kyber (the feature that makes the TLS ClientHello very fat). I've got the problem with it on router, so to escape possibly errors it is better to just disable it: in chrome://flags search for kyber and switch it to disabled state. 
 
