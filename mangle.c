@@ -190,9 +190,8 @@ int ip4_frag(const __u8 *pkt, __u32 buflen, __u32 payload_offset,
 	f2_hdr->tot_len = htons(f2_dlen);
 
 
-#if defined(DEBUG)
-	printf("Packet split in portion %u %u\n", f1_plen, f2_plen);
-#endif
+	if (config.verbose)
+		printf("Packet split in portion %u %u\n", f1_plen, f2_plen);
 
 	ip4_set_checksum(f1_hdr);
 	ip4_set_checksum(f2_hdr);
@@ -272,9 +271,8 @@ int tcp4_frag(const __u8 *pkt, __u32 buflen, __u32 payload_offset,
 
 	s2_tcph->seq = htonl(ntohl(s2_tcph->seq) + payload_offset);
 	
-#if defined(DEBUG)
-	printf("Packet split in portion %u %u\n", s1_plen, s2_plen);
-#endif
+	if (config.verbose)
+		printf("Packet split in portion %u %u\n", s1_plen, s2_plen);
 
 	tcp4_set_checksum(s1_tcph, s1_hdr);
 	tcp4_set_checksum(s2_tcph, s2_hdr);

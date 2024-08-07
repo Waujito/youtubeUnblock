@@ -29,34 +29,196 @@
 #include "config.h"
 #include "mangle.h"
 
-static struct {
-  uint32_t queue_start_num;
-  int rawsocket;
-  pthread_mutex_t rawsocket_lock;
-  int threads;
-} config = {
-	.rawsocket = -2, 
-	.threads = THREADS_NUM
+pthread_mutex_t rawsocket_lock;
+
+struct config_t config = {
+	.rawsocket = -2,
+	.threads = THREADS_NUM,
+	.fragmentation_strategy = FRAGMENTATION_STRATEGY,
+	.fake_sni_strategy = FAKE_SNI_STRATEGY,
+	.fake_sni_ttl = FAKE_SNI_TTL,
+
+#ifdef SEG2_DELAY
+	.seg2_delay = SEG2_DELAY,
+#else
+	.seg2_delay = 0,
+#endif
+
+#ifdef USE_GSO
+	.use_gso = true,
+#else
+	.use_gso = false,
+#endif
+
+#ifdef DEBUG
+	.verbose = true,
+#else
+	.verbose = false,
+#endif
 };
+
+const char* get_value(const char *option, const char *prefix)
+{
+	errno = 0;
+
+	size_t prefix_len = strlen(prefix);
+	size_t option_len = strlen(option);
+
+	if (option_len <= prefix_len || strncmp(prefix, option, prefix_len)) {
+		return NULL;
+	}
+
+	return option + prefix_len;
+}
+
+int parse_bool_option(const char *value) {
+	errno = 0;
+	if (strcmp(value, "1") == 0) {
+		return 1;
+	}
+	else if (strcmp(value, "0") == 0) {
+		return 0;
+	}
+
+	errno = EINVAL;
+	return -1;
+}
+
+long parse_numeric_option(const char* value) {
+	errno = 0;
+
+	char* end;
+	long result = strtol(value, &end, 10);
+	if (*end != '\0') {
+		errno = EINVAL;
+		return 0;
+	}
+
+	return result;
+}
+
+int parse_option(const char* option) {
+	const char* value;
+	int ret;
+
+	if (!strcmp(option, "--no-gso")) {
+		config.use_gso = 0;
+		goto out;
+	}
+
+	if (!strcmp(option, "--silent")) {
+		config.verbose = 0;
+		goto out;
+	}
+
+	if ((value = get_value(option, "--frag=")) != 0) {
+		if (!value) {
+			goto err;
+		}
+
+		if (strcmp(value, "tcp") == 0) {
+			config.fragmentation_strategy = FRAG_STRAT_TCP;
+		} else if (strcmp(value, "ip") == 0) {
+			config.fragmentation_strategy = FRAG_STRAT_IP;
+		} else if (strcmp(value, "none") == 0) {
+			config.fragmentation_strategy = FRAG_STRAT_NONE;
+		} else {
+			goto err;
+		}
+
+		goto out;
+	}
+
+	if ((value = get_value(option, "--fake-sni=")) != 0) {
+		if (strcmp(value, "ack") == 0) {
+			config.fake_sni_strategy = FKSN_STRAT_ACK_SEQ;
+		} else if (strcmp(value, "ttl") == 0) {
+			config.fake_sni_strategy = FKSN_STRAT_TTL;
+		}
+		else if (strcmp(value, "none") == 0) {
+			config.fake_sni_strategy = FKSN_STRAT_NONE;
+		} else {
+			goto err;
+		}
+
+		goto out;
+	}
+
+	if ((value = get_value(option, "--seg2delay=")) != 0) {
+		long num = parse_numeric_option(value);
+		if (errno != 0 ||
+			num < 0)
+			goto err;
+
+		config.seg2_delay = num;
+		goto out;
+	}
+
+	if ((value = get_value(option, "--threads=")) != 0) {
+		long num = parse_numeric_option(value);
+		if (errno != 0 ||
+			num < 0 ||
+			num > MAX_THREADS) {
+			errno = EINVAL;
+			goto err;
+		}
+
+		config.threads = num;
+		goto out;
+	}
+
+	if ((value = get_value(option, "--fake-sni-ttl=")) != 0) {
+		long num = parse_numeric_option(value);
+		if (errno != 0 ||
+			num < 0 ||
+			num > 255) {
+			goto err;
+		}
+
+		config.fake_sni_ttl = num;
+		goto out;
+	}
+
+err:
+	errno = EINVAL;
+	return -1;
+out:
+	errno = 0;
+	return 0;
+}
 
 static int parse_args(int argc, const char *argv[]) {
 	int err;
 	char *end;
 
-	if (argc != 2) {
+	if (argc < 2) {
 		errno = EINVAL;
 		goto errormsg_help;
 	}
 
-	uint32_t queue_num = strtoul(argv[1], &end, 10);
-	if (errno != 0 || *end != '\0') goto errormsg_help;
+	config.queue_start_num = parse_numeric_option(argv[1]);
+	if (errno != 0) goto errormsg_help;
 
-	config.queue_start_num = queue_num;
+	for (int i = 2; i < argc; i++) {
+		if (parse_option(argv[i])) {
+			printf("Invalid option %s\n", argv[i]);
+			goto errormsg_help;
+		}
+	}
+
 	return 0;
 
 errormsg_help:
 	err = errno;
-	printf("Usage: %s [queue_num]\n", argv[0]);
+	printf("Usage: %s <queue_num> [OPTIONS]\n", argv[0]);
+	printf("Options:\n");
+	printf("\t--fake-sni={ack,ttl,none}\n");
+	printf("\t--fake-sni-ttl=<ttl>\n");
+	printf("\t--frag={tcp,ip,none}\n");
+	printf("\t--seg2delay=<delay>\n");
+	printf("\t--threads=<threads number>\n");
+	printf("\t--silent\n");
+	printf("\t--no-gso\n");
 	errno = err;
 	if (errno == 0) errno = EINVAL;
 
@@ -117,7 +279,7 @@ static int open_raw_socket(void) {
 		return -1;
 	}
 
-	int mst = pthread_mutex_init(&config.rawsocket_lock, NULL);
+	int mst = pthread_mutex_init(&rawsocket_lock, NULL);
 	if (mst) {
 		fprintf(stderr, "Mutex err: %d\n", mst);
 		close(config.rawsocket);
@@ -139,11 +301,11 @@ static int close_raw_socket(void) {
 
 	if (close(config.rawsocket)) {
 		perror("Unable to close raw socket");
-		pthread_mutex_destroy(&config.rawsocket_lock);
+		pthread_mutex_destroy(&rawsocket_lock);
 		return -1;
 	}
 
-	pthread_mutex_destroy(&config.rawsocket_lock);
+	pthread_mutex_destroy(&rawsocket_lock);
 
 	config.rawsocket = -2;
 	return 0;
@@ -154,36 +316,36 @@ static int send_raw_socket(const uint8_t *pkt, uint32_t pktlen) {
 	int ret;
 
 	if (pktlen > AVAILABLE_MTU) {
-#ifdef DEBUG
-		printf("Split packet!\n");
-#endif
+		if (config.verbose)
+			printf("Split packet!\n");
 
 		uint8_t buff1[MNL_SOCKET_BUFFER_SIZE];
 		uint32_t buff1_size = MNL_SOCKET_BUFFER_SIZE;
 		uint8_t buff2[MNL_SOCKET_BUFFER_SIZE];
 		uint32_t buff2_size = MNL_SOCKET_BUFFER_SIZE;
 
-#if defined(USE_TCP_SEGMENTATION) || defined(RAWSOCK_TCP_FSTRAT)
-		if ((ret = tcp4_frag(pkt, pktlen, AVAILABLE_MTU-128, 
-			buff1, &buff1_size, buff2, &buff2_size)) < 0) {
+		switch (config.fragmentation_strategy) {
+			case FRAG_STRAT_TCP:
+				if ((ret = tcp4_frag(pkt, pktlen, AVAILABLE_MTU-128,
+					buff1, &buff1_size, buff2, &buff2_size)) < 0) {
 
-			errno = -ret;
-			return ret;
-		}
-#elif defined(USE_IP_FRAGMENTATION) || defined(RAWSOCK_IP_FSTRAT)
-		if ((ret = ip4_frag(pkt, pktlen, AVAILABLE_MTU-128, 
-			buff1, &buff1_size, buff2, &buff2_size)) < 0) {
+					errno = -ret;
+					return ret;
+				}
+				break;
+			case FRAG_STRAT_IP:
+				if ((ret = ip4_frag(pkt, pktlen, AVAILABLE_MTU-128,
+					buff1, &buff1_size, buff2, &buff2_size)) < 0) {
 
-			errno = -ret;
-			return ret;
+					errno = -ret;
+					return ret;
+				}
+				break;
+			default:
+				errno = EINVAL;
+				printf("send_raw_socket: Packet is too big but fragmentation is disabled!\n");
+				return -EINVAL;
 		}
-#else
-		errno = EINVAL;
-		printf("send_raw_socket: Packet is too big but fragmentation is disabled! "
-			"Pass -DRAWSOCK_TCP_FSTRAT or -DRAWSOCK_IP_FSTRAT as CFLAGS "
-			"To enable it only for raw socket\n");
-		return -EINVAL;
-#endif
 
 		int sent = 0;
 		int status = send_raw_socket(buff1, buff1_size);
@@ -220,13 +382,13 @@ static int send_raw_socket(const uint8_t *pkt, uint32_t pktlen) {
 		}
 	};
 
-	pthread_mutex_lock(&config.rawsocket_lock);
+	pthread_mutex_lock(&rawsocket_lock);
 
 	int sent = sendto(config.rawsocket, 
 	    pkt, pktlen, 0, 
 	    (struct sockaddr *)&daddr, sizeof(daddr));
 
-	pthread_mutex_unlock(&config.rawsocket_lock);
+	pthread_mutex_unlock(&rawsocket_lock);
 
 	/* The function will return -errno on error as well as errno value set itself */
 	if (sent < 0) sent = -errno;
@@ -332,21 +494,14 @@ static int process_packet(const struct packet_data packet, struct queue_data qda
         nfq_nlmsg_verdict_put(verdnlh, packet.id, NF_ACCEPT);
 
 	if (vrd.gvideo_hello) {
-#ifdef DEBUG
-		printf("Google video!\n");
-#endif
+		if (config.verbose)
+			printf("Google video!\n");
 
 		if (dlen > 1480) {
-#ifdef DEBUG
-			fprintf(stderr, "WARNING! Google video packet is too big and may cause issues!\n");
-#endif
+			if (config.verbose)
+				fprintf(stderr, "WARNING! Google video packet is too big and may cause issues!\n");
 		}
 		
-#ifdef FAKE_SNI
-		uint8_t fake_sni[MNL_SOCKET_BUFFER_SIZE];
-		uint32_t fsn_len = MNL_SOCKET_BUFFER_SIZE;
-#endif
-
 		uint8_t frag1[MNL_SOCKET_BUFFER_SIZE];
 		uint8_t frag2[MNL_SOCKET_BUFFER_SIZE];
 		uint32_t f1len = MNL_SOCKET_BUFFER_SIZE;
@@ -358,54 +513,64 @@ static int process_packet(const struct packet_data packet, struct queue_data qda
 		nfq_tcp_compute_checksum_ipv4(
 			(struct tcphdr *)tcph, (struct iphdr *)iph);
 
-#ifdef FAKE_SNI
-		ret = gen_fake_sni(iph, tcph, fake_sni, &fsn_len);
-		if (ret < 0) {
-			errno = -ret;
-			perror("gen_fake_sni");
-			goto fallback;
+		if (config.fake_sni_strategy != FKSN_STRAT_NONE) {
+			uint8_t fake_sni[MNL_SOCKET_BUFFER_SIZE];
+			uint32_t fsn_len = MNL_SOCKET_BUFFER_SIZE;
+
+			ret = gen_fake_sni(iph, tcph, fake_sni, &fsn_len);
+			if (ret < 0) {
+				errno = -ret;
+				perror("gen_fake_sni");
+				goto fallback;
+			}
+
+			ret = send_raw_socket(fake_sni, fsn_len);
+			if (ret < 0) {
+				errno = -ret;
+				perror("send fake sni");
+				goto fallback;
+			}
 		}
 
-		ret = send_raw_socket(fake_sni, fsn_len);
-		if (ret < 0) {
-			errno = -ret;
-			perror("send fake sni");
-			goto fallback;
+		size_t ipd_offset;
+		size_t mid_offset;
+
+		switch (config.fragmentation_strategy) {
+			case FRAG_STRAT_TCP:
+				ipd_offset = vrd.sni_offset;
+				mid_offset = ipd_offset + vrd.sni_len / 2;
+
+				if ((ret = tcp4_frag(raw_payload, raw_payload_len,
+					mid_offset, frag1, &f1len, frag2, &f2len)) < 0) {
+
+					errno = -ret;
+					perror("tcp4_frag");
+					goto fallback;
+				}
+
+				break;
+			case FRAG_STRAT_IP:
+				ipd_offset = ((char *)data - (char *)tcph) + vrd.sni_offset;
+				mid_offset = ipd_offset + vrd.sni_len / 2;
+				mid_offset += 8 - mid_offset % 8;
+
+				if ((ret = ip4_frag(raw_payload, raw_payload_len,
+					mid_offset, frag1, &f1len, frag2, &f2len)) < 0) {
+
+					errno = -ret;
+					perror("ip4_frag");
+					goto fallback;
+				}
+
+				break;
+			default:
+				ret = send_raw_socket(raw_payload, raw_payload_len);
+				if (ret < 0) {
+					errno = -ret;
+					perror("raw pack send");
+				}
+				goto fallback;
 		}
-#endif
-
-
-#if defined(USE_TCP_SEGMENTATION)
-		size_t ipd_offset = vrd.sni_offset;
-		size_t mid_offset = ipd_offset + vrd.sni_len / 2;
-
-		if ((ret = tcp4_frag(raw_payload, raw_payload_len, 
-			 mid_offset, frag1, &f1len, frag2, &f2len)) < 0) {
-			errno = -ret;
-			perror("tcp4_frag");
-			goto fallback;
-		}
-
-#elif defined(USE_IP_FRAGMENTATION)
-		size_t ipd_offset = ((char *)data - (char *)tcph) + vrd.sni_offset;
-		size_t mid_offset = ipd_offset + vrd.sni_len / 2;
-		mid_offset += 8 - mid_offset % 8;
-
-		if ((ret = ip4_frag(raw_payload, raw_payload_len, 
-			 mid_offset, frag1, &f1len, frag2, &f2len)) < 0) {
-			errno = -ret;
-			perror("ip4_frag");
-			goto fallback;
-		}
-
-#else
-		ret = send_raw_socket(raw_payload, raw_payload_len);
-		if (ret < 0) {
-			errno = -ret;
-			perror("raw pack send");
-		}
-		goto fallback;
-#endif
 
 		ret = send_raw_socket(frag2, f2len);
 		if (ret < 0) {
@@ -414,35 +579,34 @@ static int process_packet(const struct packet_data packet, struct queue_data qda
 
 			goto fallback;
 		}
-		
-#ifdef SEG2_DELAY
-		struct dps_t *dpdt = malloc(sizeof(struct dps_t));
-		dpdt->pkt = malloc(f1len);
-		memcpy(dpdt->pkt, frag1, f1len);
-		dpdt->pktlen = f1len;
-		dpdt->timer = SEG2_DELAY;
-		pthread_t thr;
-		pthread_create(&thr, NULL, delay_packet_send, dpdt); 
-		pthread_detach(thr);
-#else
-		ret = send_raw_socket(frag1, f1len);
-		if (ret < 0) {
-			errno = -ret;
-			perror("raw frags send: frag1");
 
-			goto fallback;
+		if (config.seg2_delay) {
+			struct dps_t *dpdt = malloc(sizeof(struct dps_t));
+			dpdt->pkt = malloc(f1len);
+			memcpy(dpdt->pkt, frag1, f1len);
+			dpdt->pktlen = f1len;
+			dpdt->timer = config.seg2_delay;
+			pthread_t thr;
+			pthread_create(&thr, NULL, delay_packet_send, dpdt);
+			pthread_detach(thr);
+		} else {
+			ret = send_raw_socket(frag1, f1len);
+
+			if (ret < 0) {
+				errno = -ret;
+				perror("raw frags send: frag1");
+
+				goto fallback;
+			}
 		}
-
-#endif
-
 	}
 
 
 /*       
 	if (pktb_mangled(pktb)) {
-#ifdef DEBUG
-		printf("Mangled!\n");
-#endif
+		if (config.versose)
+			printf("Mangled!\n");
+
 		nfq_nlmsg_verdict_put_pkt(
 			verdnlh, pktb_data(pktb), pktb_len(pktb));
 	}
@@ -533,10 +697,10 @@ int init_queue(int queue_num) {
 	nlh = nfq_nlmsg_put(buf, NFQNL_MSG_CONFIG, queue_num);
 	nfq_nlmsg_cfg_put_params(nlh, NFQNL_COPY_PACKET, 0xffff);
 
-#ifdef USE_GSO
-        mnl_attr_put_u32(nlh, NFQA_CFG_FLAGS, htonl(NFQA_CFG_F_GSO));
-        mnl_attr_put_u32(nlh, NFQA_CFG_MASK, htonl(NFQA_CFG_F_GSO));
-#endif
+	if (config.use_gso) {
+		mnl_attr_put_u32(nlh, NFQA_CFG_FLAGS, htonl(NFQA_CFG_F_GSO));
+		mnl_attr_put_u32(nlh, NFQA_CFG_MASK, htonl(NFQA_CFG_F_GSO));
+	}
 
 	if (mnl_socket_sendto(nl, nlh, nlh->nlmsg_len) < 0) {
 		perror("mnl_socket_send");
@@ -589,6 +753,7 @@ struct queue_conf {
 struct queue_res {
 	int status;
 };
+static struct queue_res defqres = {0};
 
 static struct queue_res threads_reses[MAX_THREADS];
 
@@ -609,69 +774,75 @@ int main(int argc, const char *argv[]) {
 		exit(EXIT_FAILURE);
 	}
 
-#if defined(USE_TCP_SEGMENTATION)
-	printf("Using TCP segmentation\n");
-#elif defined(USE_IP_FRAGMENTATION)
-	printf("Using IP fragmentation\n");
-#else
-	printf("SNI fragmentation is disabled\n");
-#endif 
+	switch (config.fragmentation_strategy) {
+		case FRAG_STRAT_TCP:
+			printf("Using TCP segmentation\n");
+			break;
+		case FRAG_STRAT_IP:
+			printf("Using IP fragmentation\n");
+			break;
+		default:
+			printf("SNI fragmentation is disabled\n");
+			break;
+	}
 
-#ifdef SEG2_DELAY
-	printf("Some outgoing googlevideo request segments will be delayed for %d ms as of SEG2_DELAY define\n", SEG2_DELAY);
-#endif 
+	if (config.seg2_delay) {
+		printf("Some outgoing googlevideo request segments will be delayed for %d ms as of seg2_delay define\n", config.seg2_delay);
+	}
 
-#ifdef FAKE_SNI
-	printf("Fake SNI will be sent before each googlevideo request\n");
+	switch (config.fake_sni_strategy) {
+		case FKSN_STRAT_TTL:
+			printf("Fake SNI will be sent before each googlevideo request, TTL strategy will be used with TTL %d\n", config.fake_sni_ttl);
+			break;
+		case FRAG_STRAT_IP:
+			printf("Fake SNI will be sent before each googlevideo request, Ack-Seq strategy will be used\n");
+			break;
+		default:
+			printf("SNI fragmentation is disabled\n");
+			break;
+	}
 
-	printf("Fake SNI will use strategy: "
-#if FAKE_SNI_STRATEGY == FKSN_STRAT_TTL
-	"TTL"
-#else
-	"Ack-Seq"
-#endif
-	"\n");
-#endif 
-
-#ifdef USE_GSO
-	printf("GSO is enabled!\n");
-#endif
+	if (config.use_gso) {
+		printf("GSO is enabled\n");
+	}
 
 	if (open_raw_socket() < 0) {
 		perror("Unable to open raw socket");
 		exit(EXIT_FAILURE);
 	}
 
+	struct queue_res *qres = &defqres;
 
+	if (config.threads == 1) {
+		struct queue_conf tconf = {
+			.i = 0,
+			.queue_num = config.queue_start_num
+		};
 
-#if THREADS_NUM == 1
-	struct queue_conf tconf = {
-		.i = 0,
-		.queue_num = config.queue_start_num
-	};
-
-	struct queue_res *qres = init_queue_wrapper(&tconf);
-#else
-	struct queue_conf thread_confs[MAX_THREADS];
-	pthread_t threads[MAX_THREADS];
-	for (int i = 0; i < config.threads; i++) {
-		struct queue_conf *tconf = thread_confs + i;
-		pthread_t *thr = threads + i;
-
-		tconf->queue_num = config.queue_start_num + i;
-		tconf->i = i;
-
-		pthread_create(thr, NULL, init_queue_wrapper, tconf);
+		qres = init_queue_wrapper(&tconf);
 	}
+	else {
+		printf("%d threads wil be used\n", config.threads);
 
-	void *res;
-	struct queue_res *qres
-	for (int i = 0; i < config.threads; i++) {
-		pthread_join(threads[i], &res);
+		struct queue_conf thread_confs[MAX_THREADS];
+		pthread_t threads[MAX_THREADS];
+		for (int i = 0; i < config.threads; i++) {
+			struct queue_conf *tconf = thread_confs + i;
+			pthread_t *thr = threads + i;
 
-		qres = res;
+			tconf->queue_num = config.queue_start_num + i;
+			tconf->i = i;
+
+			pthread_create(thr, NULL, init_queue_wrapper, tconf);
+		}
+
+		void *res;
+		for (int i = 0; i < config.threads; i++) {
+			pthread_join(threads[i], &res);
+
+			qres = res;
+		}
 	}
-#endif
 
 	if (close_raw_socket() < 0) {
 		perror("Unable to close raw socket");
