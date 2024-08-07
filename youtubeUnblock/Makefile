@@ -3,7 +3,7 @@
 include $(TOPDIR)/rules.mk
 
 PKG_NAME:=youtubeUnblock
-PKG_VERSION:=0.1
+PKG_VERSION:=0.2
 PKG_REV:=9101d8bd63f37991c72934e21f8bc993f2b67149
 PKG_RELEASE:=1
 
