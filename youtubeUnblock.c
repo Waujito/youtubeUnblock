@@ -383,7 +383,7 @@ static int process_packet(const struct packet_data packet, struct queue_data qda
 			 mid_offset, frag1, &f1len, frag2, &f2len)) < 0) {
 			errno = -ret;
 			perror("tcp4_frag");
-			goto send_verd;
+			goto fallback;
 		}
 
 #elif defined(USE_IP_FRAGMENTATION)
@@ -395,7 +395,7 @@ static int process_packet(const struct packet_data packet, struct queue_data qda
 			 mid_offset, frag1, &f1len, frag2, &f2len)) < 0) {
 			errno = -ret;
 			perror("ip4_frag");
-			goto send_verd;
+			goto fallback;
 		}
 
 #else
@@ -404,7 +404,7 @@ static int process_packet(const struct packet_data packet, struct queue_data qda
 			errno = -ret;
 			perror("raw pack send");
 		}
-		goto send_verd;
+		goto fallback;
 #endif
 
 		ret = send_raw_socket(frag2, f2len);
@@ -412,7 +412,7 @@ static int process_packet(const struct packet_data packet, struct queue_data qda
 			errno = -ret;
 			perror("raw frags send: frag2");
 
-			goto send_verd;
+			goto fallback;
 		}
 		
 #ifdef SEG2_DELAY
@@ -430,7 +430,7 @@ static int process_packet(const struct packet_data packet, struct queue_data qda
 			errno = -ret;
 			perror("raw frags send: frag1");
 
-			goto send_verd;
+			goto fallback;
 		}
 
 #endif

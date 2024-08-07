@@ -226,7 +226,11 @@ int tcp4_frag(const __u8 *pkt, __u32 buflen, __u32 payload_offset,
 	}
 
 
-	if (!(ntohs(hdr->frag_off) & IP_DF)) {
+	if (
+		ntohs(hdr->frag_off) & IP_MF || 
+		ntohs(hdr->frag_off) & IP_OFFMASK) {
+		printf("tcp4_frag: frag value: %d\n",
+			ntohs(hdr->frag_off));
 		lgerror("tcp4_frag: ip fragmentation is set", -EINVAL);
 		return -EINVAL;
 	}
