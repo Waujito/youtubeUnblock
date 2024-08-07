@@ -15,3 +15,4 @@ Makefile.in
 /stamp-h1
 
 /*.pc
+doxygen.cfg

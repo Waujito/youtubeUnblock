@@ -4,3 +4,12 @@ build
 
 configure~
 
+# Kernel module files
+*.o
+.*
+*.mod.*
+*.mod
+modules.order
+Module.symvers
+*.so
+*.ko

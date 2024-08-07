@@ -34,12 +34,15 @@ If you don't want youtubeUnblock to log on each googlevideo request pass -DSILEN
 
 Also DNS over HTTPS (DOH) is preferred for additional anonimity. 
 
-## Troubleshooting
-If you have any troubles with youtubeUnblock, here are some options to tune. If them don't work in your case, please, open an issue. You can pass these options in make CFLAGS (`make CFLAGS=...`) or edit CFLAGS variable in Makefile.
+## Flags
 Available flags:
-- -DUSE_SEG2_DELAY This flag forces youtubeUnblock to wait little bit before send the 2nd part of the split packet. You can tune the amount of time in `#define SEG2_DELAY 100` where 100 stands for milliseconds.
-- -DNO_FAKE_SNI This flag disables -DFAKE_SNI which forces youtubeUnblock to send at least three packets instead of one with TLS ClientHello: Fake ClientHello, 1st part of original ClientHello, 2nd part of original ClientHello. This flag may be related to some Operation not permitted error messages, so befor open an issue refer to FAQ for EPERMS.
-- -DNOUSE_GSO This flag disables fix for Google Chrome fat ClientHello. The GSO is well tested now, so this flag probably won't fix anything.
+- `--seg2delay=<delay>` - This flag forces youtubeUnblock to wait little bit before send the 2nd part of the split packet.
+- `--fake-sni={ack,ttl, none}` This flag enables fake-sni which forces youtubeUnblock to send at least three packets instead of one with TLS ClientHello: Fake ClientHello, 1st part of original ClientHello, 2nd part of original ClientHello. This flag may be related to some Operation not permitted error messages, so befor open an issue refer to FAQ for EPERMS. Note, that this flag is set to `ack` by default. You may disable fake sni by setting it to `none`. Note, that your ISP may have conntrack drop on invalid state enabled, so this flag won't work. Use `ttl` to escape that.
+- `--fake-sni-ttl=<ttl>` Tunes the time to live of fake sni messages. TTL is specified like that the packet will go through the TSPU and captured by it, but will not reach the destination server. Defaults to 8.
+- `--no-gso` Disables support for Google Chrome fat packets which uses GSO. This feature is well tested now, so this flag probably won't fix anything.
+- `--threads=<threads number>` Specifies the amount of threads you want to be running for your program. This defaults to 1 and shouldn't be edited for normal use. If you have performance issues, consult [performance chaptr](https://github.com/Waujito/youtubeUnblock?tab=readme-ov-file#performance)
+- `--silent` - Disables Google video detected debug logs.
+- `--frag={tcp,ip,none}` Specifies the fragmentation strategy for the packet. tcp is used by default. Ip fragmentation may be blocked by TSPU. None specifies no fragmentation. Probably this won't work, but may be will work for some fake sni strategies.
 
 If you are on Chromium you may have to disable kyber (the feature that makes the TLS ClientHello very fat). I've got the problem with it on router, so to escape possibly errors it is better to just disable it: in chrome://flags search for kyber and switch it to disabled state. 
 
@@ -55,9 +58,9 @@ EPERM may occur in a lot of places but generally here are two: mnl_cb_run and wh
 If you have bad performance you can queue to youtubeUnblock only first, say, 20 packets from the connection. To do so, use nftables conntrack packets counter: `nft add rule inet fw4 mangle_forward tcp dport 443 ct original "packets < 20" counter queue num 537 bypass`. For my 1 CPU core device it worked pretty well. This works because we do care about only first packets with ClientHello. We don't need to process others.
 
 The same behavior is also possible in iptables: `iptables -t mangle -A FORWARD -p tcp -m tcp --dport 443 -m connbytes --connbytes-dir original --connbytes-mode packets --connbytes 0:19 -j NFQUEUE --queue-num 537 --queue-bypass`. (The package iptables-mod-conntrack-extra is required for connbytes on OpenWRT)
-
 For hosts change FORWARD to OUTPUT.
 
+You can use `--queue-balance` with multiple instances of youtubeUnblock. This behavior is supported via multithreading. Just pass -DTHREADS_NUM=n where n stands for an amount of threads you want to be enabled. The n defaults to 1. The maximum threads defaults to 16 but may be altered programatically. Note, that if you are about to increase it, here is 100% chance that you are on the wrong way.
 
 ## OpenWRT case
 The package is also compatible with routers. The router should be running by linux-based system such as [OpenWRT](https://openwrt.org/).
