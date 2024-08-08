@@ -5,7 +5,7 @@ DEPSDIR := $(BUILD_DIR)/deps
 CC:=gcc
 CCLD:=$(CC)
 LD:=ld
-override CFLAGS += -Wall -Wpedantic -Wno-unused-variable -I$(DEPSDIR)/include
+override CFLAGS += -Wall -Wpedantic -Wno-unused-variable -I$(DEPSDIR)/include -std=gnu11
 override LDFLAGS += -L$(DEPSDIR)/lib
 
 LIBNFNETLINK_CFLAGS := -I$(DEPSDIR)/include
@@ -64,7 +64,7 @@ $(LIBNETFILTER_QUEUE): $(LIBNFNETLINK) $(LIBMNL)
 
 $(APP): $(OBJS) $(LIBNETFILTER_QUEUE) $(LIBMNL)
 	@echo 'CCLD $(APP)'
-	$(CCLD) $(OBJS) -o $(APP) $(LDFLAGS) -lmnl -lnetfilter_queue
+	$(CCLD) $(OBJS) -o $(APP) $(LDFLAGS) -lmnl -lnetfilter_queue -lpthread
 
 $(BUILD_DIR)/%.o: %.c $(LIBNETFILTER_QUEUE) $(LIBMNL) config.h
 	@echo 'CC $@'
