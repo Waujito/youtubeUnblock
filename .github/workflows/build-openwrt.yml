@@ -1,0 +1,116 @@
+name: build-openwrt
+
+on:
+  push:
+    # tags:
+    #   - 'v*'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.build.outputs.version }}
+    strategy:
+      matrix:
+        branch: [openwrt-23.05]
+        arch:
+          - aarch64_cortex-a53
+          - aarch64_cortex-a72
+          - aarch64_generic
+          - arm_arm1176jzf-s_vfp
+          - arm_arm926ej-s
+          - arm_cortex-a15_neon-vfpv4
+          - arm_cortex-a5_vfpv4
+          - arm_cortex-a7
+          - arm_cortex-a7_neon-vfpv4
+          - arm_cortex-a7_vfpv4
+          - arm_cortex-a8_vfpv3
+          - arm_cortex-a9
+          - arm_cortex-a9_neon
+          - arm_cortex-a9_vfpv3-d16
+          - arm_fa526
+          - arm_mpcore
+          - arm_xscale
+          - mips64_octeonplus
+          - mips_24kc
+          - mips_4kec
+          - mips_mips32
+          - mipsel_24kc
+          - mipsel_24kc_24kf
+          - mipsel_74kc
+          - mipsel_mips32
+          - x86_64
+    container:
+      image: openwrt/sdk:${{ matrix.arch }}-${{ matrix.branch }}
+      options: --user root
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: 'openwrt'
+
+      - name: Build packages
+        id: build
+        working-directory: /builder
+        env:
+          ARCH: ${{ matrix.arch }}
+          BRANCH: ${{ matrix.branch }}
+        shell: bash
+        run: |
+          cp -va $GITHUB_WORKSPACE/youtubeUnblock package
+          VERSION=$(grep -Po 'PKG_VERSION:=\K.*' package/youtubeUnblock/Makefile)
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          sed -e 's|base.*\.git|base https://github.com/openwrt/openwrt.git|' \
+              -e 's|packages.*\.git|packages https://github.com/openwrt/packages.git|' -i feeds.conf.default
+          ./scripts/feeds update base packages
+          ./scripts/feeds install -a
+          make defconfig
+          make package/youtubeUnblock/compile V=s -j$(nproc) BUILD_LOG=1
+
+      - name: Compress build logs
+        if: always()
+        env:
+          ARCH: ${{ matrix.arch }}
+          BRANCH: ${{ matrix.branch }}
+        run: |
+          tar -cJvf logs-$BRANCH-$ARCH.tar.xz /builder/logs
+
+      - name: Upload packages
+        if: steps.build.outcome == 'success'
+        uses: actions/upload-artifact@v4
+        with:
+          name: ipk-${{ matrix.branch }}-${{ matrix.arch }}
+          path: /builder/**/youtubeUnblock*.ipk
+          if-no-files-found: error
+
+      - name: Upload build logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: logs-${{ matrix.branch }}-${{ matrix.arch }}
+          path: ./**/logs-${{ matrix.branch }}-${{ matrix.arch }}.tar.xz
+
+  release:
+    needs: build
+    permissions:
+      contents: write
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        branch: ['23.05']
+    steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: ipk-*
+
+      - name: Upload release assets
+        uses: ncipollo/release-action@v1
+        with:
+          allowUpdates: true
+          prerelease: false
+          tag: v${{ needs.build.outputs.version }}-owrt${{ matrix.branch }}
+          name: v${{ needs.build.outputs.version }} for OpenWrt ${{ matrix.branch }}
+          body: |
+            youtubeUnblock v${{ needs.build.outputs.version }} for OpenWrt ${{ matrix.branch }}
+          artifacts: ./**/*.ipk

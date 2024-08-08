@@ -13,3 +13,5 @@ modules.order
 Module.symvers
 *.so
 *.ko
+
+!/.github
