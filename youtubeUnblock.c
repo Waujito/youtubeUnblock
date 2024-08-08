@@ -838,8 +838,7 @@ int main(int argc, const char *argv[]) {
 		};
 
 		qres = init_queue_wrapper(&tconf);
-	}
-	else {
+	} else {
 		printf("%d threads wil be used\n", config.threads);
 
 		struct queue_conf thread_confs[MAX_THREADS];
