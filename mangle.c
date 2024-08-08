@@ -473,11 +473,11 @@ int gen_fake_sni(const struct iphdr *iph, const struct tcphdr *tcph,
 	ntcph->th_dport = tcph->th_dport;
 	ntcph->th_sport = tcph->th_sport;
 
-#if FAKE_SNI_STRATEGY == FKSN_STRAT_TTL
-	ntcph->ack = tcph->ack;
-	ntcph->ack_seq = tcph->ack_seq;
-	niph->ttl = FAKE_SNI_TTL;
-#endif 
+	if (config.fake_sni_strategy == FKSN_STRAT_TTL) {
+		ntcph->seq = tcph->seq;
+		ntcph->ack_seq = tcph->ack_seq;
+		niph->ttl = config.fake_sni_ttl;
+	}
 
 #endif 
 

@@ -517,7 +517,7 @@ static int process_packet(const struct packet_data packet, struct queue_data qda
 
 		if (dlen > 1480) {
 			if (config.verbose)
-				fprintf(stderr, "WARNING! Google video packet is too big and may cause issues!\n");
+				fprintf(stderr, "WARNING! Client Hello packet is too big and may cause issues!\n");
 		}
 		
 		uint8_t frag1[MNL_SOCKET_BUFFER_SIZE];
