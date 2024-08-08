@@ -46,6 +46,8 @@ Available flags:
 
 If you are on Chromium you may have to disable kyber (the feature that makes the TLS ClientHello very fat). I've got the problem with it on router, so to escape possibly errors it is better to just disable it: in chrome://flags search for kyber and switch it to disabled state. 
 
+If your browser is using quic it may not work properly. Disable it in chrome in chrome://flags and in Firefox network.http.http{2,3}.enable(d) in about:config
+
 ### Troubleshooting EPERMS (Operation not permitted)
 EPERM may occur in a lot of places but generally here are two: mnl_cb_run and when sending the packet via rawsocket (raw_frags_send and send fake sni).
 - mnl_cb_run Operation not permitted indicates that another instance of youtubeUnblock is running on the specified queue-num.
