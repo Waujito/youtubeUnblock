@@ -409,10 +409,11 @@ struct verdict analyze_tls_data(
 
 			unsigned int j = 0;
 			for (unsigned int i = 0; i <= config.domains_strlen; i++) {
-				if (	i == config.domains_strlen	||	
+				if (	i > j &&
+					(i == config.domains_strlen	||	
 					config.domains_str[i] == '\0'	||
 					config.domains_str[i] == ','	|| 
-					config.domains_str[i] == '\n'	) {
+					config.domains_str[i] == '\n'	)) {
 
 					unsigned int domain_len = (i - j);
 					const char *sni_startp = sni_name + sni_len - domain_len;
