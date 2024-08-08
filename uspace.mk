@@ -16,8 +16,6 @@ LIBMNL_LIBS := -L$(DEPSDIR)/lib
 # PREFIX is environment variable, if not set default to /usr/local
 ifeq ($(PREFIX),)
 	PREFIX := /usr/local
-else
-	PREFIX := $(DESTDIR)
 endif
 
 export CC CCLD LD CFLAGS LDFLAGS LIBNFNETLINK_CFLAGS LIBNFNETLINK_LIBS LIBMNL_CFLAGS LIBMNL_LIBS
@@ -73,16 +71,16 @@ $(BUILD_DIR)/%.o: %.c $(LIBNETFILTER_QUEUE) $(LIBMNL) config.h
 	$(CC) -c $(CFLAGS) $(LDFLAGS) $< -o $@
 
 install: all
-	install -d $(PREFIX)/bin/
-	install -m 755 $(APP) $(PREFIX)/bin/
-	install -d $(PREFIX)/lib/systemd/system/
+	install -d $(DESTDIR)$(PREFIX)/bin/
+	install -m 755 $(APP) $(DESTDIR)$(PREFIX)/bin/
+	install -d $(DESTDIR)$(PREFIX)/lib/systemd/system/
 	@cp youtubeUnblock.service $(BUILD_DIR)
 	@sed -i 's/$$(PREFIX)/$(subst /,\/,$(PREFIX))/g' $(BUILD_DIR)/youtubeUnblock.service
-	install -m 644 $(BUILD_DIR)/youtubeUnblock.service $(PREFIX)/lib/systemd/system/
+	install -m 644 $(BUILD_DIR)/youtubeUnblock.service $(DESTDIR)$(PREFIX)/lib/systemd/system/
 
 uninstall:
-	rm $(PREFIX)/bin/youtubeUnblock
-	rm $(PREFIX)/lib/systemd/system/youtubeUnblock.service
+	rm $(DESTDIR)$(PREFIX)/bin/youtubeUnblock
+	rm $(DESTDIR)$(PREFIX)/lib/systemd/system/youtubeUnblock.service
 	-systemctl disable youtubeUnblock.service
 
 clean:
@@ -90,5 +88,4 @@ clean:
 	$(MAKE) distclean -C deps/libnetfilter_queue || true
 	$(MAKE) distclean -C deps/libmnl || true
 	$(MAKE) distclean -C deps/libnfnetlink || true
-
 
