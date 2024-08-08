@@ -3,12 +3,12 @@ KMAKE_TARGETS := kmake kload kunload kreload xmod xtclean
 
 .PHONY: $(USPACE_TARGETS) $(KMAKE_TARGETS) clean
 $(USPACE_TARGETS):
-	@$(MAKE) -ef uspace.mk $@
+	@$(MAKE) -f uspace.mk $@
 
 $(KMAKE_TARGETS):
-	@$(MAKE) -ef kmake.mk $@
+	@$(MAKE) -f kmake.mk $@
 
 clean:
-	-@$(MAKE) -ef kmake.mk kclean
-	@$(MAKE) -ef uspace.mk clean
+	-@$(MAKE) -f kmake.mk kclean
+	@$(MAKE) -f uspace.mk clean
 
