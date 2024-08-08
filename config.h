@@ -9,6 +9,9 @@ struct config_t {
 	int  fake_sni_strategy;
 	int verbose;
 	unsigned int seg2_delay;
+	const char *domains_str;
+	unsigned int domains_strlen;
+	unsigned int all_domains;
 };
 extern struct config_t config;
 
@@ -66,3 +69,5 @@ extern struct config_t config;
 // The Maximum Transmission Unit size for rawsocket
 // Larger packets will be fragmented. Applicable for Chrome's kyber.
 #define AVAILABLE_MTU 1384
+
+static const char defaul_snistr[] = "googlevideo.com,youtube.com,ggpht.com,ytimg.com";

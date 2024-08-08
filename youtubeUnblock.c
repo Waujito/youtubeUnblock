@@ -55,6 +55,8 @@ struct config_t config = {
 #else
 	.verbose = false,
 #endif
+	.domains_str = defaul_snistr,
+	.domains_strlen = sizeof(defaul_snistr),
 };
 
 const char* get_value(const char *option, const char *prefix)
@@ -108,6 +110,21 @@ int parse_option(const char* option) {
 
 	if (!strcmp(option, "--silent")) {
 		config.verbose = 0;
+		goto out;
+	}
+
+	if ((value = get_value(option, "--sni-domains")) != 0) {
+		if (!value) {
+			goto err;
+		}
+		
+		if (strcmp(value, "all")) {
+			config.all_domains = 1;
+		}
+
+		config.domains_str = value;
+		config.domains_strlen = strlen(value);
+
 		goto out;
 	}
 
@@ -212,6 +229,7 @@ errormsg_help:
 	err = errno;
 	printf("Usage: %s <queue_num> [OPTIONS]\n", argv[0]);
 	printf("Options:\n");
+	printf("\t--sni-domains=<comma separated domain list>|all\n");
 	printf("\t--fake-sni={ack,ttl,none}\n");
 	printf("\t--fake-sni-ttl=<ttl>\n");
 	printf("\t--frag={tcp,ip,none}\n");
@@ -493,9 +511,9 @@ static int process_packet(const struct packet_data packet, struct queue_data qda
 	verdnlh = nfq_nlmsg_put(buf, NFQNL_MSG_VERDICT, qdata.queue_num);
         nfq_nlmsg_verdict_put(verdnlh, packet.id, NF_ACCEPT);
 
-	if (vrd.gvideo_hello) {
+	if (vrd.target_sni) {
 		if (config.verbose)
-			printf("Google video!\n");
+			printf("SNI target detected\n");
 
 		if (dlen > 1480) {
 			if (config.verbose)

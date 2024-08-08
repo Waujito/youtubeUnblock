@@ -285,10 +285,6 @@ int tcp4_frag(const __u8 *pkt, __u32 buflen, __u32 payload_offset,
 #define TLS_EXTENSION_SNI 0x0000
 #define TLS_EXTENSION_CLIENT_HELLO_ENCRYPTED 0xfe0d
 
-const char googlevideo_ending[] = "googlevideo.com";
-const int googlevideo_len = 15;
-
-
 typedef __u8 uint8_t;
 typedef __u32 uint32_t;
 typedef __u16 uint16_t;
@@ -401,19 +397,33 @@ struct verdict analyze_tls_data(
 			if (sni_ext_ptr + sni_len > sni_ext_end) break;
 
 			char *sni_name = (char *)sni_ext_ptr;
-			// sni_len
 
 			vrd.sni_offset = (uint8_t *)sni_name - data;
 			vrd.sni_len = sni_len;
 
-			char *gv_startp = sni_name + sni_len - googlevideo_len;
-			if (sni_len >= googlevideo_len &&
-				sni_len < 128 && 
-				!strncmp(gv_startp, 
-				googlevideo_ending, 
-				googlevideo_len)) {
+			if (config.all_domains) {
+				vrd.target_sni = 1;
+				goto out;
+			}
 
-				vrd.gvideo_hello = 1;
+
+			unsigned int j = 0;
+			for (unsigned int i = 0; i < config.domains_strlen; i++) {
+				if (config.domains_str[i] == ',' || config.domains_str[i] == '\n') {
+					unsigned int domain_len = (i - j);
+					const char *sni_startp = sni_name + sni_len - domain_len;
+					const char *domain_startp = config.domains_str + j;
+
+					if (sni_len >= domain_len &&
+						sni_len < 128 && 
+						!strncmp(sni_startp, 
+						domain_startp, 
+						domain_len)) {
+							vrd.target_sni = 1;
+					}
+
+					j = i + 1;
+				}
 			}
 
 nextExtension:
@@ -423,6 +433,7 @@ nextMessage:
 		i += 5 + message_length;
 	}
 
+out:
 	return vrd;
 }
 
