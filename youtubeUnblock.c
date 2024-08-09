@@ -76,7 +76,8 @@ static long parse_numeric_option(const char* value) {
 }
 
 static void print_version() {
-  	printf("Youtube unblocker v0.0.1\n"); //TODO
+  	printf("youtubeUnblock\n");	
+	printf("Bypasses youtube detection systems that relies on SNI\n");
 }
 
 static void print_usage(const char *argv0) {
@@ -773,8 +774,9 @@ void *init_queue_wrapper(void *qdconf) {
 }
 
 int main(int argc, char *argv[]) {
-	if (parse_args(argc, argv)) {
-		if (errno) {
+	int ret;
+	if ((ret = parse_args(argc, argv)) != 0) {
+		if (ret < 0) {
 			perror("Unable to parse args");
 			exit(EXIT_FAILURE);
 		}
