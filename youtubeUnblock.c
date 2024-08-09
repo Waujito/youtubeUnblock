@@ -210,7 +210,7 @@ static int parse_args(int argc, const char *argv[]) {
 
 	config.queue_start_num = parse_numeric_option(argv[optind]);
 	if (errno != 0) {
-		printf("Invalid queue numbmer\n");
+		printf("Invalid queue number\n");
 		return -1;
 	}
 
@@ -787,10 +787,10 @@ int main(int argc, const char *argv[]) {
 
 	switch (config.fake_sni_strategy) {
 		case FKSN_STRAT_TTL:
-			printf("Fake SNI will be sent before each googlevideo request, TTL strategy will be used with TTL %d\n", config.fake_sni_ttl);
+			printf("Fake SNI will be sent before each request, TTL strategy will be used with TTL %d\n", config.fake_sni_ttl);
 			break;
 		case FRAG_STRAT_IP:
-			printf("Fake SNI will be sent before each googlevideo request, Ack-Seq strategy will be used\n");
+			printf("Fake SNI will be sent before each request, Ack-Seq strategy will be used\n");
 			break;
 		default:
 			printf("SNI fragmentation is disabled\n");
