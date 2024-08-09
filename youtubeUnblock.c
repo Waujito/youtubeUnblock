@@ -26,6 +26,9 @@
 #include <pthread.h>
 #include <sys/socket.h>
 
+#include <unistd.h>
+#include <getopt.h>
+
 #include "config.h"
 #include "mangle.h"
 
@@ -59,35 +62,13 @@ struct config_t config = {
 	.domains_strlen = sizeof(defaul_snistr),
 };
 
-const char* get_value(const char *option, const char *prefix)
-{
+static long parse_numeric_option(const char* value) {
 	errno = 0;
 
-	size_t prefix_len = strlen(prefix);
-	size_t option_len = strlen(option);
-
-	if (option_len <= prefix_len || strncmp(prefix, option, prefix_len)) {
-		return NULL;
-	}
-
-	return option + prefix_len;
-}
-
-int parse_bool_option(const char *value) {
-	errno = 0;
-	if (strcmp(value, "1") == 0) {
-		return 1;
-	}
-	else if (strcmp(value, "0") == 0) {
+	if (*value == '\0') {
+		errno = EINVAL;
 		return 0;
 	}
-
-	errno = EINVAL;
-	return -1;
-}
-
-long parse_numeric_option(const char* value) {
-	errno = 0;
 
 	char* end;
 	long result = strtol(value, &end, 10);
@@ -99,135 +80,15 @@ long parse_numeric_option(const char* value) {
 	return result;
 }
 
-int parse_option(const char* option) {
-	const char* value;
-	int ret;
-
-	if (!strcmp(option, "--no-gso")) {
-		config.use_gso = 0;
-		goto out;
-	}
-
-	if (!strcmp(option, "--silent")) {
-		config.verbose = 0;
-		goto out;
-	}
-
-	if ((value = get_value(option, "--sni-domains")) != 0) {
-		if (!value) {
-			goto err;
-		}
-		
-		if (strcmp(value, "all")) {
-			config.all_domains = 1;
-		}
-
-		config.domains_str = value;
-		config.domains_strlen = strlen(value);
-
-		goto out;
-	}
-
-	if ((value = get_value(option, "--frag=")) != 0) {
-		if (!value) {
-			goto err;
-		}
-
-		if (strcmp(value, "tcp") == 0) {
-			config.fragmentation_strategy = FRAG_STRAT_TCP;
-		} else if (strcmp(value, "ip") == 0) {
-			config.fragmentation_strategy = FRAG_STRAT_IP;
-		} else if (strcmp(value, "none") == 0) {
-			config.fragmentation_strategy = FRAG_STRAT_NONE;
-		} else {
-			goto err;
-		}
-
-		goto out;
-	}
-
-	if ((value = get_value(option, "--fake-sni=")) != 0) {
-		if (strcmp(value, "ack") == 0) {
-			config.fake_sni_strategy = FKSN_STRAT_ACK_SEQ;
-		} else if (strcmp(value, "ttl") == 0) {
-			config.fake_sni_strategy = FKSN_STRAT_TTL;
-		}
-		else if (strcmp(value, "none") == 0) {
-			config.fake_sni_strategy = FKSN_STRAT_NONE;
-		} else {
-			goto err;
-		}
-
-		goto out;
-	}
-
-	if ((value = get_value(option, "--seg2delay=")) != 0) {
-		long num = parse_numeric_option(value);
-		if (errno != 0 ||
-			num < 0)
-			goto err;
-
-		config.seg2_delay = num;
-		goto out;
-	}
-
-	if ((value = get_value(option, "--threads=")) != 0) {
-		long num = parse_numeric_option(value);
-		if (errno != 0 ||
-			num < 0 ||
-			num > MAX_THREADS) {
-			errno = EINVAL;
-			goto err;
-		}
-
-		config.threads = num;
-		goto out;
-	}
-
-	if ((value = get_value(option, "--fake-sni-ttl=")) != 0) {
-		long num = parse_numeric_option(value);
-		if (errno != 0 ||
-			num < 0 ||
-			num > 255) {
-			goto err;
-		}
-
-		config.fake_sni_ttl = num;
-		goto out;
-	}
-
-err:
-	errno = EINVAL;
-	return -1;
-out:
-	errno = 0;
-	return 0;
+static void print_version() {
+  	printf("youtubeUnblock\n");	
+	printf("Bypasses youtube detection systems that relies on SNI\n");
 }
 
-static int parse_args(int argc, const char *argv[]) {
-	int err;
-	char *end;
+static void print_usage(const char *argv0) {
+	print_version();
 
-	if (argc < 2) {
-		errno = EINVAL;
-		goto errormsg_help;
-	}
-
-	config.queue_start_num = parse_numeric_option(argv[1]);
-	if (errno != 0) goto errormsg_help;
-
-	for (int i = 2; i < argc; i++) {
-		if (parse_option(argv[i])) {
-			printf("Invalid option %s\n", argv[i]);
-			goto errormsg_help;
-		}
-	}
-
-	return 0;
-
-errormsg_help:
-	err = errno;
-	printf("Usage: %s <queue_num> [OPTIONS]\n", argv[0]);
+	printf("Usage: %s <queue_num> [ OPTIONS ] \n", argv0);
 	printf("Options:\n");
 	printf("\t--sni-domains=<comma separated domain list>|all\n");
 	printf("\t--fake-sni={ack,ttl,none}\n");
@@ -237,9 +98,139 @@ errormsg_help:
 	printf("\t--threads=<threads number>\n");
 	printf("\t--silent\n");
 	printf("\t--no-gso\n");
-	errno = err;
-	if (errno == 0) errno = EINVAL;
+	printf("\n");
+}
 
+#define OPT_SNI_DOMAINS		1
+#define OPT_FAKE_SNI 		2
+#define OPT_FAKE_SNI_TTL	3
+#define OPT_FRAG    		4
+#define OPT_SEG2DELAY 		5
+#define OPT_THREADS 		6
+#define OPT_SILENT 		7
+#define OPT_NO_GSO 		8
+
+static struct option long_opt[] = {
+	{"help", 0, 0, 'h'},
+	{"version", 0, 0, 'v'},
+	{"sni-domains", 1, 0, OPT_SNI_DOMAINS},
+	{"fake-sni", 1, 0, OPT_FAKE_SNI},
+	{"fake-sni-ttl", 1, 0, OPT_FAKE_SNI_TTL},
+	{"frag", 1, 0, OPT_FRAG},
+	{"seg2delay", 1, 0, OPT_SEG2DELAY},
+	{"threads", 1, 0, OPT_THREADS},
+	{"silent", 0, 0, OPT_SILENT},
+	{"no-gso", 0, 0, OPT_NO_GSO},
+	{0,0,0,0}
+};
+
+static int parse_args(int argc, char *argv[]) {
+  	int opt;
+	int optIdx;
+	long num;
+
+	if (argc < 2) {
+		print_usage(argv[0]);
+		errno = EINVAL;
+		return -1;
+	}
+
+	while ((opt = getopt_long(argc, argv, "hv", long_opt, &optIdx)) != -1) {
+		switch (opt) {
+			case 'h':
+				print_usage(argv[0]);
+				goto out;
+			case 'v':
+				print_version();
+				goto out;
+			case OPT_SILENT:
+				config.verbose = 0;
+				break;
+			case OPT_NO_GSO:
+				config.use_gso = 0;
+				break;
+			case OPT_SNI_DOMAINS:
+				if (strcmp(optarg, "all")) {
+					config.all_domains = 1;
+				}
+				config.domains_str = optarg;
+				config.domains_strlen = strlen(config.domains_str);
+				printf("asdffdsa\n");
+
+				break;
+			case OPT_FRAG:
+				if (strcmp(optarg, "tcp") == 0) {
+					config.fragmentation_strategy = FRAG_STRAT_TCP;
+				} else if (strcmp(optarg, "ip") == 0) {
+					config.fragmentation_strategy = FRAG_STRAT_IP;
+				} else if (strcmp(optarg, "none") == 0) {
+					config.fragmentation_strategy = FRAG_STRAT_NONE;
+				} else {
+					printf("Invalid option %s\n", long_opt[optIdx].name);
+					goto error;
+				}
+
+				break;
+			case OPT_FAKE_SNI:
+				if (strcmp(optarg, "ack") == 0) {
+					config.fake_sni_strategy = FKSN_STRAT_ACK_SEQ;
+				} else if (strcmp(optarg, "ttl") == 0) {
+					config.fake_sni_strategy = FKSN_STRAT_TTL;
+				} else if (strcmp(optarg, "none") == 0) {
+					config.fake_sni_strategy = FKSN_STRAT_NONE;
+				} else {
+					errno = EINVAL;
+					printf("Invalid option %s\n", long_opt[optIdx].name);
+					goto error;
+				}
+
+				break;
+			case OPT_SEG2DELAY:
+				num = parse_numeric_option(optarg);
+				if (errno != 0 || num < 0) {
+					printf("Invalid option %s\n", long_opt[optIdx].name);
+					goto error;
+				}
+
+				config.seg2_delay = num;
+				break;
+			case OPT_THREADS:
+				num = parse_numeric_option(optarg);
+				if (errno != 0 || num < 0 || num > MAX_THREADS) {
+					printf("Invalid option %s\n", long_opt[optIdx].name);
+					goto error;
+				}
+
+				config.threads = num;
+				break;
+			case OPT_FAKE_SNI_TTL:
+				num = parse_numeric_option(optarg);
+				if (errno != 0 || num < 0 || num > 255) {
+					printf("Invalid option %s\n", long_opt[optIdx].name);
+					goto error;
+				}
+
+				config.fake_sni_ttl = num;
+				break;
+			default:
+				goto error;
+		}
+	}
+
+	config.queue_start_num = parse_numeric_option(argv[optind]);
+	if (errno != 0) {
+		printf("Invalid queue number\n");
+		goto error;
+	}
+
+	errno = 0;
+	return 0;
+out:
+	errno = 0;
+	return 1;
+error:
+	print_usage(argv[0]);
+	errno = EINVAL;
 	return -1;
 }
 
@@ -786,10 +777,14 @@ void *init_queue_wrapper(void *qdconf) {
 	return thres;
 }
 
-int main(int argc, const char *argv[]) {
-	if (parse_args(argc, argv)) {
-		perror("Unable to parse args");
-		exit(EXIT_FAILURE);
+int main(int argc, char *argv[]) {
+	int ret;
+	if ((ret = parse_args(argc, argv)) != 0) {
+		if (ret < 0) {
+			perror("Unable to parse args");
+			exit(EXIT_FAILURE);
+		}
+		exit(EXIT_SUCCESS);
 	}
 
 	switch (config.fragmentation_strategy) {
@@ -810,10 +805,10 @@ int main(int argc, const char *argv[]) {
 
 	switch (config.fake_sni_strategy) {
 		case FKSN_STRAT_TTL:
-			printf("Fake SNI will be sent before each googlevideo request, TTL strategy will be used with TTL %d\n", config.fake_sni_ttl);
+			printf("Fake SNI will be sent before each request, TTL strategy will be used with TTL %d\n", config.fake_sni_ttl);
 			break;
 		case FRAG_STRAT_IP:
-			printf("Fake SNI will be sent before each googlevideo request, Ack-Seq strategy will be used\n");
+			printf("Fake SNI will be sent before each request, Ack-Seq strategy will be used\n");
 			break;
 		default:
 			printf("SNI fragmentation is disabled\n");
