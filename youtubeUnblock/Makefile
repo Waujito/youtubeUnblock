@@ -19,7 +19,6 @@ define Package/youtubeUnblock
 	TITLE:=youtubeUnblock
 	URL:=https://github.com/Waujito/youtubeUnblock
 	MAINTAINER:=Vadim Vetrov <vetrovvd@gmail.com>
-	DEPENDS:=+kmod-nft-queue
 endef
 
 define Package/youtubeUnblock/description
