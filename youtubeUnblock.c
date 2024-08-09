@@ -115,7 +115,7 @@ static struct option long_opt[] = {
                     {0,0,0,0}
                   };
 
-static int parse_args(int argc, const char *argv[]) {
+static int parse_args(int argc, char *argv[]) {
   	int opt;
 	int optIdx;
 	long num;
@@ -760,7 +760,7 @@ void *init_queue_wrapper(void *qdconf) {
 	return thres;
 }
 
-int main(int argc, const char *argv[]) {
+int main(int argc, char *argv[]) {
 	if (parse_args(argc, argv)) {
 		if (errno) {
 			perror("Unable to parse args");
