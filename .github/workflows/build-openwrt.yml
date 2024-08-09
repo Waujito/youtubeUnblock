@@ -1,7 +1,7 @@
 name: build-openwrt
 
 on:
-  workflow_dispatch:
+  - push
 
 jobs:
   build:
@@ -10,7 +10,8 @@ jobs:
       version: ${{ steps.build.outputs.version }}
     strategy:
       matrix:
-        branch: [openwrt-23.05]
+        branch: 
+          - openwrt-23.05
         arch:
           - aarch64_cortex-a53
           - aarch64_cortex-a72
@@ -37,6 +38,7 @@ jobs:
           - mipsel_24kc_24kf
           - mipsel_74kc
           - mipsel_mips32
+          - ramips-mt76x8
           - x86_64
     container:
       image: openwrt/sdk:${{ matrix.arch }}-${{ matrix.branch }}
@@ -46,19 +48,25 @@ jobs:
         uses: actions/checkout@v4
         with:
           ref: 'openwrt'
+      
 
+      - name: Prepare workflow
+        shell: bash
+        run: |
+          sed -i 's/PKG_REV:=.*$/PKG_REV:=${{ github.sha }}/;s/PKG_VERSION:=.*$/PKG_VERSION:=$(date %Y%m%d)/' youtubeUnblock/Makefile
+          
       - name: Build packages
         id: build
         working-directory: /builder
         shell: bash
         run: |
-          cp -va $GITHUB_WORKSPACE/youtubeUnblock package
-          VERSION=$(grep -Po 'PKG_VERSION:=\K.*' package/youtubeUnblock/Makefile)
-          echo "version=$VERSION" >> $GITHUB_OUTPUT
-          sed -e 's|base.*\.git|base https://github.com/openwrt/openwrt.git|' \
-              -e 's|packages.*\.git|packages https://github.com/openwrt/packages.git|' -i feeds.conf.default
-          make defconfig
-          make package/youtubeUnblock/compile V=s -j$(nproc) BUILD_LOG=1
+          echo "src-link youtubeUnblock $GITHUB_WORKSPACE" >> feeds.conf
+          su - buildbot -c 'cat feeds.conf'
+          su - buildbot -c './scripts/feeds update youtubeUnblock'
+          su - buildbot -c './scripts/feeds install -a -p youtubeUnblock'
+          su - buildbot -c 'make defconfig'
+          su - buildbot -c 'make package/youtubeUnblock/compile V=s BUILD_LOG=1'
+
 
       - name: Compress build logs
         if: always()
