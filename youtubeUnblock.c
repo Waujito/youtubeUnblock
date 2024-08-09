@@ -65,6 +65,11 @@ struct config_t config = {
 static long parse_numeric_option(const char* value) {
 	errno = 0;
 
+	if (*value == '\0') {
+		errno = EINVAL;
+		return 0;
+	}
+
 	char* end;
 	long result = strtol(value, &end, 10);
 	if (*end != '\0') {
@@ -208,7 +213,6 @@ static int parse_args(int argc, char *argv[]) {
 				config.fake_sni_ttl = num;
 				break;
 			default:
-				printf("Invalid option %s\n", long_opt[optIdx].name);
 				goto error;
 		}
 	}
