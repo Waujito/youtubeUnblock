@@ -577,8 +577,10 @@ static int process_packet(const struct packet_data packet, struct queue_data qda
 				if (ret < 0) {
 					errno = -ret;
 					perror("raw pack send");
+					goto fallback;
 				}
-				goto fallback;
+
+				goto send_verd;
 		}
 
 		ret = send_raw_socket(frag2, f2len);
