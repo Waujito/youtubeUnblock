@@ -17,7 +17,7 @@ define Package/youtubeUnblock
 	SECTION:=net
 	CATEGORY:=Networking
 	TITLE:=youtubeUnblock
-	DEPENDS:=+kmod-nfnetlink-queue +libpthread
+	DEPENDS:=+libpthread
 	URL:=https://github.com/Waujito/youtubeUnblock
 	MAINTAINER:=Vadim Vetrov <vetrovvd@gmail.com>
 endef
