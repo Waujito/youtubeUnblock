@@ -1,4 +1,4 @@
-name: build-openwrt
+name: OpenWRT Workflow
 
 on:
   - push
@@ -48,7 +48,6 @@ jobs:
         uses: actions/checkout@v4
         with:
           ref: 'openwrt'
-      
 
       - name: Prepare workflow
         shell: bash
@@ -67,25 +66,10 @@ jobs:
           su - buildbot -c 'make defconfig'
           su - buildbot -c 'make package/youtubeUnblock/compile V=s BUILD_LOG=1'
 
-
-      - name: Compress build logs
-        if: always()
-        env:
-          ARCH: ${{ matrix.arch }}
-        run: |
-          tar -cJvf logs-$ARCH.tar.xz /builder/logs
-
       - name: Upload packages
         if: steps.build.outcome == 'success'
         uses: actions/upload-artifact@v4
         with:
-          name: ipk-${{ matrix.arch }}
+          name: ${{ matrix.arch }}-${{ matrix.branch }}          
           path: /builder/**/youtubeUnblock*.ipk
           if-no-files-found: error
-
-      - name: Upload build logs
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: logs-${{ matrix.arch }}
-          path: ./**/logs-*.tar.xz
