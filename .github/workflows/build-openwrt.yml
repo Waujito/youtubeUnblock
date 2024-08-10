@@ -29,7 +29,6 @@ jobs:
           - arm_cortex-a9_vfpv3-d16
           - arm_fa526
           - arm_mpcore
-          - arm_scale
           - armsr-armv8
           - armsr-armv7
           - mips64_octeonplus
