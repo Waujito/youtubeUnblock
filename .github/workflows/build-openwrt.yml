@@ -1,7 +1,9 @@
 name: OpenWRT Workflow
 
 on:
-  - push
+  push:
+    branches:
+      - main
 
 jobs:
   build:
