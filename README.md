@@ -1,36 +1,45 @@
 # youtubeUnblock
-Bypasses Googlevideo detection systems that relies on SNI. The package is for Linux only. The package is fully compatible with routers running OpenWRT. The binaries are available under [Github Actions](https://github.com/Waujito/youtubeUnblock/actions). To learn how to build and configure the package on OpenWRT, consult [this chapter](https://github.com/Waujito/youtubeUnblock?tab=readme-ov-file#openwrt-case).
+Bypasses Googlevideo detection systems that relies on SNI. The package is for Linux only. The package is fully compatible with routers running OpenWRT. 
+
+The package offers binaries via [Github Actions](https://github.com/Waujito/youtubeUnblock/actions). You can find [packages for OpenWRT under this link](https://github.com/Waujito/youtubeUnblock/actions/workflows/build-openwrt.yml). Also [static binaries for PCs are available here](https://github.com/Waujito/youtubeUnblock/actions/workflows/build-alpine.yml).
 
 For Windows use [GoodbyeDPI from ValdikSS](https://github.com/ValdikSS/GoodbyeDPI) (you can find how to use it for YouTube [here](https://github.com/ValdikSS/GoodbyeDPI/issues/378)) The same behavior is also implemented in [zapret package for linux](https://github.com/bol-van/zapret).
 
-## How it works:
-Lets look from the DPIses side of view: All they have is ip and tcp information, higher-level data is encrypted. So from the IP header only IP address might be helpful for them. In tcp here is basically nothing. So they may handle IP addresses and process it. What's wrong? Google servers are on the way: It is very hard to handle all that infrastracture. One server may host multiple websites and it is very bad if them block, say Google Search trying to block googlevideo. But even if googlevideo servers have their own ip for only googlevideo purposes, here is a problem about how large is Google infrastracture and how much servers are here. The DPIs can't even parse normally all the servers, because each video may live on it's cache server. So what's else? Let's take a look at a TLS level. All information here is encrypted. All... Except hello messages! They are used to initialize handshake connections and hold tons of helpful information. If we talk about TLS v1.3, it is optimized to transfer as less information as possible unencrypted. But here is only one thing that may point us which domain the user wants to connect, the SNI extension. It transfers all domain names unencrypted. Exactly what we need! And DPIs may use this thing to detect google video connections and slow down them (In fact they are corrupting a tcp connection with bad packets).
+## Configuration
+### OpenWRT pre configuration
+When you got the packet, you should install it. Go to your router interface and put it in via System-Software-install_package. Now the package is on the router. Goto System-Startup, restart firewall and start youtubeUnblock. You are done! To make it work you should register an iptables rule and install required kernel modules. The list of modules depends on your the version of OpenWRT and which firewall do you use (iptables or nftables). The common dependency id `kmod-nfnetlink-queue` but it is provided as dependency for another firewall packets. 
 
-So we aims to somehow hide the SNI from them. How?
-- We can alter the SNI name in the tls packet to something else. But what's wrong with this? The server also uses SNI name for certificates. And if we change it, the server will return an invalid certificate which browser can't normally process, which may turn out to the MITM problem.
-- We can encrypt it. Here are a lot of investigations about SNI, but the server should support the technique. Also ISPs may block encrypted SNI. [Check this Wikipedia page](https://en.wikipedia.org/wiki/Server_Name_Indication)
-- So what else can we do with the SNI info? If we can't hide it, let's rely on DPIs weak spots. The DPI is an extremly high loaded machine that analyzes every single packet sent to the Internet. And every performance-impacted feature should be avoided for them. One of this features is IP packet fragmentation. We can split the packet in the middle of SNI message and post it. For DPI fragmentation involves too much overhead: they should store a very big mapping table which maps IP id, Source ip and Destination ip. Also note that some packets may be lost and DPI should support auto-clean of that table. So just imagine how much memory and CPU time will this cost for DPI. But fragments are ok for clients and hosts. And that's the base idea behind this package. I have to mention here that the idea isn't mine, I get in here after some research for this side. Here already was a solution for Windows, GoodbyeDPI. I just made an alternative for Linux.
+So, if you are on iptables you should install: `kmod-ipt-nfqueue`, `iptables-mod-nfqueue`, `kmod-ipt-conntrack-extra`, `iptables-mod-conntrack-extra` and of course iptables user-space app should be available.
+On nftables the dependencies are: `kmod-nft-queue` and `kmod-nf-conntrack`.
 
-You may read further in an [yt-dlp issue page](https://github.com/yt-dlp/yt-dlp/issues/10443) and in [ntc party forum](https://ntc.party/t/%D0%BE%D0%B1%D1%81%D1%83%D0%B6%D0%B4%D0%B5%D0%BD%D0%B8%D0%B5-%D0%B7%D0%B0%D0%BC%D0%B5%D0%B4%D0%BB%D0%B5%D0%BD%D0%B8%D0%B5-youtube-%D0%B2-%D1%80%D0%BE%D1%81%D1%81%D0%B8%D0%B8/8074).
+Next step is to add required rules. For nftables on OpenWRT rules comes out-of-the-box and stored under /usr/share/nftables.d/ruleset-post/537-youtubeUnblock.nft. All you need is install requirements and do /etc/init.f/firewall reload.
 
-## How it processes packets
-When the packet is joining the queue, the application checks sni payload to be googlevideo (right how the DPIs do), segmentates/fragmentates (both TCP and IP fragmentation techniques are supported) and posts the packet. Note that it is impossible to post two fragmented packets from one netfilter queue verdict. Instead, the application drops an original packet and makes another linux raw socket to post the packets in the network. To escape infinity loops the socket marks outgoing packets and the application automatically accepts it.
+For hosts change FORWARD to OUTPUT chain in next rulesets.
 
-## Usage:
-Before compilation make sure `gcc`, `make`, `autoconf`, `automake`, `pkg-config` and `libtool` is installed. For Fedora `glibc-static` should be installed as well.
-Compile with `make`. Install with `make install`. The package include libnetfilter_queue, libnfnetlink and libmnl as static dependencies. The package requires linux-headers and kernel built with netfilter nfqueue support.
+### nftables rules
+On nftables you should put next nftables rules:
+`nft add rule inet fw4 mangle_forward tcp dport 443 ct original "packets < 20" counter queue num 537 bypass`
+`nft insert rule inet fw4 output mark and 0x8000 == 0x8000 counter accept`
 
-You should also configure iptables for this to start working:
-```iptables -A OUTPUT -p tcp --dport 443 -j NFQUEUE --queue-num 537 --queue-bypass``` (or do ```nft add rule ip mangle OUTPUT tcp dport 443 counter queue num 537 bypass``` for nftables.)
-Here iptables serves every tcp packet, destinating port 443 for this userspace packet analyzer (via netfilter kernel module) queue-num may be any number from 0 to 65565. --queue-bypass allows traffic to pass if the application is down.
+### Iptables rules
+On iptables you should put next iptables rules:
+`iptables -t mangle -A FORWARD -p tcp -m tcp --dport 443 -m connbytes --connbytes-dir original --connbytes-mode packets --connbytes 0:19 -j NFQUEUE --queue-num 537 --queue-bypass`
+`iptables -I OUTPUT -m mark --mark 32768/32768 -j ACCEPT`
 
-Also tips to explicitly accept all important outgoing raw packets from youtubeUnblock from [Troubleshooting EPERMS](https://github.com/Waujito/youtubeUnblock?tab=readme-ov-file#troubleshooting-eperms-operation-not-permitted) may be useful to avoid issues.
+Note that above rules are using conntrack to route only first 20 packets from the connection to youtubeUnblock. 
+If you got some troubles with it, for example youtubeUnblock doesn't detect youtube, try to delete connbytes from rules. But it is an unlikely behavior and you should probably check your ruleset.
 
-Run an application with `youtubeUnblock 537` where `537` stands for the queue-num (must be the same as in the iptables rule).
+You can use `--queue-balance` with multiple instances of youtubeUnblock for performance. This behavior is supported via multithreading. Just pass --threads=n where n stands for an amount of threads you want to be enabled. The n defaults to 1. The maximum threads defaults to 16 but may be altered programatically. Note, that if you are about to increase it, here is 100% chance that you are on the wrong way.
 
-Systemd daemon is also available. Do `systemctl enable --now youtubeUnblock.service` after installation (uses queue-num `537`). Please, note that systemd will configure iptables automatically. If you have troubles with it, delete ExecStartPre and ExecStop from youtubeUnblock.service and configure iptables manually (may be a useful case for nftables).
+To run the application pass the queue number to it. This number should be the same as --queue-num in firewall rules.
 
-If you don't want youtubeUnblock to log on each googlevideo request pass -DSILENT as CFLAGS.
+Next step is to daemonize the application.
+On OpenWRT: Copy `owrt/youtubeUnblock.owrt` to `/etc/init.d/youtubeUnblock` and put the program into /usr/bin/. (Don't forget to `chmod +x` both). Now run `/etc/init.d/youtubeUnblock start`. You can alo run `/etc/init.d/youtubeUnblock enable` to force OpenWRT autostart the program on boot, but I don't recommend this since if the packet has bug you may lose access to the router (I think you will be able to reset it with reset settings tricks documented for your router). 
+
+On systemd: Copy `youtubeUnblock.service` to `/usr/lib/systemd/system` (you should change the path inside the file to the program position, for example `/usr/bin/youtubeUnblock`, also you may want to delete default iptables rule addition in systemd file to controll it manually).
+And run `systemctl start youtubeUnblock`.
+
+If you have troubles with some sites being proxied, you can play with flags. For example, for someone `--fake-sni=ttl` works.
 
 Also DNS over HTTPS (DOH) is preferred for additional anonimity. 
 
@@ -57,13 +66,22 @@ EPERM may occur in a lot of places but generally here are two: mnl_cb_run and wh
     * send fake sni EPERM: Fake SNI is out-of-state thing and will likely corrupt the connection (the behavior is expected). conntrack considers it as an invalid packet. By default OpenWRT set up to drop outgoing packets like this one. You may delete nftables/iptables rule that drops packets with invalid conntrack state, but I don't recommend to do this. The step 3 is better solution.
     * Step 3, ultimate solution. Use mark (don't confuse with connmark). The youtubeUnblock uses mark internally to avoid infinity packet loops (when the packet is sent by youtubeUnblock but on next step handled by itself). Currently it uses mark (1 << 15) = 32768. You should put iptables/nftables that ultimately accepts such marks at the very start of the filter OUTPUT chain: `iptables -I OUTPUT -m mark --mark 32768/32768 -j ACCEPT` or `nft insert rule inet fw4 output mark and 0x8000 == 0x8000 counter accept`.
 
-## Performance 
-If you have bad performance you can queue to youtubeUnblock only first, say, 20 packets from the connection. To do so, use nftables conntrack packets counter: `nft add rule inet fw4 mangle_forward tcp dport 443 ct original "packets < 20" counter queue num 537 bypass`. For my 1 CPU core device it worked pretty well. This works because we do care about only first packets with ClientHello. We don't need to process others.
+## How it works:
+Lets look from the DPIses side of view: All they have is ip and tcp information, higher-level data is encrypted. So from the IP header only IP address might be helpful for them. In tcp here is basically nothing. So they may handle IP addresses and process it. What's wrong? Google servers are on the way: It is very hard to handle all that infrastracture. One server may host multiple websites and it is very bad if them block, say Google Search trying to block googlevideo. But even if googlevideo servers have their own ip for only googlevideo purposes, here is a problem about how large is Google infrastracture and how much servers are here. The DPIs can't even parse normally all the servers, because each video may live on it's cache server. So what's else? Let's take a look at a TLS level. All information here is encrypted. All... Except hello messages! They are used to initialize handshake connections and hold tons of helpful information. If we talk about TLS v1.3, it is optimized to transfer as less information as possible unencrypted. But here is only one thing that may point us which domain the user wants to connect, the SNI extension. It transfers all domain names unencrypted. Exactly what we need! And DPIs may use this thing to detect google video connections and slow down them (In fact they are corrupting a tcp connection with bad packets).
 
-The same behavior is also possible in iptables: `iptables -t mangle -A FORWARD -p tcp -m tcp --dport 443 -m connbytes --connbytes-dir original --connbytes-mode packets --connbytes 0:19 -j NFQUEUE --queue-num 537 --queue-bypass`. (The package iptables-mod-conntrack-extra is required for connbytes on OpenWRT)
-For hosts change FORWARD to OUTPUT.
+So we aims to somehow hide the SNI from them. How?
+- We can alter the SNI name in the tls packet to something else. But what's wrong with this? The server also uses SNI name for certificates. And if we change it, the server will return an invalid certificate which browser can't normally process, which may turn out to the MITM problem.
+- We can encrypt it. Here are a lot of investigations about SNI, but the server should support the technique. Also ISPs may block encrypted SNI. [Check this Wikipedia page](https://en.wikipedia.org/wiki/Server_Name_Indication)
+- So what else can we do with the SNI info? If we can't hide it, let's rely on DPIs weak spots. The DPI is an extremly high loaded machine that analyzes every single packet sent to the Internet. And every performance-impacted feature should be avoided for them. One of this features is IP packet fragmentation. We can split the packet in the middle of SNI message and post it. For DPI fragmentation involves too much overhead: they should store a very big mapping table which maps IP id, Source ip and Destination ip. Also note that some packets may be lost and DPI should support auto-clean of that table. So just imagine how much memory and CPU time will this cost for DPI. But fragments are ok for clients and hosts. And that's the base idea behind this package. I have to mention here that the idea isn't mine, I get in here after some research for this side. Here already was a solution for Windows, GoodbyeDPI. I just made an alternative for Linux.
 
-You can use `--queue-balance` with multiple instances of youtubeUnblock. This behavior is supported via multithreading. Just pass -DTHREADS_NUM=n where n stands for an amount of threads you want to be enabled. The n defaults to 1. The maximum threads defaults to 16 but may be altered programatically. Note, that if you are about to increase it, here is 100% chance that you are on the wrong way.
+You may read further in an [yt-dlp issue page](https://github.com/yt-dlp/yt-dlp/issues/10443) and in [ntc party forum](https://ntc.party/t/%D0%BE%D0%B1%D1%81%D1%83%D0%B6%D0%B4%D0%B5%D0%BD%D0%B8%D0%B5-%D0%B7%D0%B0%D0%BC%D0%B5%D0%B4%D0%BB%D0%B5%D0%BD%D0%B8%D0%B5-youtube-%D0%B2-%D1%80%D0%BE%D1%81%D1%81%D0%B8%D0%B8/8074).
+
+## How it processes packets
+When the packet is joining the queue, the application checks sni payload to be googlevideo (right how the DPIs do), segmentates/fragmentates (both TCP and IP fragmentation techniques are supported) and posts the packet. Note that it is impossible to post two fragmented packets from one netfilter queue verdict. Instead, the application drops an original packet and makes another linux raw socket to post the packets in the network. To escape infinity loops the socket marks outgoing packets and the application automatically accepts it.
+
+## Compilation
+Before compilation make sure `gcc`, `make`, `autoconf`, `automake`, `pkg-config` and `libtool` is installed. For Fedora `glibc-static` should be installed as well.
+Compile with `make`. Install with `make install`. The package include libnetfilter_queue, libnfnetlink and libmnl as static dependencies. The package requires linux-headers and kernel built with netfilter nfqueue support.
 
 ## OpenWRT case
 The package is also compatible with routers. The router should be running by linux-based system such as [OpenWRT](https://openwrt.org/).
@@ -76,19 +94,6 @@ First step is to download or compile OpenWRT SDK for your specific platform. The
 ### Building with toolchain
 The precompiled toolchain located near the SDK. For me it is called `openwrt-toolchain-23.05.3-ramips-mt76x8_gcc-12.3.0_musl.Linux-x86_64.tar.xz`. When you download the toolchain, untar it somewhere. Now we are ready for compilation. My cross gcc asked me to create a staging dir for it and pass it as an environment variable. Also you should notice toolsuite packages and replace my make command with yours. ```STAGING_DIR=temp make CC=/usr/bin/mipsel-openwrt-linux-gcc LD=/usr/bin/mipsel-openwrt-linux-ld AR=/usr/bin/mipsel-openwrt-linux-ar OBJDUMP=/usr/bin/mipsel-openwrt-linux-objdump NM=/usr/bin/mipsel-openwrt-linux-nm STRIP=/usr/bin/mipsel-openwrt-linux-strip CROSS_COMPILE_PLATFORM=mipsel-buildroot-linux-gnu```. Take a look at `CROSS_COMPILE_PLATFORM` It is required by autotools but I think it is not necessary. Anyways I put `mipsel-buildroot-linux-gnu` in here. For your model may be an [automake cross-compile manual](https://www.gnu.org/software/automake/manual/html_node/Cross_002dCompilation.html) will be helpful. When compilation is done, the binary file will be in build directory. Copy it to your router. Note that an ssh access is likely to be required to proceed. sshfs don't work on my model so I injected the application to the router via Software Upload Package page. It has given me an error, but also a `/tmp/upload.ipk` file which I copied in root directory, `chmod +x`-ed and run.
 
-### Configuration
-When you got the packet you should install it. Go to your router interface and put it in via System-Software-install_package. Now the package is on the router. Goto System-Startup, restart firewall and start youtubeUnblock. You are done!
 
-Make sure the required packets are installed: kmod-nft-queue if you're using nftables or kmod-ipt-nfqueue if you're using iptables.
-
-If you compiled the package via the SDK or downloaded the binary everything is preinstalled. But if you got any issues (suitable for routers with iptables instead of nftables), ssh into the router and check up everything manually. 
-
-For iptables: install a normal iptables user-space app: `xtables-legacy iptables-zz-legacy` and kernel/iptables nfqueue extensions: `iptables-mod-nfqueue kmod-ipt-nfqueue` and add `iptables -t mangle -A FORWARD -p tcp -m tcp --dport 443 -j NFQUEUE --queue-num 537 --queue-bypass` rule. 
-
-If you prefer nftables, this should work: `nft add rule inet fw4 mangle_forward tcp dport 443 counter queue num 537 bypass`. Note that `kmod-nft-queue` should be installed.
-
-Also you can copy `owrt/537-youtubeUnblock.nft` to `/usr/share/nftables.d/ruleset-post/537-youtubeUnblock.nft` and run `/etc/init.d/firewall reload`. This will reload the nftables ruleset and automatically link 537-youtubeUnblock.nft with it.
-
-Next step is to daemonize the application in openwrt. Copy `owrt/youtubeUnblock.owrt` to `/etc/init.d/youtubeUnblock` and put the program into /usr/bin/. (Don't forget to `chmod +x` both). Now run `/etc/init.d/youtubeUnblock start`. You can alo run `/etc/init.d/youtubeUnblock enable` to force OpenWRT autostart the program on boot, but I don't recommend this since if the packet has bug you may lose access to the router (I think you will be able to reset it with reset settings tricks documented for your router). 
 
 ## If you have any questions/suggestions/problems feel free to open an issue.
