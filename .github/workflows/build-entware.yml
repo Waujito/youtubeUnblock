@@ -1,0 +1,97 @@
+name: Entware Workflow
+
+on:
+  - push
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.build.outputs.version }}
+    strategy:
+      matrix:
+        branch: [entware]
+        arch:
+          - aarch64-3.10
+          - armv7-3.2
+          - mips-3.4
+          - mipsel-3.4
+          - x64-3.2
+    steps:
+      - name: Entware docker container
+        run: |
+          git clone https://github.com/Entware/docker.git
+          docker build docker --pull --tag builder
+          docker volume create entware-home
+
+      - name: Get cache dir
+        id: cache_dir
+        run: |
+          mkdir gh_act_cache
+          echo "cache_dir=$(pwd)/gh_act_cache" >> ${GITHUB_OUTPUT}
+
+      - name: Restore cached build
+        id: cache-build-restore
+        uses: actions/cache/restore@v4
+        with: 
+          path: ${{ steps.cache_dir.outputs.cache_dir }}
+          key: ${{ matrix.arch }}-cache
+
+      - name: Load entware from cache
+        if: steps.cache-build-restore.outputs.cache-hit == 'true'
+        run: |
+          docker run --rm --mount source=entware-home,target=/backup_vol -v ${{ steps.cache_dir.outputs.cache_dir }}:/backup ubuntu tar -xf /backup/entware.tar -C /backup_vol
+          docker run --rm --mount source=entware-home,target=/home/me -w /home/me ubuntu bash -c "cp -r ./backup_vol/* ./"
+          docker run --rm --mount source=entware-home,target=/home/me -w /home/me ubuntu bash -c "chown -R 1000:1000 ./* ./"
+
+      - name: Build entware
+        if: steps.cache-build-restore.outputs.cache-hit != 'true'
+        run: |
+          docker run --rm -i --mount source=entware-home,target=/home/me -w /home/me --name builder builder git clone https://github.com/Entware/Entware.git
+          docker run --rm -i --mount source=entware-home,target=/home/me -w /home/me/Entware --name builder builder make package/symlinks
+          docker run --rm -i --mount source=entware-home,target=/home/me -w /home/me/Entware --name builder builder cp -v configs/${{ matrix.arch }}.config .config
+          docker run --rm -i --mount source=entware-home,target=/home/me -w /home/me/Entware --name builder builder make -j$(nproc) toolchain/install
+          docker run --rm --mount source=entware-home,target=/backup_vol -v ${{ steps.cache_dir.outputs.cache_dir }}:/backup ubuntu tar -cf /backup/entware.tar /backup_vol/
+
+      - name: Save cache build
+        if: steps.cache-build-restore.outputs.cache-hit != 'true'
+        id: cache-build-save
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ steps.cache_dir.outputs.cache_dir }}
+          key: ${{ matrix.arch }}-cache
+
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: 'openwrt'
+
+      - name: Prepare workflow
+        shell: bash
+        run: |
+          sed -i 's/PKG_REV:=.*$/PKG_REV:=${{ github.sha }}/;s/PKG_VERSION:=.*$/PKG_VERSION:=$(date %Y%m%d)/' youtubeUnblock/Makefile
+          
+      - name: Build packages
+        id: build
+        shell: bash
+        run: |
+          echo "src-link youtubeUnblock /youtubeUnblock" | docker run --rm -i --mount source=entware-home,target=/home/me -v $GITHUB_WORKSPACE:/youtubeUnblock -w /home/me/Entware --name builder builder tee -a feeds.conf
+          docker run --rm -i --mount source=entware-home,target=/home/me -v $GITHUB_WORKSPACE:/youtubeUnblock -w /home/me/Entware --name builder builder ./scripts/feeds update youtubeUnblock
+          docker run --rm -i --mount source=entware-home,target=/home/me -v $GITHUB_WORKSPACE:/youtubeUnblock -w /home/me/Entware --name builder builder ./scripts/feeds install -a -p youtubeUnblock
+          echo "CONFIG_PACKAGE_youtubeUnblock=m" | docker run --rm -i --mount source=entware-home,target=/home/me -v $GITHUB_WORKSPACE:/youtubeUnblock -w /home/me/Entware --name builder builder tee -a .config
+          docker run --rm -i --mount source=entware-home,target=/home/me -v $GITHUB_WORKSPACE:/youtubeUnblock -w /home/me/Entware --name builder builder make package/youtubeUnblock/compile V=s
+
+      - name: Extract packages
+        if: steps.build.outcome == 'success'
+        run: |
+          mkdir output
+          docker run --rm --user root -i --mount source=entware-home,target=/home/me -v $(pwd):/target -w /home/me/Entware --name builder builder cp -r bin /target/output/
+
+      - name: Upload packages
+        if: steps.build.outcome == 'success'
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.arch }}-${{ matrix.branch }}          
+          path: ./output/**/*
+          if-no-files-found: error
+

@@ -1,5 +1,5 @@
 # youtubeUnblock
-Bypasses Googlevideo detection systems that relies on SNI. The package is for Linux only. The package is fully compatible with routers running OpenWRT. The binaries are available under [Github Actions](https://github.com/Waujito/youtubeUnblock/actions). To learn how to build and configure the package on OpenWRT, consult [this chapter](https://github.com/Waujito/youtubeUnblock?tab=readme-ov-file#openwrt-case).
+Bypasses Googlevideo detection systems that relies on SNI. The package is for Linux only. The package is fully compatible with routers running OpenWRT. The binaries are available under [Github Actions OpenWRT Workflow](https://github.com/Waujito/youtubeUnblock/actions/workflows/build-openwrt.yml). To learn how to build and configure the package on OpenWRT, consult [this chapter](https://github.com/Waujito/youtubeUnblock?tab=readme-ov-file#openwrt-case).
 
 For Windows use [GoodbyeDPI from ValdikSS](https://github.com/ValdikSS/GoodbyeDPI) (you can find how to use it for YouTube [here](https://github.com/ValdikSS/GoodbyeDPI/issues/378)) The same behavior is also implemented in [zapret package for linux](https://github.com/bol-van/zapret).
 
