@@ -42,6 +42,7 @@ jobs:
           - mipsel_74kc
           - mipsel_mips32
           - ramips-mt76x8
+          - ramips-mt7621
           - x86_64
     container:
       image: openwrt/sdk:${{ matrix.arch }}-${{ matrix.branch }}
