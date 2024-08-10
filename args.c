@@ -9,11 +9,14 @@
 
 
 struct config_t config = {
-	.rawsocket = -2,
 	.threads = THREADS_NUM,
+	.frag_sni_reverse = 0,
+	.frag_sni_faked = 0,
 	.fragmentation_strategy = FRAGMENTATION_STRATEGY,
-	.fake_sni_strategy = FAKE_SNI_STRATEGY,
-	.fake_sni_ttl = FAKE_SNI_TTL,
+	.faking_strategy = FAKING_STRATEGY,
+	.faking_ttl = FAKE_TTL,
+	.fake_sni = 1,
+	.fake_sni_seq_len = 1,
 
 #ifdef SEG2_DELAY
 	.seg2_delay = SEG2_DELAY,
@@ -40,26 +43,36 @@ struct config_t config = {
 
 #define OPT_SNI_DOMAINS		1
 #define OPT_FAKE_SNI 		2
-#define OPT_FAKE_SNI_TTL	3
+#define OPT_FAKING_TTL		3
+#define OPT_FAKING_STRATEGY	10
+#define OPT_FAKE_SNI_SEQ_LEN	11
 #define OPT_FRAG    		4
+#define OPT_FRAG_SNI_REVERSE	12
+#define OPT_FRAG_SNI_FAKED	13
 #define OPT_SEG2DELAY 		5
 #define OPT_THREADS 		6
 #define OPT_SILENT 		7
 #define OPT_NO_GSO 		8
 #define OPT_QUEUE_NUM		9
 
+#define OPT_MAX OPT_FRAG_SNI_FAKED
+
 static struct option long_opt[] = {
-	{"help", 0, 0, 'h'},
-	{"version", 0, 0, 'v'},
-	{"sni-domains", 1, 0, OPT_SNI_DOMAINS},
-	{"fake-sni", 1, 0, OPT_FAKE_SNI},
-	{"fake-sni-ttl", 1, 0, OPT_FAKE_SNI_TTL},
-	{"frag", 1, 0, OPT_FRAG},
-	{"seg2delay", 1, 0, OPT_SEG2DELAY},
-	{"threads", 1, 0, OPT_THREADS},
-	{"silent", 0, 0, OPT_SILENT},
-	{"no-gso", 0, 0, OPT_NO_GSO},
-	{"queue-num", 1, 0, OPT_QUEUE_NUM},
+	{"help",		0, 0, 'h'},
+	{"version",		0, 0, 'v'},
+	{"sni-domains",		1, 0, OPT_SNI_DOMAINS},
+	{"fake-sni",		1, 0, OPT_FAKE_SNI},
+	{"fake-sni-seq-len",	1, 0, OPT_FAKE_SNI_SEQ_LEN},
+	{"faking-strategy",	1, 0, OPT_FAKING_STRATEGY},
+	{"faking-ttl",		1, 0, OPT_FAKING_TTL},
+	{"frag",		1, 0, OPT_FRAG},
+	{"frag-sni-reverse",	1, 0, OPT_FRAG_SNI_REVERSE},
+	{"frag-sni-faked",	1, 0, OPT_FRAG_SNI_FAKED},
+	{"seg2delay",		1, 0, OPT_SEG2DELAY},
+	{"threads",		1, 0, OPT_THREADS},
+	{"silent",		0, 0, OPT_SILENT},
+	{"no-gso",		0, 0, OPT_NO_GSO},
+	{"queue-num",		1, 0, OPT_QUEUE_NUM},
 	{0,0,0,0}
 };
 
@@ -93,9 +106,13 @@ void print_usage(const char *argv0) {
 	printf("Options:\n");
 	printf("\t--queue-num=<number of netfilter queue>\n");
 	printf("\t--sni-domains=<comma separated domain list>|all\n");
-	printf("\t--fake-sni={ack,ttl,none}\n");
-	printf("\t--fake-sni-ttl=<ttl>\n");
+	printf("\t--fake-sni={1|0}\n");
+	printf("\t--fake-sni-seq-len=<length>\n");
+	printf("\t--faking-ttl=<ttl>\n");
+	printf("\t--faking-strategy={ack,ttl}\n");
 	printf("\t--frag={tcp,ip,none}\n");
+	printf("\t--frag-sni-reverse={0|1}\n");
+	printf("\t--frag-sni-faked={0|1}\n");
 	printf("\t--seg2delay=<delay>\n");
 	printf("\t--threads=<threads number>\n");
 	printf("\t--silent\n");
@@ -143,19 +160,72 @@ int parse_args(int argc, char *argv[]) {
 				}
 
 				break;
-			case OPT_FAKE_SNI:
-				if (strcmp(optarg, "ack") == 0) {
-					config.fake_sni_strategy = FKSN_STRAT_ACK_SEQ;
-				} else if (strcmp(optarg, "ttl") == 0) {
-					config.fake_sni_strategy = FKSN_STRAT_TTL;
-				} else if (strcmp(optarg, "none") == 0) {
-					config.fake_sni_strategy = FKSN_STRAT_NONE;
+			case OPT_FRAG_SNI_FAKED:
+				if (strcmp(optarg, "1") == 0) {
+					config.frag_sni_faked = 1;				
+				} else if (strcmp(optarg, "0") == 0) {
+					config.frag_sni_faked = 0;
 				} else {
 					errno = EINVAL;
 					printf("Invalid option %s\n", long_opt[optIdx].name);
 					goto error;
 				}
 
+				break;
+			case OPT_FRAG_SNI_REVERSE:
+				if (strcmp(optarg, "1") == 0) {
+					config.frag_sni_reverse = 1;				
+				} else if (strcmp(optarg, "0") == 0) {
+					config.frag_sni_reverse = 0;
+				} else {
+					errno = EINVAL;
+					printf("Invalid option %s\n", long_opt[optIdx].name);
+					goto error;
+				}
+
+				break;
+			case OPT_FAKING_STRATEGY:
+				if (strcmp(optarg, "ack") == 0) {
+					config.faking_strategy = FAKE_STRAT_ACK_SEQ;
+				} else if (strcmp(optarg, "ttl") == 0) {
+					config.faking_strategy = FAKE_STRAT_TTL;
+				} else {
+					errno = EINVAL;
+					printf("Invalid option %s\n", long_opt[optIdx].name);
+					goto error;
+				}
+
+				break;
+			case OPT_FAKING_TTL:
+				num = parse_numeric_option(optarg);
+				if (errno != 0 || num < 0 || num > 255) {
+					printf("Invalid option %s\n", long_opt[optIdx].name);
+					goto error;
+				}
+
+				config.faking_ttl = num;
+				break;
+
+			case OPT_FAKE_SNI:
+				if (strcmp(optarg, "1") == 0) {
+					config.fake_sni = 1;				
+				} else if (strcmp(optarg, "0") == 0) {
+					config.fake_sni = 0;
+				} else {
+					errno = EINVAL;
+					printf("Invalid option %s\n", long_opt[optIdx].name);
+					goto error;
+				}
+
+				break;
+			case OPT_FAKE_SNI_SEQ_LEN:
+				num = parse_numeric_option(optarg);
+				if (errno != 0 || num < 0 || num > 255) {
+					printf("Invalid option %s\n", long_opt[optIdx].name);
+					goto error;
+				}
+
+				config.fake_sni_seq_len = num;
 				break;
 			case OPT_SEG2DELAY:
 				num = parse_numeric_option(optarg);
@@ -174,15 +244,6 @@ int parse_args(int argc, char *argv[]) {
 				}
 
 				config.threads = num;
-				break;
-			case OPT_FAKE_SNI_TTL:
-				num = parse_numeric_option(optarg);
-				if (errno != 0 || num < 0 || num > 255) {
-					printf("Invalid option %s\n", long_opt[optIdx].name);
-					goto error;
-				}
-
-				config.fake_sni_ttl = num;
 				break;
 			case OPT_QUEUE_NUM:
 				num = parse_numeric_option(optarg);

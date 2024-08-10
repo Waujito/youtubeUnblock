@@ -63,4 +63,15 @@ void ip4_set_checksum(struct iphdr *iph);
 
 int gen_fake_sni(const struct iphdr *iph, const struct tcphdr *tcph, 
 		 uint8_t *buf, uint32_t *buflen);
+
+int fail4_packet(uint8_t *payload, uint32_t plen);
+
+#define PKT_ACCEPT	0
+#define PKT_DROP	1
+
+/**
+ * Processes the packet and returns verdict.
+ * This is the primary function that traverses the packet.
+ */
+int process_packet(const uint8_t *packet, uint32_t packet_len);
 #endif /* YU_MANGLE_H */
