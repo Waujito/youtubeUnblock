@@ -60,6 +60,8 @@ struct config_t config = {
 #endif
 	.domains_str = defaul_snistr,
 	.domains_strlen = sizeof(defaul_snistr),
+
+	.queue_start_num = DEFAULT_QUEUE_NUM,
 };
 
 static long parse_numeric_option(const char* value) {
@@ -88,8 +90,9 @@ static void print_version() {
 static void print_usage(const char *argv0) {
 	print_version();
 
-	printf("Usage: %s <queue_num> [ OPTIONS ] \n", argv0);
+	printf("Usage: %s [ OPTIONS ] \n", argv0);
 	printf("Options:\n");
+	printf("\t--queue-num=<number of netfilter queue>\n");
 	printf("\t--sni-domains=<comma separated domain list>|all\n");
 	printf("\t--fake-sni={ack,ttl,none}\n");
 	printf("\t--fake-sni-ttl=<ttl>\n");
@@ -109,6 +112,7 @@ static void print_usage(const char *argv0) {
 #define OPT_THREADS 		6
 #define OPT_SILENT 		7
 #define OPT_NO_GSO 		8
+#define OPT_QUEUE_NUM		9
 
 static struct option long_opt[] = {
 	{"help", 0, 0, 'h'},
@@ -121,6 +125,7 @@ static struct option long_opt[] = {
 	{"threads", 1, 0, OPT_THREADS},
 	{"silent", 0, 0, OPT_SILENT},
 	{"no-gso", 0, 0, OPT_NO_GSO},
+	{"queue-num", 1, 0, OPT_QUEUE_NUM},
 	{0,0,0,0}
 };
 
@@ -128,12 +133,6 @@ static int parse_args(int argc, char *argv[]) {
   	int opt;
 	int optIdx;
 	long num;
-
-	if (argc < 2) {
-		print_usage(argv[0]);
-		errno = EINVAL;
-		return -1;
-	}
 
 	while ((opt = getopt_long(argc, argv, "hv", long_opt, &optIdx)) != -1) {
 		switch (opt) {
@@ -155,7 +154,6 @@ static int parse_args(int argc, char *argv[]) {
 				}
 				config.domains_str = optarg;
 				config.domains_strlen = strlen(config.domains_str);
-				printf("asdffdsa\n");
 
 				break;
 			case OPT_FRAG:
@@ -212,16 +210,21 @@ static int parse_args(int argc, char *argv[]) {
 
 				config.fake_sni_ttl = num;
 				break;
+			case OPT_QUEUE_NUM:
+				num = parse_numeric_option(optarg);
+				if (errno != 0 || num < 0) {
+					printf("Invalid option %s\n", long_opt[optIdx].name);
+					goto error;
+				}
+
+				config.queue_start_num = num;
+				break;
 			default:
 				goto error;
 		}
 	}
 
-	config.queue_start_num = parse_numeric_option(argv[optind]);
-	if (errno != 0) {
-		printf("Invalid queue number\n");
-		goto error;
-	}
+	
 
 	errno = 0;
 	return 0;
@@ -496,7 +499,6 @@ static int process_packet(const struct packet_data packet, struct queue_data qda
 		goto fallback;
 	}
 
-
 	struct verdict vrd = analyze_tls_data(data, dlen);
 
 	verdnlh = nfq_nlmsg_put(buf, NFQNL_MSG_VERDICT, qdata.queue_num);
@@ -523,21 +525,45 @@ static int process_packet(const struct packet_data packet, struct queue_data qda
 			(struct tcphdr *)tcph, (struct iphdr *)iph);
 
 		if (config.fake_sni_strategy != FKSN_STRAT_NONE) {
-			uint8_t fake_sni[MNL_SOCKET_BUFFER_SIZE];
-			uint32_t fsn_len = MNL_SOCKET_BUFFER_SIZE;
+			uint8_t rfsiph[60];
+			uint8_t rfstcph[60];
 
-			ret = gen_fake_sni(iph, tcph, fake_sni, &fsn_len);
-			if (ret < 0) {
-				errno = -ret;
-				perror("gen_fake_sni");
-				goto fallback;
-			}
+			memcpy(rfsiph, iph, iph_len);
+			memcpy(rfstcph, tcph, tcph_len);
 
-			ret = send_raw_socket(fake_sni, fsn_len);
-			if (ret < 0) {
-				errno = -ret;
-				perror("send fake sni");
-				goto fallback;
+			struct iphdr *fsiph = (void *)rfsiph;
+			struct tcphdr *fstcph = (void *)rfstcph;
+
+			for (int i = 0; i < 10; i++) {
+				uint8_t fake_sni[MNL_SOCKET_BUFFER_SIZE];
+				uint32_t fsn_len = MNL_SOCKET_BUFFER_SIZE;
+				ret = gen_fake_sni(fsiph, fstcph, fake_sni, &fsn_len);
+				if (ret < 0) {
+					errno = -ret;
+					perror("gen_fake_sni");
+					goto fallback;
+				}
+
+				printf("%d\n", i);
+				ret = send_raw_socket(fake_sni, fsn_len);
+				if (ret < 0) {
+					errno = -ret;
+					perror("send fake sni");
+					goto fallback;
+				}
+
+				uint32_t iph_len;
+				uint32_t tcph_len;
+				uint32_t plen;
+				tcp4_payload_split(fake_sni, fsn_len, &fsiph, &iph_len, &fstcph, &tcph_len, NULL, &plen);
+
+
+				fstcph->seq = htonl(ntohl(tcph->seq) + plen * (i + 1));
+				memcpy(rfsiph, fsiph, iph_len);
+				memcpy(rfstcph, fstcph, tcph_len);
+				fsiph = (void *)rfsiph;
+				fstcph = (void *)rfstcph;
+
 			}
 		}
 
@@ -731,7 +757,7 @@ int init_queue(int queue_num) {
 		.queue_num = queue_num
 	};
 
-	printf("Queue %d started!\n", qdata.queue_num);
+	printf("Queue %d started\n", qdata.queue_num);
 
 	while (1) {
 		ret = mnl_socket_recvfrom(nl, buf, BUF_SIZE);

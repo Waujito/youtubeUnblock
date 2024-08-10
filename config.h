@@ -70,4 +70,6 @@ extern struct config_t config;
 // Larger packets will be fragmented. Applicable for Chrome's kyber.
 #define AVAILABLE_MTU 1384
 
+#define DEFAULT_QUEUE_NUM 537
+
 static const char defaul_snistr[] = "googlevideo.com,ggpht.com,ytimg.com,youtube.com,play.google.com,youtu.be,googleapis.com,googleusercontent.com,gstatic.com,l.google.com";
