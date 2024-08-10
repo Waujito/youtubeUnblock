@@ -47,6 +47,7 @@ Also DNS over HTTPS (DOH) is preferred for additional anonimity.
 
 ## Flags
 Available flags:
+- `--queue-num=<number of netfilter queue>` - The number of netfilter queue youtubeUnblock will be linked to. Defaults to 537.
 - `--sni-domains=<comma separated domain list>|all` - List of domains you want to be handled by sni. Use this string if you want to change default domains. Defaults to `googlevideo.com,youtube.com,ggpht.com,ytimg.com`. You can pass all if you want for every Client Hello to be handled.
 - `--seg2delay=<delay>` - This flag forces youtubeUnblock to wait little bit before send the 2nd part of the split packet.
 - `--fake-sni={ack,ttl, none}` This flag enables fake-sni which forces youtubeUnblock to send at least three packets instead of one with TLS ClientHello: Fake ClientHello, 1st part of original ClientHello, 2nd part of original ClientHello. This flag may be related to some Operation not permitted error messages, so befor open an issue refer to FAQ for EPERMS. Note, that this flag is set to `ack` by default. You may disable fake sni by setting it to `none`. Note, that your ISP may have conntrack drop on invalid state enabled, so this flag won't work. Use `ttl` to escape that.

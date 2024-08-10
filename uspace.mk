@@ -34,7 +34,7 @@ LIBNETFILTER_QUEUE := $(DEPSDIR)/lib/libnetfilter_queue.a
 default: all
 
 run_dev: dev
-	bash -c "sudo $(APP) 537"
+	bash -c "sudo $(APP)"
 
 dev: dev_attrs all
 
