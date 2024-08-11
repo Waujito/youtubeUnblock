@@ -1,7 +1,6 @@
 #include <stdlib.h>
 #define _GNU_SOURCE
 #include "mangle.h"
-#include "raw_replacements.h"
 #include "config.h"
 
 #ifdef KERNEL_SPACE
@@ -67,7 +66,7 @@ static int send_ip4_frags(const uint8_t *packet, uint32_t pktlen, const uint32_t
 
 static int send_tcp4_frags(const uint8_t *packet, uint32_t pktlen, const uint32_t *poses, uint32_t poses_sz, uint32_t dvs) {
 	if (poses_sz == 0) {
-		if (config.seg2_delay && dvs > 0) {
+		if (config.seg2_delay && ((dvs > 0) ^ config.frag_sni_reverse)) {
 			if (!instance_config.send_delayed_packet) {
 				return -EINVAL;
 			}
@@ -103,9 +102,7 @@ static int send_tcp4_frags(const uint8_t *packet, uint32_t pktlen, const uint32_
 			return ret;
 		}
 
-		int reverse = config.frag_sni_reverse;
-
-		if (reverse)
+		if (config.frag_sni_reverse)
 			goto send_frag2;
 		
 send_frag1:
@@ -115,7 +112,7 @@ send_frag1:
 				return ret;
 			}
 
-			if (reverse) 
+			if (config.frag_sni_reverse) 
 				goto out;
 		}
 
@@ -139,10 +136,10 @@ send_fake:
 				return ret;
 			}
 
-			if (reverse)
-				goto send_frag1;
 		}
 
+		if (config.frag_sni_reverse)
+			goto send_frag1;
 
 send_frag2:
 		{
@@ -152,12 +149,11 @@ send_frag2:
 				return ret;
 			}
 
-			if (reverse)
+			if (config.frag_sni_reverse)
 				goto send_fake;
 		}
 	}
 out:
-
 	return 0;
 }
 
@@ -742,42 +738,29 @@ int gen_fake_sni(const struct iphdr *iph, const struct tcphdr *tcph,
 		return -EINVAL;
 
 	int ip_len = iph->ihl * 4;
-	size_t data_len = sizeof(fake_sni);
+	int tcph_len = tcph->doff * 4;
 
-	size_t dlen = data_len + ip_len;
+	const char *data = config.fake_sni_pkt;
+	size_t data_len = config.fake_sni_pkt_sz;
+
+	size_t dlen = ip_len + tcph_len + data_len;
 
 	if (*buflen < dlen) 
 		return -ENOMEM;
-	*buflen = dlen;
 
 	memcpy(buf, iph, ip_len);
-	memcpy(buf + ip_len, fake_sni, data_len);
+	memcpy(buf + ip_len, tcph, tcph_len);
+	memcpy(buf + ip_len + tcph_len, data, data_len);
+
 	struct iphdr *niph = (struct iphdr *)buf;
+	struct tcphdr *ntcph = (struct tcphdr *)(buf + ip_len);
 
 	niph->protocol = IPPROTO_TCP;
 	niph->tot_len = htons(dlen);
 
-	int ret = 0;
-	struct tcphdr *ntcph = (struct tcphdr *)(buf + ip_len);
+	fail4_packet(buf, *buflen);
 
-#ifdef KERNEL_SPACE
-	ntcph->dest = tcph->dest;
-	ntcph->source = tcph->source;
-#else 
-	ntcph->th_dport = tcph->th_dport;
-	ntcph->th_sport = tcph->th_sport;
-
-	if (config.faking_strategy == FAKE_STRAT_TTL) {
-		ntcph->seq = tcph->seq;
-		ntcph->ack_seq = tcph->ack_seq;
-		niph->ttl = config.faking_ttl;
-	}
-
-#endif 
-
-	ip4_set_checksum(niph);
-	tcp4_set_checksum(ntcph, niph);
-
+	*buflen = dlen;
 	return 0;
 }
 

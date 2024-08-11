@@ -1,4 +1,5 @@
 #include "config.h"
+#include "raw_replacements.h"
 #include <stdbool.h>
 #include <errno.h>
 #include <stdio.h>
@@ -39,6 +40,8 @@ struct config_t config = {
 	.domains_strlen = sizeof(defaul_snistr),
 
 	.queue_start_num = DEFAULT_QUEUE_NUM,
+	.fake_sni_pkt = fake_sni,
+	.fake_sni_pkt_sz = sizeof(fake_sni) - 1, // - 1 for null-terminator
 };
 
 #define OPT_SNI_DOMAINS		1
