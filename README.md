@@ -14,34 +14,34 @@ When you got the packet, you should install it. Go to your router interface and 
 So, if you are on iptables you should install: `kmod-ipt-nfqueue`, `iptables-mod-nfqueue`, `kmod-ipt-conntrack-extra`, `iptables-mod-conntrack-extra` and of course iptables user-space app should be available.
 On nftables the dependencies are: `kmod-nft-queue` and `kmod-nf-conntrack`.
 
-Next step is to add required rules. For nftables on OpenWRT rules comes out-of-the-box and stored under /usr/share/nftables.d/ruleset-post/537-youtubeUnblock.nft. All you need is install requirements and do /etc/init.f/firewall reload.
+Next step is to add required rules. For nftables on OpenWRT rules comes out-of-the-box and stored under /usr/share/nftables.d/ruleset-post/537-youtubeUnblock.nft. All you need is install requirements and do `/etc/init.d/firewall reload`. If no, go to Firewall configuration.
 
-For hosts change FORWARD to OUTPUT chain in next rulesets.
+Now we are ready to daemonize the application.
+If you installed package from Github Actions or built it yourself with OpenWRT SDK, rc scripts are preinstalled. All you need is to do `/etc/init.d/youtubeUnblock start`.
+Else copy `owrt/youtubeUnblock.owrt` to `/etc/init.d/youtubeUnblock` and put the program into /usr/bin/. (Don't forget to `chmod +x` both). Now run `/etc/init.d/youtubeUnblock start`. 
 
-### nftables rules
+You can also run `/etc/init.d/youtubeUnblock enable` to force OpenWRT autostart the program on boot, but I don't recommend this since if the packet has bug you may lose access to the router (I think you will be able to reset it with reset settings tricks documented for your router). 
+
+### PC configuration
+On local host make sure to change FORWARD to OUTPUT chain in the Firewall rulesets.
+
+Copy `youtubeUnblock.service` to `/usr/lib/systemd/system` (you should change the path inside the file to the program position, for example `/usr/bin/youtubeUnblock`, also you may want to delete default iptables rule addition in systemd file to controll it manually). And run `systemctl start youtubeUnblock`.
+
+### Firewall configuration
+#### nftables rules
 On nftables you should put next nftables rules:
 `nft add rule inet fw4 mangle_forward tcp dport 443 ct original "packets < 20" counter queue num 537 bypass`
 `nft insert rule inet fw4 output mark and 0x8000 == 0x8000 counter accept`
 
-### Iptables rules
+#### Iptables rules
 On iptables you should put next iptables rules:
-`iptables -t mangle -A FORWARD -p tcp -m tcp --dport 443 -m connbytes --connbytes-dir original --connbytes-mode packets --connbytes 0:19 -j NFQUEUE --queue-num 537 --queue-bypass`
+`iptables -t mangle -A FORWARD -p tcp --dport 443 -m connbytes --connbytes-dir original --connbytes-mode packets --connbytes 0:19 -j NFQUEUE --queue-num 537 --queue-bypass`
 `iptables -I OUTPUT -m mark --mark 32768/32768 -j ACCEPT`
 
-Note that above rules are using conntrack to route only first 20 packets from the connection to youtubeUnblock. 
+Note that above rules use conntrack to route only first 20 packets from the connection to youtubeUnblock. 
 If you got some troubles with it, for example youtubeUnblock doesn't detect youtube, try to delete connbytes from rules. But it is an unlikely behavior and you should probably check your ruleset.
 
 You can use `--queue-balance` with multiple instances of youtubeUnblock for performance. This behavior is supported via multithreading. Just pass --threads=n where n stands for an amount of threads you want to be enabled. The n defaults to 1. The maximum threads defaults to 16 but may be altered programatically. Note, that if you are about to increase it, here is 100% chance that you are on the wrong way.
-
-To run the application pass the queue number to it. This number should be the same as --queue-num in firewall rules.
-
-Next step is to daemonize the application.
-On OpenWRT: Copy `owrt/youtubeUnblock.owrt` to `/etc/init.d/youtubeUnblock` and put the program into /usr/bin/. (Don't forget to `chmod +x` both). Now run `/etc/init.d/youtubeUnblock start`. You can alo run `/etc/init.d/youtubeUnblock enable` to force OpenWRT autostart the program on boot, but I don't recommend this since if the packet has bug you may lose access to the router (I think you will be able to reset it with reset settings tricks documented for your router). 
-
-On systemd: Copy `youtubeUnblock.service` to `/usr/lib/systemd/system` (you should change the path inside the file to the program position, for example `/usr/bin/youtubeUnblock`, also you may want to delete default iptables rule addition in systemd file to controll it manually).
-And run `systemctl start youtubeUnblock`.
-
-If you have troubles with some sites being proxied, you can play with flags. For example, for someone `--fake-sni=ttl` works.
 
 Also DNS over HTTPS (DOH) is preferred for additional anonimity. 
 
@@ -57,8 +57,10 @@ Available flags:
 - `--silent` - Disables Google video detected debug logs.
 - `--frag={tcp,ip,none}` Specifies the fragmentation strategy for the packet. tcp is used by default. Ip fragmentation may be blocked by TSPU. None specifies no fragmentation. Probably this won't work, but may be will work for some fake sni strategies.
 
-If you are on Chromium you may have to disable kyber (the feature that makes the TLS ClientHello very fat). I've got the problem with it on router, so to escape possibly errors it is better to just disable it: in chrome://flags search for kyber and switch it to disabled state. 
+## Troubleshooting
+If you have troubles with some sites being proxied, you can play with flags. For example, for someone `--fake-sni=ttl` works. You should specify proper `--fake-sni-ttl=<ttl value>` where ttl is amount of hops between you and DPI.
 
+If you are on Chromium you may have to disable kyber (the feature that makes the TLS ClientHello very fat). I've got the problem with it on router, so to escape possibly errors it is better to just disable it: in chrome://flags search for kyber and switch it to disabled state. 
 If your browser is using quic it may not work properly. Disable it in chrome in chrome://flags and in Firefox network.http.http{2,3}.enable(d) in about:config
 
 ### Troubleshooting EPERMS (Operation not permitted)
