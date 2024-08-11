@@ -1,7 +1,6 @@
+#include <stdlib.h>
 #define _GNU_SOURCE
-
 #include "mangle.h"
-#include "raw_replacements.h"
 #include "config.h"
 
 #ifdef KERNEL_SPACE
@@ -22,6 +21,319 @@ typedef uint16_t __u16;
 
 #define lgerror(msg, ret) __extension__ ({errno = -ret; perror(msg);})
 #endif
+
+
+int process_packet(const uint8_t *raw_payload, uint32_t raw_payload_len) {
+	if (raw_payload_len > MAX_PACKET_SIZE) {
+		return PKT_ACCEPT;
+	}
+
+	const struct iphdr *iph;
+	uint32_t iph_len;
+	const struct tcphdr *tcph;
+	uint32_t tcph_len;
+	const uint8_t *data;
+	uint32_t dlen;
+
+	int ret = tcp4_payload_split((uint8_t *)raw_payload, raw_payload_len,
+			      (struct iphdr **)&iph, &iph_len, (struct tcphdr **)&tcph, &tcph_len,
+			      (uint8_t **)&data, &dlen);
+
+	if (ret < 0) {
+		goto accept;
+	}
+
+	struct tls_verdict vrd = analyze_tls_data(data, dlen);
+
+	if (vrd.target_sni) {
+		if (config.verbose)
+			printf("Target SNI detected: %.*s\n", vrd.sni_len, data + vrd.sni_offset);
+
+		uint8_t payload[MAX_PACKET_SIZE];
+		uint32_t payload_len = raw_payload_len;
+		memcpy(payload, raw_payload, raw_payload_len);
+
+		struct iphdr *iph;
+		uint32_t iph_len;
+		struct tcphdr *tcph;
+		uint32_t tcph_len;
+		uint8_t *data;
+		uint32_t dlen;
+
+		int ret = tcp4_payload_split(payload, payload_len,
+				      &iph, &iph_len, &tcph, &tcph_len,
+				      &data, &dlen);
+		ip4_set_checksum(iph);
+		tcp4_set_checksum(tcph, iph);
+
+		
+		if (dlen > 1480 && config.verbose) {
+			printf("WARNING! Client Hello packet is too big and may cause issues!\n");
+		}
+
+		if (config.fake_sni) {
+			post_fake_sni(iph, iph_len, tcph, tcph_len, 
+				config.fake_sni_seq_len);	
+		}
+
+		size_t ipd_offset;
+		size_t mid_offset;
+
+		switch (config.fragmentation_strategy) {
+			case FRAG_STRAT_TCP: {
+				ipd_offset = vrd.sni_offset;
+				mid_offset = ipd_offset + vrd.sni_len / 2;
+
+				uint32_t poses[] = { 2, mid_offset };
+
+				ret = send_tcp4_frags(payload, payload_len, poses, 2, 0);
+				if (ret < 0) {
+					lgerror("tcp4 send frags", ret);
+					goto accept;
+				}
+
+				goto drop;
+			}
+			break;
+			case FRAG_STRAT_IP: {
+				ipd_offset = ((char *)data - (char *)tcph) + vrd.sni_offset;
+				mid_offset = ipd_offset + vrd.sni_len / 2;
+				mid_offset += 8 - mid_offset % 8;
+
+				uint32_t poses[] = { mid_offset };
+				ret = send_ip4_frags(payload, payload_len, poses, 1, 0);
+				if (ret < 0) {
+					lgerror("ip4 send frags", ret);
+					goto accept;
+				}
+
+				goto drop;
+			}
+			break;
+			default:
+				ret = instance_config.send_raw_packet(payload, payload_len);
+				if (ret < 0) {
+					lgerror("raw pack send", ret);
+					goto accept;
+				}
+
+				goto drop;
+		}
+
+
+
+		goto drop;
+	}
+
+accept:
+	return PKT_ACCEPT;
+drop:
+	return PKT_DROP;
+}
+
+int send_ip4_frags(const uint8_t *packet, uint32_t pktlen, const uint32_t *poses, uint32_t poses_sz, uint32_t dvs) {
+	if (poses_sz == 0) {
+		if (config.seg2_delay && ((dvs > 0) ^ config.frag_sni_reverse)) {
+			if (!instance_config.send_delayed_packet) {
+				return -EINVAL;
+			}
+
+			instance_config.send_delayed_packet(
+				packet, pktlen, config.seg2_delay);
+
+			return 0;
+		} else {
+			return instance_config.send_raw_packet(
+				packet, pktlen);
+		}
+	} else {
+		uint8_t frag1[MAX_PACKET_SIZE];
+		uint8_t frag2[MAX_PACKET_SIZE];
+		uint32_t f1len = MAX_PACKET_SIZE;
+		uint32_t f2len = MAX_PACKET_SIZE;
+
+		int ret;
+
+		if (dvs > poses[0]) {
+			printf("send_frags: Recursive dvs(%d) is more than poses0(%d)\n", dvs, poses[0]);
+			return -EINVAL;
+		}
+
+		ret = ip4_frag(packet, pktlen, poses[0] - dvs, 
+			frag1, &f1len, frag2, &f2len);
+
+		if (ret < 0) {
+			lgerror("send_frags: frag", ret);
+			printf("Error context: packet with size %d, position: %d, recursive dvs: %d\n", pktlen, poses[0], dvs);
+			return ret;
+		}
+
+		if (config.frag_sni_reverse)
+			goto send_frag2;
+send_frag1:
+		ret = send_ip4_frags(frag1, f1len, NULL, 0, 0);
+		if (ret < 0) {
+			return ret;
+		}
+
+		if (config.frag_sni_reverse)
+			goto out;
+
+send_frag2:
+		dvs += poses[0];
+		ret = send_ip4_frags(frag2, f2len, poses + 1, poses_sz - 1, dvs);
+		if (ret < 0) {
+			return ret;
+		}
+
+		if (config.frag_sni_reverse)
+			goto send_frag1;
+	}
+
+out:
+	return 0;
+}
+
+int send_tcp4_frags(const uint8_t *packet, uint32_t pktlen, const uint32_t *poses, uint32_t poses_sz, uint32_t dvs) {
+	if (poses_sz == 0) {
+		if (config.seg2_delay && ((dvs > 0) ^ config.frag_sni_reverse)) {
+			if (!instance_config.send_delayed_packet) {
+				return -EINVAL;
+			}
+
+			instance_config.send_delayed_packet(
+				packet, pktlen, config.seg2_delay);
+
+			return 0;
+		} else {
+			return instance_config.send_raw_packet(
+				packet, pktlen);
+		}
+	} else {
+		uint8_t frag1[MAX_PACKET_SIZE];
+		uint8_t frag2[MAX_PACKET_SIZE];
+		uint8_t fake_pad[MAX_PACKET_SIZE];
+		uint32_t f1len = MAX_PACKET_SIZE;
+		uint32_t f2len = MAX_PACKET_SIZE;
+
+		int ret;
+
+		if (dvs > poses[0]) {
+			printf("send_frags: Recursive dvs(%d) is more than poses0(%d)\n", dvs, poses[0]);
+			return -EINVAL;
+		}
+
+		ret = tcp4_frag(packet, pktlen, poses[0] - dvs, 
+			frag1, &f1len, frag2, &f2len);
+
+		if (ret < 0) {
+			lgerror("send_frags: frag", ret);
+			printf("Error context: packet with size %d, position: %d, recursive dvs: %d\n", pktlen, poses[0], dvs);
+			return ret;
+		}
+
+		if (config.frag_sni_reverse)
+			goto send_frag2;
+		
+send_frag1:
+		{
+			ret = send_tcp4_frags(frag1, f1len, NULL, 0, 0);
+			if (ret < 0) {
+				return ret;
+			}
+
+			if (config.frag_sni_reverse) 
+				goto out;
+		}
+
+send_fake:
+		if (config.frag_sni_faked) {
+			uint32_t iphfl, tcphfl;
+			ret = tcp4_payload_split(frag2, f2len, NULL, &iphfl, NULL, &tcphfl, NULL, NULL);
+			if (ret < 0) {
+				lgerror("Invalid frag2", ret);
+				return ret;
+			}
+			memcpy(fake_pad, frag2, iphfl + tcphfl);
+			memset(fake_pad + iphfl + tcphfl, 0, f2len - iphfl - tcphfl);
+			ret = fail4_packet(fake_pad, f2len);
+			if (ret < 0) {
+				lgerror("Failed to fail packet", ret);
+				return ret;
+			}
+			ret = send_tcp4_frags(fake_pad, f2len, NULL, 0, 0);
+			if (ret < 0) {
+				return ret;
+			}
+
+		}
+
+		if (config.frag_sni_reverse)
+			goto send_frag1;
+
+send_frag2:
+		{
+			dvs += poses[0];
+			ret = send_tcp4_frags(frag2, f2len, poses + 1, poses_sz - 1, dvs);
+			if (ret < 0) {
+				return ret;
+			}
+
+			if (config.frag_sni_reverse)
+				goto send_fake;
+		}
+	}
+out:
+	return 0;
+}
+
+int post_fake_sni(const struct iphdr *iph, unsigned int iph_len, 
+		     const struct tcphdr *tcph, unsigned int tcph_len,
+		     unsigned char sequence_len) {
+	uint8_t rfsiph[60];
+	uint8_t rfstcph[60];
+	int ret;
+
+	memcpy(rfsiph, iph, iph_len);
+	memcpy(rfstcph, tcph, tcph_len);
+
+	struct iphdr *fsiph = (void *)rfsiph;
+	struct tcphdr *fstcph = (void *)rfstcph;
+
+	for (int i = 0; i < sequence_len; i++) {
+		uint8_t fake_sni[MAX_PACKET_SIZE];
+		uint32_t fsn_len = MAX_PACKET_SIZE;
+		ret = gen_fake_sni(fsiph, fstcph, fake_sni, &fsn_len);
+		if (ret < 0) {
+			lgerror("gen_fake_sni", ret);
+			return ret;
+		}
+
+		ret = instance_config.send_raw_packet(fake_sni, fsn_len);
+		if (ret < 0) {
+			lgerror("send fake sni", ret);
+			return ret;
+		}
+
+		uint32_t iph_len;
+		uint32_t tcph_len;
+		uint32_t plen;
+		tcp4_payload_split(
+			fake_sni, fsn_len, 
+			&fsiph, &iph_len, &fstcph, &tcph_len,
+			NULL, &plen);
+
+
+		fstcph->seq = htonl(ntohl(fstcph->seq) + plen);
+		memcpy(rfsiph, fsiph, iph_len);
+		memcpy(rfstcph, fstcph, tcph_len);
+		fsiph = (void *)rfsiph;
+		fstcph = (void *)rfstcph;
+
+	}
+
+	return 0;
+}
 
 void tcp4_set_checksum(struct tcphdr *tcph, struct iphdr *iph) 
 {
@@ -52,15 +364,22 @@ int ip4_payload_split(__u8 *pkt, __u32 buflen,
 		       struct iphdr **iph, __u32 *iph_len, 
 		       __u8 **payload, __u32 *plen) {
 	if (pkt == NULL || buflen < sizeof(struct iphdr)) {
+		lgerror("ip4_payload_split: pkt|buflen", -EINVAL);
 		return -EINVAL;
 	}
 
 	struct iphdr *hdr = (struct iphdr *)pkt;
-	if (hdr->version != IPVERSION) return -EINVAL;
+	if (hdr->version != IPVERSION) {
+		lgerror("ip4_payload_split: ipversion", -EINVAL);
+		return -EINVAL;
+	}
 
 	__u32 hdr_len = hdr->ihl * 4;
 	__u32 pktlen = ntohs(hdr->tot_len);
-	if (buflen < pktlen || hdr_len > pktlen) return -EINVAL;
+	if (buflen < pktlen || hdr_len > pktlen) {
+		lgerror("ip4_payload_split: buflen cmp pktlen", -EINVAL);
+		return -EINVAL;
+	}
 
 	if (iph) 
 		*iph = hdr;
@@ -270,6 +589,9 @@ int tcp4_frag(const __u8 *pkt, __u32 buflen, __u32 payload_offset,
 	s2_hdr->tot_len = htons(s2_dlen);
 
 	s2_tcph->seq = htonl(ntohl(s2_tcph->seq) + payload_offset);
+
+	s1_tcph->window = htons(1);
+	s2_tcph->window = htons(1);
 	
 	if (config.verbose)
 		printf("Packet split in portion %u %u\n", s1_plen, s2_plen);
@@ -295,11 +617,11 @@ typedef __u16 uint16_t;
  * data Payload data of TCP.
  * dlen Length of `data`.
  */
-struct verdict analyze_tls_data(
+struct tls_verdict analyze_tls_data(
 	const uint8_t *data, 
 	uint32_t dlen) 
 {
-	struct verdict vrd = {0};
+	struct tls_verdict vrd = {0};
 
 	size_t i = 0;
 	const uint8_t *data_end = data + dlen;
@@ -449,41 +771,58 @@ int gen_fake_sni(const struct iphdr *iph, const struct tcphdr *tcph,
 		return -EINVAL;
 
 	int ip_len = iph->ihl * 4;
-	size_t data_len = sizeof(fake_sni);
+	int tcph_len = tcph->doff * 4;
 
-	size_t dlen = data_len + ip_len;
+	const char *data = config.fake_sni_pkt;
+	size_t data_len = config.fake_sni_pkt_sz;
+
+	size_t dlen = ip_len + tcph_len + data_len;
 
 	if (*buflen < dlen) 
 		return -ENOMEM;
-	*buflen = dlen;
 
 	memcpy(buf, iph, ip_len);
-	memcpy(buf + ip_len, fake_sni, data_len);
+	memcpy(buf + ip_len, tcph, tcph_len);
+	memcpy(buf + ip_len + tcph_len, data, data_len);
+
 	struct iphdr *niph = (struct iphdr *)buf;
+	struct tcphdr *ntcph = (struct tcphdr *)(buf + ip_len);
 
 	niph->protocol = IPPROTO_TCP;
 	niph->tot_len = htons(dlen);
 
-	int ret = 0;
-	struct tcphdr *ntcph = (struct tcphdr *)(buf + ip_len);
+	fail4_packet(buf, *buflen);
 
-#ifdef KERNEL_SPACE
-	ntcph->dest = tcph->dest;
-	ntcph->source = tcph->source;
-#else 
-	ntcph->th_dport = tcph->th_dport;
-	ntcph->th_sport = tcph->th_sport;
+	*buflen = dlen;
+	return 0;
+}
 
-	if (config.fake_sni_strategy == FKSN_STRAT_TTL) {
-		ntcph->seq = tcph->seq;
-		ntcph->ack_seq = tcph->ack_seq;
-		niph->ttl = config.fake_sni_ttl;
+int fail4_packet(uint8_t *payload, uint32_t plen) {
+	struct iphdr *iph;
+	uint32_t iph_len;
+	struct tcphdr *tcph;
+	uint32_t tcph_len;
+	uint8_t *data;
+	uint32_t dlen;
+	int ret;
+
+	ret = tcp4_payload_split(payload, plen, 
+			&iph, &iph_len, &tcph, &tcph_len,
+			&data, &dlen);
+
+	if (ret < 0) {
+		return ret;
 	}
 
-#endif 
+	if (config.faking_strategy == FAKE_STRAT_ACK_SEQ) {
+		tcph->seq = random();
+		tcph->ack_seq = random();
+	} else if (config.faking_strategy == FAKE_STRAT_TTL) {
+		iph->ttl = config.faking_ttl;
+	}
 
-	ip4_set_checksum(niph);
-	tcp4_set_checksum(ntcph, niph);
+	ip4_set_checksum(iph);
+	tcp4_set_checksum(tcph, iph);
 
 	return 0;
 }

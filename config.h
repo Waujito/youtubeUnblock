@@ -1,18 +1,40 @@
+#ifndef YTB_CONFIG_H
+#define YTB_CONFIG_H
+
+typedef int (*raw_send_t)(const unsigned char *data, unsigned int data_len);
+/**
+ * Sends the packet after delay_ms. The function should schedule send and return immediately
+ * (for example, open daemon thread)
+ */
+typedef void (*delayed_send_t)(const unsigned char *data, unsigned int data_len, unsigned int delay_ms);
+
+struct instance_config_t {
+	raw_send_t send_raw_packet;
+	delayed_send_t send_delayed_packet;
+};
+extern struct instance_config_t instance_config;
 
 struct config_t {
 	unsigned int queue_start_num;
-	int rawsocket;
 	int threads;
 	int use_gso;
 	int fragmentation_strategy;
-	unsigned char fake_sni_ttl;
-	int  fake_sni_strategy;
+	int frag_sni_reverse;
+	int frag_sni_faked;
+	int faking_strategy;
+	unsigned char faking_ttl;
+	int fake_sni;
+	unsigned int fake_sni_seq_len;
 	int verbose;
+	/* In milliseconds */
 	unsigned int seg2_delay;
 	const char *domains_str;
 	unsigned int domains_strlen;
 	unsigned int all_domains;
+	const char *fake_sni_pkt;
+	unsigned int fake_sni_pkt_sz;
 };
+
 extern struct config_t config;
 
 #define MAX_THREADS 16
@@ -43,23 +65,17 @@ extern struct config_t config;
 #define SEG2_DELAY 100
 #endif
 
-#define FAKE_SNI_TTL 8
+#define FAKE_TTL 8
 
-// No fake SNI
-#define FKSN_STRAT_NONE 0
-// Will invalidate fake client hello by out-of-ack_seq out-of-seq request
-#define FKSN_STRAT_ACK_SEQ 1
-// Will assume that GGC server is located further than FAKE_SNI_TTL
-// Thus, Fake Client Hello will be eliminated automatically.
-#define FKSN_STRAT_TTL 2
+// Will invalidate fake packets by out-of-ack_seq out-of-seq request
+#define FAKE_STRAT_ACK_SEQ 1
+// Will assume that GGC server is located further than FAKE_TTL
+// Thus, Fake packet will be eliminated automatically.
+#define FAKE_STRAT_TTL 2
 
 
-#ifdef NO_FAKE_SNI
-#define FAKE_SNI_STRATEGY FKSN_STRAT_NONE
-#endif
-
-#ifndef FAKE_SNI_STRATEGY
-#define FAKE_SNI_STRATEGY FKSN_STRAT_ACK_SEQ
+#ifndef FAKING_STRATEGY
+#define FAKING_STRATEGY FAKE_STRAT_ACK_SEQ
 #endif
 
 #if !defined(SILENT) && !defined(KERNEL_SPACE)
@@ -72,4 +88,8 @@ extern struct config_t config;
 
 #define DEFAULT_QUEUE_NUM 537
 
+#define MAX_PACKET_SIZE 8192
+
 static const char defaul_snistr[] = "googlevideo.com,ggpht.com,ytimg.com,youtube.com,play.google.com,youtu.be,googleapis.com,googleusercontent.com,gstatic.com,l.google.com";
+
+#endif /* YTB_CONFIG_H */

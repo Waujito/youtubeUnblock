@@ -45,17 +45,33 @@ If you have troubles with some sites being proxied, you can play with flags. For
 
 Also DNS over HTTPS (DOH) is preferred for additional anonimity. 
 
+## Check it
+Here is a command aims to help you deterime whether it works or no:
+```
+curl -o/dev/null -k --connect-to ::google.com -k -L -H Host:\ mirror.gcr.io https://test.googlevideo.com/v2/cimg/android/blobs/sha256:6fd8bdac3da660bde7bd0b6f2b6a46e1b686afb74b9a4614def32532b73f5eaa
+```
+
+It should return bad speed without youtubeUnblock and good with it. With youtubeUnblock the speed should be the same as with next the command:
+
+```
+curl -o/dev/null -k --connect-to ::google.com -k -L -H Host:\ mirror.gcr.io https://mirror.gcr.io/v2/cimg/android/blobs/sha256:6fd8bdac3da660bde7bd0b6f2b6a46e1b686afb74b9a4614def32532b73f5eaa
+```
+
 ## Flags
 Available flags:
 - `--queue-num=<number of netfilter queue>` - The number of netfilter queue youtubeUnblock will be linked to. Defaults to 537.
 - `--sni-domains=<comma separated domain list>|all` - List of domains you want to be handled by sni. Use this string if you want to change default domains. Defaults to `googlevideo.com,youtube.com,ggpht.com,ytimg.com`. You can pass all if you want for every Client Hello to be handled.
+- `--fake-sni={0|1}` This flag enables fake-sni which forces youtubeUnblock to send at least three packets instead of one with TLS ClientHello: Fake ClientHello, 1st part of original ClientHello, 2nd part of original ClientHello. This flag may be related to some Operation not permitted error messages, so befor open an issue refer to Troubleshooting for EPERMS. Defaults to 1.
+- `--fake-sni-seq-len=<length>` This flag specifies youtubeUnblock to build a complicated construction of fake client hello packets. length determines how much fakes will be sent. Defaults to 1.
+- `--faking-strategy={ack,ttl}` This flag determines the strategy of fake packets invalidation. `ack` specifies that random sequence/acknowledgemend random will be set. This options may be handled by provider which uses conntrack with drop on invalid conntrack state firewall rule enabled. `ttl` specifies that packet will be invalidated after `--faking-ttl=n` hops. `ttl` is better but may cause issues if unconfigured. Defaults to `ack`
+- `--faking-ttl=<ttl>` Tunes the time to live of fake sni messages. TTL is specified like that the packet will go through the TSPU and captured by it, but will not reach the destination server. Defaults to 8.
+- `--frag={tcp,ip,none}` Specifies the fragmentation strategy for the packet. tcp is used by default. Ip fragmentation may be blocked by TSPU. None specifies no fragmentation. Probably this won't work, but may be will work for some fake sni strategies.
+- `--frag-sni-reverse={0|1}` Specifies youtubeUnblock to send Client Hello fragments in the reverse order. Defaults to 1.
+- `--frag-sni-faked={0|1}` Specifies youtubeUnblock to send fake packets near Client Hello (fills payload with zeroes). Defaults to 0.
 - `--seg2delay=<delay>` - This flag forces youtubeUnblock to wait little bit before send the 2nd part of the split packet.
-- `--fake-sni={ack,ttl, none}` This flag enables fake-sni which forces youtubeUnblock to send at least three packets instead of one with TLS ClientHello: Fake ClientHello, 1st part of original ClientHello, 2nd part of original ClientHello. This flag may be related to some Operation not permitted error messages, so befor open an issue refer to FAQ for EPERMS. Note, that this flag is set to `ack` by default. You may disable fake sni by setting it to `none`. Note, that your ISP may have conntrack drop on invalid state enabled, so this flag won't work. Use `ttl` to escape that.
-- `--fake-sni-ttl=<ttl>` Tunes the time to live of fake sni messages. TTL is specified like that the packet will go through the TSPU and captured by it, but will not reach the destination server. Defaults to 8.
+- `--silent` - Disables verbose mode.
 - `--no-gso` Disables support for Google Chrome fat packets which uses GSO. This feature is well tested now, so this flag probably won't fix anything.
 - `--threads=<threads number>` Specifies the amount of threads you want to be running for your program. This defaults to 1 and shouldn't be edited for normal use. If you have performance issues, consult [performance chaptr](https://github.com/Waujito/youtubeUnblock?tab=readme-ov-file#performance)
-- `--silent` - Disables Google video detected debug logs.
-- `--frag={tcp,ip,none}` Specifies the fragmentation strategy for the packet. tcp is used by default. Ip fragmentation may be blocked by TSPU. None specifies no fragmentation. Probably this won't work, but may be will work for some fake sni strategies.
 
 If you are on Chromium you may have to disable kyber (the feature that makes the TLS ClientHello very fat). I've got the problem with it on router, so to escape possibly errors it is better to just disable it: in chrome://flags search for kyber and switch it to disabled state. 
 
