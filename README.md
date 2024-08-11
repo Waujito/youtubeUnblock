@@ -1,7 +1,7 @@
 # youtubeUnblock
 Bypasses Googlevideo detection systems that relies on SNI. The package is for Linux only. The package is fully compatible with routers running OpenWRT. 
 
-The program offers binaries via [Github Actions](https://github.com/Waujito/youtubeUnblock/actions). You can find [packages for OpenWRT under this link](https://github.com/Waujito/youtubeUnblock/actions/workflows/build-openwrt.yml). Also [static binaries for PCs are available here](https://github.com/Waujito/youtubeUnblock/actions/workflows/build-alpine.yml). 
+The program offers binaries via [Github Actions](https://github.com/Waujito/youtubeUnblock/actions). You can find [packages for OpenWRT under this link](https://github.com/Waujito/youtubeUnblock/actions/workflows/build-openwrt.yml). You can check the architecture of your device with command `grep ARCH /etc/openwrt_release`. Also [static binaries for PCs are available here](https://github.com/Waujito/youtubeUnblock/actions/workflows/build-alpine.yml). 
 
 The program is also compatible with routers driven by [Entware](https://github.com/Entware/Entware) (Keenetics/some Asuses). You can find binaries [here](https://github.com/Waujito/youtubeUnblock/actions/workflows/build-entware.yml). And [here is an installation guide](https://help.keenetic.com/hc/ru/articles/360021214160-%D0%A3%D1%81%D1%82%D0%B0%D0%BD%D0%BE%D0%B2%D0%BA%D0%B0-%D1%81%D0%B8%D1%81%D1%82%D0%B5%D0%BC%D1%8B-%D0%BF%D0%B0%D0%BA%D0%B5%D1%82%D0%BE%D0%B2-%D1%80%D0%B5%D0%BF%D0%BE%D0%B7%D0%B8%D1%82%D0%BE%D1%80%D0%B8%D1%8F-Entware-%D0%BD%D0%B0-USB-%D0%BD%D0%B0%D0%BA%D0%BE%D0%BF%D0%B8%D1%82%D0%B5%D0%BB%D1%8C). Install the package with opkg. If you got read-only filesystem error you may unpack the binary manually or specify opkg path `opkg -o <destdir>`.
 
