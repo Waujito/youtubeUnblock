@@ -183,7 +183,7 @@ int process_packet(const uint8_t *raw_payload, uint32_t raw_payload_len) {
 		goto accept;
 	}
 
-	struct verdict vrd = analyze_tls_data(data, dlen);
+	struct tls_verdict vrd = analyze_tls_data(data, dlen);
 
 	if (vrd.target_sni) {
 		if (config.verbose)
@@ -588,11 +588,11 @@ typedef __u16 uint16_t;
  * data Payload data of TCP.
  * dlen Length of `data`.
  */
-struct verdict analyze_tls_data(
+struct tls_verdict analyze_tls_data(
 	const uint8_t *data, 
 	uint32_t dlen) 
 {
-	struct verdict vrd = {0};
+	struct tls_verdict vrd = {0};
 
 	size_t i = 0;
 	const uint8_t *data_end = data + dlen;
