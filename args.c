@@ -11,7 +11,7 @@
 
 struct config_t config = {
 	.threads = THREADS_NUM,
-	.frag_sni_reverse = 0,
+	.frag_sni_reverse = 1,
 	.frag_sni_faked = 0,
 	.fragmentation_strategy = FRAGMENTATION_STRATEGY,
 	.faking_strategy = FAKING_STRATEGY,

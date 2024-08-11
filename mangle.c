@@ -22,12 +22,131 @@ typedef uint16_t __u16;
 #define lgerror(msg, ret) __extension__ ({errno = -ret; perror(msg);})
 #endif
 
-static int send_ip4_frags(const uint8_t *packet, uint32_t pktlen, const uint32_t *poses, uint32_t poses_sz, uint32_t dvs) {
-	if (poses_sz == 0) {
-		return instance_config.send_raw_packet(packet, pktlen);
+
+int process_packet(const uint8_t *raw_payload, uint32_t raw_payload_len) {
+	if (raw_payload_len > MAX_PACKET_SIZE) {
+		return PKT_ACCEPT;
 	}
 
-	{
+	const struct iphdr *iph;
+	uint32_t iph_len;
+	const struct tcphdr *tcph;
+	uint32_t tcph_len;
+	const uint8_t *data;
+	uint32_t dlen;
+
+	int ret = tcp4_payload_split((uint8_t *)raw_payload, raw_payload_len,
+			      (struct iphdr **)&iph, &iph_len, (struct tcphdr **)&tcph, &tcph_len,
+			      (uint8_t **)&data, &dlen);
+
+	if (ret < 0) {
+		goto accept;
+	}
+
+	struct tls_verdict vrd = analyze_tls_data(data, dlen);
+
+	if (vrd.target_sni) {
+		if (config.verbose)
+			printf("Target SNI detected: %.*s\n", vrd.sni_len, data + vrd.sni_offset);
+
+		uint8_t payload[MAX_PACKET_SIZE];
+		uint32_t payload_len = raw_payload_len;
+		memcpy(payload, raw_payload, raw_payload_len);
+
+		struct iphdr *iph;
+		uint32_t iph_len;
+		struct tcphdr *tcph;
+		uint32_t tcph_len;
+		uint8_t *data;
+		uint32_t dlen;
+
+		int ret = tcp4_payload_split(payload, payload_len,
+				      &iph, &iph_len, &tcph, &tcph_len,
+				      &data, &dlen);
+		ip4_set_checksum(iph);
+		tcp4_set_checksum(tcph, iph);
+
+		
+		if (dlen > 1480 && config.verbose) {
+			printf("WARNING! Client Hello packet is too big and may cause issues!\n");
+		}
+
+		if (config.fake_sni) {
+			post_fake_sni(iph, iph_len, tcph, tcph_len, 
+				config.fake_sni_seq_len);	
+		}
+
+		size_t ipd_offset;
+		size_t mid_offset;
+
+		switch (config.fragmentation_strategy) {
+			case FRAG_STRAT_TCP: {
+				ipd_offset = vrd.sni_offset;
+				mid_offset = ipd_offset + vrd.sni_len / 2;
+
+				uint32_t poses[] = { 2, mid_offset };
+
+				ret = send_tcp4_frags(payload, payload_len, poses, 2, 0);
+				if (ret < 0) {
+					lgerror("tcp4 send frags", ret);
+					goto accept;
+				}
+
+				goto drop;
+			}
+			break;
+			case FRAG_STRAT_IP: {
+				ipd_offset = ((char *)data - (char *)tcph) + vrd.sni_offset;
+				mid_offset = ipd_offset + vrd.sni_len / 2;
+				mid_offset += 8 - mid_offset % 8;
+
+				uint32_t poses[] = { mid_offset };
+				ret = send_ip4_frags(payload, payload_len, poses, 1, 0);
+				if (ret < 0) {
+					lgerror("ip4 send frags", ret);
+					goto accept;
+				}
+
+				goto drop;
+			}
+			break;
+			default:
+				ret = instance_config.send_raw_packet(payload, payload_len);
+				if (ret < 0) {
+					lgerror("raw pack send", ret);
+					goto accept;
+				}
+
+				goto drop;
+		}
+
+
+
+		goto drop;
+	}
+
+accept:
+	return PKT_ACCEPT;
+drop:
+	return PKT_DROP;
+}
+
+int send_ip4_frags(const uint8_t *packet, uint32_t pktlen, const uint32_t *poses, uint32_t poses_sz, uint32_t dvs) {
+	if (poses_sz == 0) {
+		if (config.seg2_delay && ((dvs > 0) ^ config.frag_sni_reverse)) {
+			if (!instance_config.send_delayed_packet) {
+				return -EINVAL;
+			}
+
+			instance_config.send_delayed_packet(
+				packet, pktlen, config.seg2_delay);
+
+			return 0;
+		} else {
+			return instance_config.send_raw_packet(
+				packet, pktlen);
+		}
+	} else {
 		uint8_t frag1[MAX_PACKET_SIZE];
 		uint8_t frag2[MAX_PACKET_SIZE];
 		uint32_t f1len = MAX_PACKET_SIZE;
@@ -49,22 +168,33 @@ static int send_ip4_frags(const uint8_t *packet, uint32_t pktlen, const uint32_t
 			return ret;
 		}
 
-		dvs += poses[0];
+		if (config.frag_sni_reverse)
+			goto send_frag2;
+send_frag1:
 		ret = send_ip4_frags(frag1, f1len, NULL, 0, 0);
 		if (ret < 0) {
 			return ret;
 		}
 
+		if (config.frag_sni_reverse)
+			goto out;
+
+send_frag2:
+		dvs += poses[0];
 		ret = send_ip4_frags(frag2, f2len, poses + 1, poses_sz - 1, dvs);
 		if (ret < 0) {
 			return ret;
 		}
+
+		if (config.frag_sni_reverse)
+			goto send_frag1;
 	}
 
+out:
 	return 0;
 }
 
-static int send_tcp4_frags(const uint8_t *packet, uint32_t pktlen, const uint32_t *poses, uint32_t poses_sz, uint32_t dvs) {
+int send_tcp4_frags(const uint8_t *packet, uint32_t pktlen, const uint32_t *poses, uint32_t poses_sz, uint32_t dvs) {
 	if (poses_sz == 0) {
 		if (config.seg2_delay && ((dvs > 0) ^ config.frag_sni_reverse)) {
 			if (!instance_config.send_delayed_packet) {
@@ -157,153 +287,53 @@ out:
 	return 0;
 }
 
+int post_fake_sni(const struct iphdr *iph, unsigned int iph_len, 
+		     const struct tcphdr *tcph, unsigned int tcph_len,
+		     unsigned char sequence_len) {
+	uint8_t rfsiph[60];
+	uint8_t rfstcph[60];
+	int ret;
 
+	memcpy(rfsiph, iph, iph_len);
+	memcpy(rfstcph, tcph, tcph_len);
 
-int process_packet(const uint8_t *raw_payload, uint32_t raw_payload_len) {
-	if (raw_payload_len > MAX_PACKET_SIZE) {
-		return PKT_ACCEPT;
-	}
+	struct iphdr *fsiph = (void *)rfsiph;
+	struct tcphdr *fstcph = (void *)rfstcph;
 
-	const struct iphdr *iph;
-	uint32_t iph_len;
-	const struct tcphdr *tcph;
-	uint32_t tcph_len;
-	const uint8_t *data;
-	uint32_t dlen;
+	for (int i = 0; i < sequence_len; i++) {
+		uint8_t fake_sni[MAX_PACKET_SIZE];
+		uint32_t fsn_len = MAX_PACKET_SIZE;
+		ret = gen_fake_sni(fsiph, fstcph, fake_sni, &fsn_len);
+		if (ret < 0) {
+			lgerror("gen_fake_sni", ret);
+			return ret;
+		}
 
-	int ret = tcp4_payload_split((uint8_t *)raw_payload, raw_payload_len,
-			      (struct iphdr **)&iph, &iph_len, (struct tcphdr **)&tcph, &tcph_len,
-			      (uint8_t **)&data, &dlen);
+		ret = instance_config.send_raw_packet(fake_sni, fsn_len);
+		if (ret < 0) {
+			lgerror("send fake sni", ret);
+			return ret;
+		}
 
-	if (ret < 0) {
-		goto accept;
-	}
-
-	struct tls_verdict vrd = analyze_tls_data(data, dlen);
-
-	if (vrd.target_sni) {
-		if (config.verbose)
-			printf("Target SNI detected: %.*s\n", vrd.sni_len, data + vrd.sni_offset);
-
-		uint8_t payload[MAX_PACKET_SIZE];
-		uint32_t payload_len = raw_payload_len;
-		memcpy(payload, raw_payload, raw_payload_len);
-
-		struct iphdr *iph;
 		uint32_t iph_len;
-		struct tcphdr *tcph;
 		uint32_t tcph_len;
-		uint8_t *data;
-		uint32_t dlen;
-
-		int ret = tcp4_payload_split(payload, payload_len,
-				      &iph, &iph_len, &tcph, &tcph_len,
-				      &data, &dlen);
-		ip4_set_checksum(iph);
-		tcp4_set_checksum(tcph, iph);
-
-		
-		if (dlen > 1480 && config.verbose) {
-			printf("WARNING! Client Hello packet is too big and may cause issues!\n");
-		}
-
-		if (config.fake_sni) {
-			uint8_t rfsiph[60];
-			uint8_t rfstcph[60];
-
-			memcpy(rfsiph, iph, iph_len);
-			memcpy(rfstcph, tcph, tcph_len);
-
-			struct iphdr *fsiph = (void *)rfsiph;
-			struct tcphdr *fstcph = (void *)rfstcph;
-
-			for (int i = 0; i < config.fake_sni_seq_len; i++) {
-				uint8_t fake_sni[MAX_PACKET_SIZE];
-				uint32_t fsn_len = MAX_PACKET_SIZE;
-				ret = gen_fake_sni(fsiph, fstcph, fake_sni, &fsn_len);
-				if (ret < 0) {
-					lgerror("gen_fake_sni", ret);
-					goto accept;
-				}
-
-				ret = instance_config.send_raw_packet(fake_sni, fsn_len);
-				if (ret < 0) {
-					lgerror("send fake sni", ret);
-					goto accept;
-				}
-
-				uint32_t iph_len;
-				uint32_t tcph_len;
-				uint32_t plen;
-				tcp4_payload_split(fake_sni, fsn_len, &fsiph, &iph_len, &fstcph, &tcph_len, NULL, &plen);
+		uint32_t plen;
+		tcp4_payload_split(
+			fake_sni, fsn_len, 
+			&fsiph, &iph_len, &fstcph, &tcph_len,
+			NULL, &plen);
 
 
-				fstcph->seq = htonl(ntohl(fstcph->seq) + plen);
-				memcpy(rfsiph, fsiph, iph_len);
-				memcpy(rfstcph, fstcph, tcph_len);
-				fsiph = (void *)rfsiph;
-				fstcph = (void *)rfstcph;
+		fstcph->seq = htonl(ntohl(fstcph->seq) + plen);
+		memcpy(rfsiph, fsiph, iph_len);
+		memcpy(rfstcph, fstcph, tcph_len);
+		fsiph = (void *)rfsiph;
+		fstcph = (void *)rfstcph;
 
-			}
-		}
-
-		size_t ipd_offset;
-		size_t mid_offset;
-
-		switch (config.fragmentation_strategy) {
-			case FRAG_STRAT_TCP: {
-				ipd_offset = vrd.sni_offset;
-				mid_offset = ipd_offset + vrd.sni_len / 2;
-
-				uint32_t poses[] = { 2, mid_offset };
-
-				ret = send_tcp4_frags(payload, payload_len, poses, 2, 0);
-				if (ret < 0) {
-					lgerror("tcp4 send frags", ret);
-					goto accept;
-				}
-
-				goto drop;
-			}
-			break;
-			case FRAG_STRAT_IP: {
-				ipd_offset = ((char *)data - (char *)tcph) + vrd.sni_offset;
-				mid_offset = ipd_offset + vrd.sni_len / 2;
-				mid_offset += 8 - mid_offset % 8;
-
-				uint32_t poses[] = { mid_offset };
-				ret = send_tcp4_frags(payload, payload_len, poses, 1, 0);
-				if (ret < 0) {
-					lgerror("ip4 send frags", ret);
-					goto accept;
-				}
-
-				goto drop;
-			}
-			break;
-			default:
-				ret = instance_config.send_raw_packet(payload, payload_len);
-				if (ret < 0) {
-					lgerror("raw pack send", ret);
-					goto accept;
-				}
-
-				goto drop;
-		}
-
-
-
-		goto drop;
 	}
 
-accept:
-	return PKT_ACCEPT;
-drop:
-	return PKT_DROP;
+	return 0;
 }
-
-
-
 
 void tcp4_set_checksum(struct tcphdr *tcph, struct iphdr *iph) 
 {
