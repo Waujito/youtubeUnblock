@@ -52,6 +52,7 @@ struct config_t config = {
 #define OPT_FRAG    		4
 #define OPT_FRAG_SNI_REVERSE	12
 #define OPT_FRAG_SNI_FAKED	13
+#define OPT_FK_WINSIZE		14
 #define OPT_SEG2DELAY 		5
 #define OPT_THREADS 		6
 #define OPT_SILENT 		7
@@ -71,6 +72,7 @@ static struct option long_opt[] = {
 	{"frag",		1, 0, OPT_FRAG},
 	{"frag-sni-reverse",	1, 0, OPT_FRAG_SNI_REVERSE},
 	{"frag-sni-faked",	1, 0, OPT_FRAG_SNI_FAKED},
+	{"fk-winsize",		1, 0, OPT_FK_WINSIZE},
 	{"seg2delay",		1, 0, OPT_SEG2DELAY},
 	{"threads",		1, 0, OPT_THREADS},
 	{"silent",		0, 0, OPT_SILENT},
@@ -117,6 +119,7 @@ void print_usage(const char *argv0) {
 	printf("\t--frag={tcp,ip,none}\n");
 	printf("\t--frag-sni-reverse={0|1}\n");
 	printf("\t--frag-sni-faked={0|1}\n");
+	printf("\t--fk-winsize=<winsize>\n");
 	printf("\t--seg2delay=<delay>\n");
 	printf("\t--threads=<threads number>\n");
 	printf("\t--silent\n");
@@ -232,6 +235,15 @@ int parse_args(int argc, char *argv[]) {
 
 				config.fake_sni_seq_len = num;
 				break;
+			case OPT_FK_WINSIZE:
+				num = parse_numeric_option(optarg);
+				if (errno != 0 || num < 0) {
+					printf("Invalid option %s\n", long_opt[optIdx].name);
+					goto error;
+				}
+
+				config.fk_winsize = num;
+				break;
 			case OPT_SEG2DELAY:
 				num = parse_numeric_option(optarg);
 				if (errno != 0 || num < 0) {
@@ -319,6 +331,10 @@ void print_welcome() {
 		case FAKE_STRAT_ACK_SEQ:
 			printf("Ack-Seq faking strategy will be used\n");
 			break;
+	}
+
+	if (config.fk_winsize) {
+		printf("Response TCP window will be set to %d with the appropriate scale\n", config.fk_winsize);
 	}
 
 

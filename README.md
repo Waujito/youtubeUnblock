@@ -68,6 +68,7 @@ Available flags:
 - `--frag={tcp,ip,none}` Specifies the fragmentation strategy for the packet. tcp is used by default. Ip fragmentation may be blocked by TSPU. None specifies no fragmentation. Probably this won't work, but may be will work for some fake sni strategies.
 - `--frag-sni-reverse={0|1}` Specifies youtubeUnblock to send Client Hello fragments in the reverse order. Defaults to 1.
 - `--frag-sni-faked={0|1}` Specifies youtubeUnblock to send fake packets near Client Hello (fills payload with zeroes). Defaults to 0.
+- `--fk-winsize=<winsize>` Specifies window size for the fragmented TCP packet. Applicable if you want for response to be fragmented. May slowdown connection initialization.
 - `--seg2delay=<delay>` - This flag forces youtubeUnblock to wait little bit before send the 2nd part of the split packet.
 - `--silent` - Disables verbose mode.
 - `--no-gso` Disables support for Google Chrome fat packets which uses GSO. This feature is well tested now, so this flag probably won't fix anything.

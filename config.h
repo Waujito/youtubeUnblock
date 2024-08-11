@@ -33,6 +33,7 @@ struct config_t {
 	unsigned int all_domains;
 	const char *fake_sni_pkt;
 	unsigned int fake_sni_pkt_sz;
+	unsigned int fk_winsize;
 };
 
 extern struct config_t config;

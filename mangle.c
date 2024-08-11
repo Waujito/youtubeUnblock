@@ -63,6 +63,11 @@ int process_packet(const uint8_t *raw_payload, uint32_t raw_payload_len) {
 		int ret = tcp4_payload_split(payload, payload_len,
 				      &iph, &iph_len, &tcph, &tcph_len,
 				      &data, &dlen);
+
+		if (config.fk_winsize) {
+			tcph->window = htons(config.fk_winsize);
+		}
+
 		ip4_set_checksum(iph);
 		tcp4_set_checksum(tcph, iph);
 
@@ -590,9 +595,6 @@ int tcp4_frag(const __u8 *pkt, __u32 buflen, __u32 payload_offset,
 
 	s2_tcph->seq = htonl(ntohl(s2_tcph->seq) + payload_offset);
 
-	s1_tcph->window = htons(1);
-	s2_tcph->window = htons(1);
-	
 	if (config.verbose)
 		printf("Packet split in portion %u %u\n", s1_plen, s2_plen);
 

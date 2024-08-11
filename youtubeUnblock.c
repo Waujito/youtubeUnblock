@@ -10,7 +10,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#include <linux/netfilter/nfnetlink_queue.h>
+/* Warning is ok, use this for Entware */
+#include <libnetfilter_queue/linux_nfnetlink_queue.h>
+
 #include <libmnl/libmnl.h>
 #include <libnetfilter_queue/libnetfilter_queue.h>
 #include <libnetfilter_queue/libnetfilter_queue_ipv4.h>
