@@ -454,53 +454,8 @@ int main(int argc, char *argv[]) {
 		exit(EXIT_SUCCESS);
 	}
 
-	switch (config.fragmentation_strategy) {
-		case FRAG_STRAT_TCP:
-			printf("Using TCP segmentation\n");
-			break;
-		case FRAG_STRAT_IP:
-			printf("Using IP fragmentation\n");
-			break;
-		default:
-			printf("SNI fragmentation is disabled\n");
-			break;
-	}
-
-	if (config.seg2_delay) {
-		printf("Some outgoing googlevideo request segments will be delayed for %d ms as of seg2_delay define\n", config.seg2_delay);
-	}
-
-	if (config.fake_sni) {
-		printf("Fake SNI will be sent before each target client hello\n");
-	} else {
-		printf("Fake SNI is disabled\n");
-	}
-
-	if (config.frag_sni_reverse) {
-		printf("Fragmentation Client Hello will be reversed\n");
-	}
-
-	if (config.frag_sni_faked) {
-		printf("Fooling packets will be sent near the original Client Hello\n");
-	}
-
-	if (config.fake_sni_seq_len > 1) {
-		printf("Faking sequence of length %d will be built as fake sni\n", config.fake_sni_seq_len);
-	}
-
-	switch (config.faking_strategy) {
-		case FAKE_STRAT_TTL:
-			printf("TTL faking strategy will be used with TTL %d\n", config.faking_ttl);
-			break;
-		case FAKE_STRAT_ACK_SEQ:
-			printf("Ack-Seq faking strategy will be used\n");
-			break;
-	}
-
-
-	if (config.use_gso) {
-		printf("GSO is enabled\n");
-	}
+	print_version();
+	print_welcome();
 
 	if (open_raw_socket() < 0) {
 		perror("Unable to open raw socket");

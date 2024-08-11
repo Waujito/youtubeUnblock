@@ -183,7 +183,7 @@ int process_packet(const uint8_t *raw_payload, uint32_t raw_payload_len) {
 
 	if (vrd.target_sni) {
 		if (config.verbose)
-			printf("SNI target detected\n");
+			printf("Target SNI detected: %.*s\n", vrd.sni_len, data + vrd.sni_offset);
 
 		uint8_t payload[MAX_PACKET_SIZE];
 		uint32_t payload_len = raw_payload_len;
@@ -559,6 +559,9 @@ int tcp4_frag(const __u8 *pkt, __u32 buflen, __u32 payload_offset,
 	s2_hdr->tot_len = htons(s2_dlen);
 
 	s2_tcph->seq = htonl(ntohl(s2_tcph->seq) + payload_offset);
+
+	s1_tcph->window = htons(1);
+	s2_tcph->window = htons(1);
 	
 	if (config.verbose)
 		printf("Packet split in portion %u %u\n", s1_plen, s2_plen);

@@ -99,7 +99,8 @@ static long parse_numeric_option(const char* value) {
 
 void print_version() {
   	printf("youtubeUnblock\n");	
-	printf("Bypasses youtube detection systems that relies on SNI\n");
+	printf("Bypasses deep packet inspection systems that relies on SNI\n");
+	printf("\n");
 }
 
 void print_usage(const char *argv0) {
@@ -143,9 +144,10 @@ int parse_args(int argc, char *argv[]) {
 				config.use_gso = 0;
 				break;
 			case OPT_SNI_DOMAINS:
-				if (strcmp(optarg, "all")) {
+				if (!strcmp(optarg, "all")) {
 					config.all_domains = 1;
 				}
+
 				config.domains_str = optarg;
 				config.domains_strlen = strlen(config.domains_str);
 
@@ -273,4 +275,58 @@ error:
 	print_usage(argv[0]);
 	errno = EINVAL;
 	return -1;
+}
+
+void print_welcome() {
+	switch (config.fragmentation_strategy) {
+		case FRAG_STRAT_TCP:
+			printf("Using TCP segmentation\n");
+			break;
+		case FRAG_STRAT_IP:
+			printf("Using IP fragmentation\n");
+			break;
+		default:
+			printf("SNI fragmentation is disabled\n");
+			break;
+	}
+
+	if (config.seg2_delay) {
+		printf("Some outgoing googlevideo request segments will be delayed for %d ms as of seg2_delay define\n", config.seg2_delay);
+	}
+
+	if (config.fake_sni) {
+		printf("Fake SNI will be sent before each target client hello\n");
+	} else {
+		printf("Fake SNI is disabled\n");
+	}
+
+	if (config.frag_sni_reverse) {
+		printf("Fragmentation Client Hello will be reversed\n");
+	}
+
+	if (config.frag_sni_faked) {
+		printf("Fooling packets will be sent near the original Client Hello\n");
+	}
+
+	if (config.fake_sni_seq_len > 1) {
+		printf("Faking sequence of length %d will be built as fake sni\n", config.fake_sni_seq_len);
+	}
+
+	switch (config.faking_strategy) {
+		case FAKE_STRAT_TTL:
+			printf("TTL faking strategy will be used with TTL %d\n", config.faking_ttl);
+			break;
+		case FAKE_STRAT_ACK_SEQ:
+			printf("Ack-Seq faking strategy will be used\n");
+			break;
+	}
+
+
+	if (config.use_gso) {
+		printf("GSO is enabled\n");
+	}
+
+	if (config.all_domains) {
+		printf("All Client Hello will be targetted by youtubeUnblock!\n");
+	}
 }
