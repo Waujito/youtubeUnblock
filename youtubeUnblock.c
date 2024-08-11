@@ -33,8 +33,6 @@
 pthread_mutex_t rawsocket_lock;
 int rawsocket = -2;
 
-
-
 static int open_socket(struct mnl_socket **_nl) {
 	struct mnl_socket *nl = NULL;
 	nl = mnl_socket_open(NETLINK_NETFILTER);
