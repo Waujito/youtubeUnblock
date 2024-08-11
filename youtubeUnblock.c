@@ -149,7 +149,7 @@ static int parse_args(int argc, char *argv[]) {
 				config.use_gso = 0;
 				break;
 			case OPT_SNI_DOMAINS:
-				if (strcmp(optarg, "all")) {
+				if (!strcmp(optarg, "all")) {
 					config.all_domains = 1;
 				}
 				config.domains_str = optarg;
