@@ -1,5 +1,7 @@
 # youtubeUnblock
-Bypasses Googlevideo detection systems that relies on SNI. The package is for Linux only. The package is fully compatible with routers running OpenWRT. 
+Bypasses Deep Packet Inspection systems that relies on SNI. The package is for Linux only. The package is fully compatible with routers running OpenWRT. 
+
+The program was primarily developed to bypass YouTube Outage in Russia, but it works good with other websites blocked by SNI. Tune the list of such websites via `--sni-domains` flag for the program.
 
 The program offers binaries via [Github Actions](https://github.com/Waujito/youtubeUnblock/actions). You can find [packages for OpenWRT under this link](https://github.com/Waujito/youtubeUnblock/actions/workflows/build-openwrt.yml). You can check the architecture of your device with command `grep ARCH /etc/openwrt_release`. Also [static binaries for PCs are available here](https://github.com/Waujito/youtubeUnblock/actions/workflows/build-alpine.yml). 
 
@@ -59,8 +61,8 @@ curl -o/dev/null -k --connect-to ::google.com -k -L -H Host:\ mirror.gcr.io http
 
 ## Flags
 Available flags:
+- `--sni-domains=<comma separated domain list>|all` - List of domains you want to be handled by sni. Use this string if you want to change default domains. Defaults to `googlevideo.com,ggpht.com,ytimg.com,youtube.com,play.google.com,youtu.be,googleapis.com,googleusercontent.com,gstatic.com,l.google.com`. You can pass all if you want for every Client Hello to be handled.
 - `--queue-num=<number of netfilter queue>` - The number of netfilter queue youtubeUnblock will be linked to. Defaults to 537.
-- `--sni-domains=<comma separated domain list>|all` - List of domains you want to be handled by sni. Use this string if you want to change default domains. Defaults to `googlevideo.com,youtube.com,ggpht.com,ytimg.com`. You can pass all if you want for every Client Hello to be handled.
 - `--fake-sni={0|1}` This flag enables fake-sni which forces youtubeUnblock to send at least three packets instead of one with TLS ClientHello: Fake ClientHello, 1st part of original ClientHello, 2nd part of original ClientHello. This flag may be related to some Operation not permitted error messages, so befor open an issue refer to Troubleshooting for EPERMS. Defaults to 1.
 - `--fake-sni-seq-len=<length>` This flag specifies youtubeUnblock to build a complicated construction of fake client hello packets. length determines how much fakes will be sent. Defaults to 1.
 - `--faking-strategy={ack,ttl}` This flag determines the strategy of fake packets invalidation. `ack` specifies that random sequence/acknowledgemend random will be set. This options may be handled by provider which uses conntrack with drop on invalid conntrack state firewall rule enabled. `ttl` specifies that packet will be invalidated after `--faking-ttl=n` hops. `ttl` is better but may cause issues if unconfigured. Defaults to `ack`
