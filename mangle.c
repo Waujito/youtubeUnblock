@@ -1,25 +1,15 @@
-#include <stdlib.h>
 #define _GNU_SOURCE
+#include "types.h" // IWYU pragma: keep
 #include "mangle.h"
 #include "config.h"
 
 #ifdef KERNEL_SPACE
-#include <linux/printk.h>
 #include <linux/ip.h>
 
-#define printf pr_info
-#define perror pr_err
-#define lgerror(msg, ret) (pr_err(msg ": %d\n", ret))
 #else 
-#include <stdio.h>
+#include <stdlib.h>
 #include <libnetfilter_queue/libnetfilter_queue_ipv4.h>
 #include <libnetfilter_queue/libnetfilter_queue_tcp.h>
-
-typedef uint8_t __u8;
-typedef uint32_t __u32;
-typedef uint16_t __u16;
-
-#define lgerror(msg, ret) __extension__ ({errno = -ret; perror(msg);})
 #endif
 
 
@@ -365,9 +355,9 @@ void ip4_set_checksum(struct iphdr *iph)
 }
 
 
-int ip4_payload_split(__u8 *pkt, __u32 buflen,
-		       struct iphdr **iph, __u32 *iph_len, 
-		       __u8 **payload, __u32 *plen) {
+int ip4_payload_split(uint8_t *pkt, uint32_t buflen,
+		       struct iphdr **iph, uint32_t *iph_len, 
+		       uint8_t **payload, uint32_t *plen) {
 	if (pkt == NULL || buflen < sizeof(struct iphdr)) {
 		lgerror("ip4_payload_split: pkt|buflen", -EINVAL);
 		return -EINVAL;
@@ -379,8 +369,8 @@ int ip4_payload_split(__u8 *pkt, __u32 buflen,
 		return -EINVAL;
 	}
 
-	__u32 hdr_len = hdr->ihl * 4;
-	__u32 pktlen = ntohs(hdr->tot_len);
+	uint32_t hdr_len = hdr->ihl * 4;
+	uint32_t pktlen = ntohs(hdr->tot_len);
 	if (buflen < pktlen || hdr_len > pktlen) {
 		lgerror("ip4_payload_split: buflen cmp pktlen", -EINVAL);
 		return -EINVAL;
@@ -398,17 +388,17 @@ int ip4_payload_split(__u8 *pkt, __u32 buflen,
 	return 0;
 }
 
-int tcp4_payload_split(__u8 *pkt, __u32 buflen,
-		       struct iphdr **iph, __u32 *iph_len,
-		       struct tcphdr **tcph, __u32 *tcph_len,
-		       __u8 **payload, __u32 *plen) {
+int tcp4_payload_split(uint8_t *pkt, uint32_t buflen,
+		       struct iphdr **iph, uint32_t *iph_len,
+		       struct tcphdr **tcph, uint32_t *tcph_len,
+		       uint8_t **payload, uint32_t *plen) {
 	struct iphdr *hdr;
-	__u32 hdr_len;
+	uint32_t hdr_len;
 	struct tcphdr *thdr;
-	__u32 thdr_len;
+	uint32_t thdr_len;
 	
-	__u8 *tcph_pl;
-	__u32 tcph_plen;
+	uint8_t *tcph_pl;
+	uint32_t tcph_plen;
 
 	if (ip4_payload_split(pkt, buflen, &hdr, &hdr_len, 
 			&tcph_pl, &tcph_plen)){
@@ -441,22 +431,22 @@ int tcp4_payload_split(__u8 *pkt, __u32 buflen,
 }
 
 // split packet to two ipv4 fragments.
-int ip4_frag(const __u8 *pkt, __u32 buflen, __u32 payload_offset, 
-			__u8 *frag1, __u32 *f1len, 
-			__u8 *frag2, __u32 *f2len) {
+int ip4_frag(const uint8_t *pkt, uint32_t buflen, uint32_t payload_offset, 
+			uint8_t *frag1, uint32_t *f1len, 
+			uint8_t *frag2, uint32_t *f2len) {
 	
 	struct iphdr *hdr;
-	const __u8 *payload;
-	__u32 plen;
-	__u32 hdr_len;
+	const uint8_t *payload;
+	uint32_t plen;
+	uint32_t hdr_len;
 	int ret;
 
 	if (!frag1 || !f1len || !frag2 || !f2len)
 		return -EINVAL;
 
 	if ((ret = ip4_payload_split(
-		(__u8 *)pkt, buflen, 
-		&hdr, &hdr_len, (__u8 **)&payload, &plen)) < 0) {
+		(uint8_t *)pkt, buflen, 
+		&hdr, &hdr_len, (uint8_t **)&payload, &plen)) < 0) {
 		lgerror("ipv4_frag: TCP Header extract error", ret);
 		return -EINVAL;
 	}
@@ -471,11 +461,11 @@ int ip4_frag(const __u8 *pkt, __u32 buflen, __u32 payload_offset,
 		return -EINVAL;
 	}
 
-	__u32 f1_plen = payload_offset;
-	__u32 f1_dlen = f1_plen + hdr_len;
+	uint32_t f1_plen = payload_offset;
+	uint32_t f1_dlen = f1_plen + hdr_len;
 
-	__u32 f2_plen = plen - payload_offset;
-	__u32 f2_dlen = f2_plen + hdr_len;
+	uint32_t f2_plen = plen - payload_offset;
+	uint32_t f2_dlen = f2_plen + hdr_len;
 
 	if (*f1len < f1_dlen || *f2len < f2_dlen) {
 		return -ENOMEM;
@@ -492,8 +482,8 @@ int ip4_frag(const __u8 *pkt, __u32 buflen, __u32 payload_offset,
 	struct iphdr *f1_hdr = (void *)frag1;
 	struct iphdr *f2_hdr = (void *)frag2;
 
-	__u16 f1_frag_off = ntohs(f1_hdr->frag_off);
-	__u16 f2_frag_off = ntohs(f2_hdr->frag_off);
+	uint16_t f1_frag_off = ntohs(f1_hdr->frag_off);
+	uint16_t f2_frag_off = ntohs(f2_hdr->frag_off);
 
 	f1_frag_off &= IP_OFFMASK;
 	f1_frag_off |= IP_MF;
@@ -505,7 +495,7 @@ int ip4_frag(const __u8 *pkt, __u32 buflen, __u32 payload_offset,
 		f2_frag_off &= IP_OFFMASK;
 	}
 	
-	f2_frag_off += (__u16)payload_offset / 8;
+	f2_frag_off += (uint16_t)payload_offset / 8;
 
 	f1_hdr->frag_off = htons(f1_frag_off);
 	f1_hdr->tot_len = htons(f1_dlen);
@@ -524,25 +514,25 @@ int ip4_frag(const __u8 *pkt, __u32 buflen, __u32 payload_offset,
 }
 
 // split packet to two tcp-on-ipv4 segments.
-int tcp4_frag(const __u8 *pkt, __u32 buflen, __u32 payload_offset, 
-			__u8 *seg1, __u32 *s1len, 
-			__u8 *seg2, __u32 *s2len) {
+int tcp4_frag(const uint8_t *pkt, uint32_t buflen, uint32_t payload_offset, 
+			uint8_t *seg1, uint32_t *s1len, 
+			uint8_t *seg2, uint32_t *s2len) {
 
 	struct iphdr *hdr;
-	__u32 hdr_len;
+	uint32_t hdr_len;
 	struct tcphdr *tcph;
-	__u32 tcph_len;
-	__u32 plen;
-	const __u8 *payload;
+	uint32_t tcph_len;
+	uint32_t plen;
+	const uint8_t *payload;
 	int ret;
 
 	if (!seg1 || !s1len || !seg2 || !s2len)
 		return -EINVAL;
 
-	if ((ret = tcp4_payload_split((__u8 *)pkt, buflen,
+	if ((ret = tcp4_payload_split((uint8_t *)pkt, buflen,
 				&hdr, &hdr_len,
 				&tcph, &tcph_len,
-				(__u8 **)&payload, &plen)) < 0) {
+				(uint8_t **)&payload, &plen)) < 0) {
 		lgerror("tcp4_frag: tcp4_payload_split", ret);
 
 		return -EINVAL;
@@ -563,11 +553,11 @@ int tcp4_frag(const __u8 *pkt, __u32 buflen, __u32 payload_offset,
 		return -EINVAL;
 	}
 
-	__u32 s1_plen = payload_offset;
-	__u32 s1_dlen = s1_plen + hdr_len + tcph_len;
+	uint32_t s1_plen = payload_offset;
+	uint32_t s1_dlen = s1_plen + hdr_len + tcph_len;
 
-	__u32 s2_plen = plen - payload_offset;
-	__u32 s2_dlen = s2_plen + hdr_len + tcph_len;
+	uint32_t s2_plen = plen - payload_offset;
+	uint32_t s2_dlen = s2_plen + hdr_len + tcph_len;
 
 	if (*s1len < s1_dlen || *s2len < s2_dlen) 
 		return -ENOMEM;
@@ -609,9 +599,9 @@ int tcp4_frag(const __u8 *pkt, __u32 buflen, __u32 payload_offset,
 #define TLS_EXTENSION_SNI 0x0000
 #define TLS_EXTENSION_CLIENT_HELLO_ENCRYPTED 0xfe0d
 
-typedef __u8 uint8_t;
-typedef __u32 uint32_t;
-typedef __u16 uint16_t;
+typedef uint8_t uint8_t;
+typedef uint32_t uint32_t;
+typedef uint16_t uint16_t;
 
 /**
  * Processes tls payload of the tcp request.

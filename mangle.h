@@ -1,13 +1,10 @@
 #ifndef YU_MANGLE_H
 #define YU_MANGLE_H
 
-#ifdef KERNEL_SPACE
-#include <linux/types.h>
-typedef __u8 uint8_t;
-typedef __u32 uint32_t;
+#include "types.h"
 
+#ifdef KERNEL_SPACE
 #include <linux/string.h>
-#include <linux/errno.h>
 #include <linux/stddef.h>
 #include <linux/net.h>
 #include <linux/in.h>
@@ -25,7 +22,6 @@ typedef __u32 uint32_t;
 #define USER_SPACE
 #include <stdint.h>
 #include <string.h>
-#include <errno.h>
 #include <arpa/inet.h>
 #include <netinet/ip.h>
 #include <netinet/tcp.h>
