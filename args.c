@@ -163,7 +163,6 @@ int parse_args(int argc, char *argv[]) {
 				} else if (strcmp(optarg, "none") == 0) {
 					config.fragmentation_strategy = FRAG_STRAT_NONE;
 				} else {
-					printf("Invalid option %s\n", long_opt[optIdx].name);
 					goto error;
 				}
 
@@ -175,7 +174,6 @@ int parse_args(int argc, char *argv[]) {
 					config.frag_sni_faked = 0;
 				} else {
 					errno = EINVAL;
-					printf("Invalid option %s\n", long_opt[optIdx].name);
 					goto error;
 				}
 
@@ -187,7 +185,6 @@ int parse_args(int argc, char *argv[]) {
 					config.frag_sni_reverse = 0;
 				} else {
 					errno = EINVAL;
-					printf("Invalid option %s\n", long_opt[optIdx].name);
 					goto error;
 				}
 
@@ -199,7 +196,6 @@ int parse_args(int argc, char *argv[]) {
 					config.faking_strategy = FAKE_STRAT_TTL;
 				} else {
 					errno = EINVAL;
-					printf("Invalid option %s\n", long_opt[optIdx].name);
 					goto error;
 				}
 
@@ -207,7 +203,6 @@ int parse_args(int argc, char *argv[]) {
 			case OPT_FAKING_TTL:
 				num = parse_numeric_option(optarg);
 				if (errno != 0 || num < 0 || num > 255) {
-					printf("Invalid option %s\n", long_opt[optIdx].name);
 					goto error;
 				}
 
@@ -221,7 +216,6 @@ int parse_args(int argc, char *argv[]) {
 					config.fake_sni = 0;
 				} else {
 					errno = EINVAL;
-					printf("Invalid option %s\n", long_opt[optIdx].name);
 					goto error;
 				}
 
@@ -229,7 +223,6 @@ int parse_args(int argc, char *argv[]) {
 			case OPT_FAKE_SNI_SEQ_LEN:
 				num = parse_numeric_option(optarg);
 				if (errno != 0 || num < 0 || num > 255) {
-					printf("Invalid option %s\n", long_opt[optIdx].name);
 					goto error;
 				}
 
@@ -238,7 +231,6 @@ int parse_args(int argc, char *argv[]) {
 			case OPT_FK_WINSIZE:
 				num = parse_numeric_option(optarg);
 				if (errno != 0 || num < 0) {
-					printf("Invalid option %s\n", long_opt[optIdx].name);
 					goto error;
 				}
 
@@ -247,7 +239,6 @@ int parse_args(int argc, char *argv[]) {
 			case OPT_SEG2DELAY:
 				num = parse_numeric_option(optarg);
 				if (errno != 0 || num < 0) {
-					printf("Invalid option %s\n", long_opt[optIdx].name);
 					goto error;
 				}
 
@@ -256,7 +247,6 @@ int parse_args(int argc, char *argv[]) {
 			case OPT_THREADS:
 				num = parse_numeric_option(optarg);
 				if (errno != 0 || num < 0 || num > MAX_THREADS) {
-					printf("Invalid option %s\n", long_opt[optIdx].name);
 					goto error;
 				}
 
@@ -265,7 +255,6 @@ int parse_args(int argc, char *argv[]) {
 			case OPT_QUEUE_NUM:
 				num = parse_numeric_option(optarg);
 				if (errno != 0 || num < 0) {
-					printf("Invalid option %s\n", long_opt[optIdx].name);
 					goto error;
 				}
 
@@ -284,6 +273,7 @@ out:
 	errno = 0;
 	return 1;
 error:
+	printf("Invalid option %s\n", long_opt[optIdx].name);
 	print_usage(argv[0]);
 	errno = EINVAL;
 	return -1;
