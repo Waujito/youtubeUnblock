@@ -134,155 +134,142 @@ int parse_args(int argc, char *argv[]) {
 
 	while ((opt = getopt_long(argc, argv, "hv", long_opt, &optIdx)) != -1) {
 		switch (opt) {
-			case 'h':
-				print_usage(argv[0]);
-				goto out;
-			case 'v':
-				print_version();
-				goto out;
-			case OPT_SILENT:
-				config.verbose = 0;
-				break;
-			case OPT_NO_GSO:
-				config.use_gso = 0;
-				break;
-			case OPT_SNI_DOMAINS:
-				if (!strcmp(optarg, "all")) {
-					config.all_domains = 1;
-				}
+		case 'h':
+			print_usage(argv[0]);
+			goto stop_exec;
+		case 'v':
+			print_version();
+			goto stop_exec;
+		case OPT_SILENT:
+			config.verbose = 0;
+			break;
+		case OPT_NO_GSO:
+			config.use_gso = 0;
+			break;
+		case OPT_SNI_DOMAINS:
+			if (!strcmp(optarg, "all")) {
+				config.all_domains = 1;
+			}
 
-				config.domains_str = optarg;
-				config.domains_strlen = strlen(config.domains_str);
+			config.domains_str = optarg;
+			config.domains_strlen = strlen(config.domains_str);
+			break;
+		case OPT_FRAG:
+			if (strcmp(optarg, "tcp") == 0) {
+				config.fragmentation_strategy = FRAG_STRAT_TCP;
+			} else if (strcmp(optarg, "ip") == 0) {
+				config.fragmentation_strategy = FRAG_STRAT_IP;
+			} else if (strcmp(optarg, "none") == 0) {
+				config.fragmentation_strategy = FRAG_STRAT_NONE;
+			} else {
+				goto invalid_opt;
+			}
 
-				break;
-			case OPT_FRAG:
-				if (strcmp(optarg, "tcp") == 0) {
-					config.fragmentation_strategy = FRAG_STRAT_TCP;
-				} else if (strcmp(optarg, "ip") == 0) {
-					config.fragmentation_strategy = FRAG_STRAT_IP;
-				} else if (strcmp(optarg, "none") == 0) {
-					config.fragmentation_strategy = FRAG_STRAT_NONE;
-				} else {
-					printf("Invalid option %s\n", long_opt[optIdx].name);
-					goto error;
-				}
+			break;
+		case OPT_FRAG_SNI_FAKED:
+			if (strcmp(optarg, "1") == 0) {
+				config.frag_sni_faked = 1;
+			} else if (strcmp(optarg, "0") == 0) {
+				config.frag_sni_faked = 0;
+			} else {
+				goto invalid_opt;
+			}
 
-				break;
-			case OPT_FRAG_SNI_FAKED:
-				if (strcmp(optarg, "1") == 0) {
-					config.frag_sni_faked = 1;				
-				} else if (strcmp(optarg, "0") == 0) {
-					config.frag_sni_faked = 0;
-				} else {
-					errno = EINVAL;
-					printf("Invalid option %s\n", long_opt[optIdx].name);
-					goto error;
-				}
+			break;
+		case OPT_FRAG_SNI_REVERSE:
+			if (strcmp(optarg, "1") == 0) {
+				config.frag_sni_reverse = 1;
+			} else if (strcmp(optarg, "0") == 0) {
+				config.frag_sni_reverse = 0;
+			} else {
+				goto invalid_opt;
+			}
 
-				break;
-			case OPT_FRAG_SNI_REVERSE:
-				if (strcmp(optarg, "1") == 0) {
-					config.frag_sni_reverse = 1;				
-				} else if (strcmp(optarg, "0") == 0) {
-					config.frag_sni_reverse = 0;
-				} else {
-					errno = EINVAL;
-					printf("Invalid option %s\n", long_opt[optIdx].name);
-					goto error;
-				}
+			break;
+		case OPT_FAKING_STRATEGY:
+			if (strcmp(optarg, "ack") == 0) {
+				config.faking_strategy = FAKE_STRAT_ACK_SEQ;
+			} else if (strcmp(optarg, "ttl") == 0) {
+				config.faking_strategy = FAKE_STRAT_TTL;
+			} else {
+				goto invalid_opt;
+			}
 
-				break;
-			case OPT_FAKING_STRATEGY:
-				if (strcmp(optarg, "ack") == 0) {
-					config.faking_strategy = FAKE_STRAT_ACK_SEQ;
-				} else if (strcmp(optarg, "ttl") == 0) {
-					config.faking_strategy = FAKE_STRAT_TTL;
-				} else {
-					errno = EINVAL;
-					printf("Invalid option %s\n", long_opt[optIdx].name);
-					goto error;
-				}
+			break;
+		case OPT_FAKING_TTL:
+			num = parse_numeric_option(optarg);
+			if (errno != 0 || num < 0 || num > 255) {
+				goto invalid_opt;
+			}
 
-				break;
-			case OPT_FAKING_TTL:
-				num = parse_numeric_option(optarg);
-				if (errno != 0 || num < 0 || num > 255) {
-					printf("Invalid option %s\n", long_opt[optIdx].name);
-					goto error;
-				}
+			config.faking_ttl = num;
+			break;
 
-				config.faking_ttl = num;
-				break;
+		case OPT_FAKE_SNI:
+			if (strcmp(optarg, "1") == 0) {
+				config.fake_sni = 1;				
+			} else if (strcmp(optarg, "0") == 0) {
+				config.fake_sni = 0;
+			} else {
+				goto invalid_opt;
+			}
 
-			case OPT_FAKE_SNI:
-				if (strcmp(optarg, "1") == 0) {
-					config.fake_sni = 1;				
-				} else if (strcmp(optarg, "0") == 0) {
-					config.fake_sni = 0;
-				} else {
-					errno = EINVAL;
-					printf("Invalid option %s\n", long_opt[optIdx].name);
-					goto error;
-				}
+			break;
+		case OPT_FAKE_SNI_SEQ_LEN:
+			num = parse_numeric_option(optarg);
+			if (errno != 0 || num < 0 || num > 255) {
+				goto invalid_opt;
+			}
 
-				break;
-			case OPT_FAKE_SNI_SEQ_LEN:
-				num = parse_numeric_option(optarg);
-				if (errno != 0 || num < 0 || num > 255) {
-					printf("Invalid option %s\n", long_opt[optIdx].name);
-					goto error;
-				}
+			config.fake_sni_seq_len = num;
+			break;
+		case OPT_FK_WINSIZE:
+			num = parse_numeric_option(optarg);
+			if (errno != 0 || num < 0) {
+				goto invalid_opt;
+			}
 
-				config.fake_sni_seq_len = num;
-				break;
-			case OPT_FK_WINSIZE:
-				num = parse_numeric_option(optarg);
-				if (errno != 0 || num < 0) {
-					printf("Invalid option %s\n", long_opt[optIdx].name);
-					goto error;
-				}
+			config.fk_winsize = num;
+			break;
+		case OPT_SEG2DELAY:
+			num = parse_numeric_option(optarg);
+			if (errno != 0 || num < 0) {
+				goto invalid_opt;
+			}
 
-				config.fk_winsize = num;
-				break;
-			case OPT_SEG2DELAY:
-				num = parse_numeric_option(optarg);
-				if (errno != 0 || num < 0) {
-					printf("Invalid option %s\n", long_opt[optIdx].name);
-					goto error;
-				}
+			config.seg2_delay = num;
+			break;
+		case OPT_THREADS:
+			num = parse_numeric_option(optarg);
+			if (errno != 0 || num < 0 || num > MAX_THREADS) {
+				goto invalid_opt;
+			}
 
-				config.seg2_delay = num;
-				break;
-			case OPT_THREADS:
-				num = parse_numeric_option(optarg);
-				if (errno != 0 || num < 0 || num > MAX_THREADS) {
-					printf("Invalid option %s\n", long_opt[optIdx].name);
-					goto error;
-				}
+			config.threads = num;
+			break;
+		case OPT_QUEUE_NUM:
+			num = parse_numeric_option(optarg);
+			if (errno != 0 || num < 0) {
+				goto invalid_opt;
+			}
 
-				config.threads = num;
-				break;
-			case OPT_QUEUE_NUM:
-				num = parse_numeric_option(optarg);
-				if (errno != 0 || num < 0) {
-					printf("Invalid option %s\n", long_opt[optIdx].name);
-					goto error;
-				}
-
-				config.queue_start_num = num;
-				break;
-			default:
-				goto error;
+			config.queue_start_num = num;
+			break;
+		default:
+			goto error;
 		}
 	}
 
-	
 
+// out:
 	errno = 0;
 	return 0;
-out:
+stop_exec:
 	errno = 0;
 	return 1;
+
+invalid_opt:
+	printf("Invalid option %s\n", long_opt[optIdx].name);
 error:
 	print_usage(argv[0]);
 	errno = EINVAL;
