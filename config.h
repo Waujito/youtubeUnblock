@@ -25,7 +25,11 @@ struct config_t {
 	unsigned char faking_ttl;
 	int fake_sni;
 	unsigned int fake_sni_seq_len;
+#define VERBOSE_INFO	0
+#define VERBOSE_DEBUG	1
+#define VERBOSE_TRACE	2
 	int verbose;
+	int quic_drop;
 	/* In milliseconds */
 	unsigned int seg2_delay;
 	const char *domains_str;

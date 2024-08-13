@@ -1,9 +1,6 @@
 #include "quic.h"
+#include "logging.h"
 
-static const uint32_t supported_versions[] = {
-	1,		// version 1, RFC 9000
-	0x6b3343cf,	// version 2, RFC 9369
-};
 
 /**
  * Packet number.
@@ -45,18 +42,24 @@ int quic_parse_data(uint8_t *raw_payload, uint32_t raw_payload_len,
 	struct quic_lhdr *nqch = (struct quic_lhdr *)raw_payload;
 	uint32_t left_len = raw_payload_len - sizeof(struct quic_lhdr);
 	uint8_t *cur_rawptr = raw_payload + sizeof(struct quic_lhdr);
-	if (!nqch->fixed)
+	if (!nqch->fixed) {
+		lgtrace_addp("quic fixed uset");
 		return -EPROTO;
+	}
 
 	uint8_t found = 0;
 	for (uint8_t i = 0; i < sizeof(supported_versions); i++) {
-		if (nqch->version == supported_versions[i]) {
+		if (ntohl(nqch->version) == supported_versions[i]) {
 			found = 1;
 		}
 	}
 
-	if (!found) 
+	if (!found) {
+		lgtrace_addp("quic version undefined %d", ntohl(nqch->version));
 		return -EPROTO;
+	}
+
+	lgtrace_addp("quic version valid %d", ntohl(nqch->version));
 
 	if (left_len < 2) goto invalid_packet;
 	struct quic_cids nqci = {0};
