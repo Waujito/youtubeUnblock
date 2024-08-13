@@ -36,15 +36,17 @@ struct config_t config = {
 #else
 	.verbose = false,
 #endif
-	.domains_str = defaul_snistr,
-	.domains_strlen = sizeof(defaul_snistr),
+	.all_domains = false,
+	.sni_file = "domains.txt",
+	.sni_targets = NULL,
 
 	.queue_start_num = DEFAULT_QUEUE_NUM,
 	.fake_sni_pkt = fake_sni,
 	.fake_sni_pkt_sz = sizeof(fake_sni) - 1, // - 1 for null-terminator
 };
 
-#define OPT_SNI_DOMAINS		1
+#define OPT_SNI_DOMAINS_ALL	1
+#define OPT_SNI_DOMAINS_FILE	15
 #define OPT_FAKE_SNI 		2
 #define OPT_FAKING_TTL		3
 #define OPT_FAKING_STRATEGY	10
@@ -64,7 +66,8 @@ struct config_t config = {
 static struct option long_opt[] = {
 	{"help",		0, 0, 'h'},
 	{"version",		0, 0, 'v'},
-	{"sni-domains",		1, 0, OPT_SNI_DOMAINS},
+	{"sni-domains-all",	1, 0, OPT_SNI_DOMAINS_ALL},
+	{"sni-domains-file",	1, 0, OPT_SNI_DOMAINS_FILE},
 	{"fake-sni",		1, 0, OPT_FAKE_SNI},
 	{"fake-sni-seq-len",	1, 0, OPT_FAKE_SNI_SEQ_LEN},
 	{"faking-strategy",	1, 0, OPT_FAKING_STRATEGY},
@@ -111,7 +114,8 @@ void print_usage(const char *argv0) {
 	printf("Usage: %s [ OPTIONS ] \n", argv0);
 	printf("Options:\n");
 	printf("\t--queue-num=<number of netfilter queue>\n");
-	printf("\t--sni-domains=<comma separated domain list>|all\n");
+	printf("\t--sni-domains-all={1|0}\n");
+	printf("\t--sni-domains-file=[filename]\n");
 	printf("\t--fake-sni={1|0}\n");
 	printf("\t--fake-sni-seq-len=<length>\n");
 	printf("\t--faking-ttl=<ttl>\n");
@@ -146,14 +150,11 @@ int parse_args(int argc, char *argv[]) {
 			case OPT_NO_GSO:
 				config.use_gso = 0;
 				break;
-			case OPT_SNI_DOMAINS:
-				if (!strcmp(optarg, "all")) {
-					config.all_domains = 1;
-				}
-
-				config.domains_str = optarg;
-				config.domains_strlen = strlen(config.domains_str);
-
+			case OPT_SNI_DOMAINS_ALL:
+				config.all_domains = 1;
+				break;
+			case OPT_SNI_DOMAINS_FILE:
+				config.sni_file = optarg;
 				break;
 			case OPT_FRAG:
 				if (strcmp(optarg, "tcp") == 0) {
@@ -345,4 +346,66 @@ void print_welcome() {
 	if (config.all_domains) {
 		printf("All Client Hello will be targetted by youtubeUnblock!\n");
 	}
+}
+
+int parse_sni_list () {
+	char buf[MAX_SNI_LEN];
+	char *p;
+	struct sni_target *t;
+	struct sni_target *cur;
+	char *sni_buf;
+  
+	if (config.all_domains) {
+		printf("Enabled for all SNI!\n");
+		return 0;
+	}
+
+	printf("Reading target SNI from file: %s\n", config.sni_file);
+
+	if (access(config.sni_file, F_OK) != 0) {
+		printf("parse_sni_list: Domains file does not exists: %s\n", config.sni_file);
+		return -1;
+	}
+
+	FILE *f;
+	f = fopen(config.sni_file, "r");
+	if (f == NULL) {
+		printf("parse_sni_list: Can't open file %s\n", config.sni_file);
+		return -2;
+	}
+
+	while ( fgets(buf, MAX_SNI_LEN, f) ) {
+		if ((p = strchr(buf, '\r')))
+			*p = 0;
+		if ((p = strchr(buf, '\n')))
+			*p = 0;
+		if (strlen(buf) < 1)
+			continue;
+		if (buf[0] == '#')
+			continue;
+		if (config.verbose)
+			printf("Adding domain to SNI targets: %s\n", buf);
+
+		/* dont be scared of malloc, and by the way we don't need to
+		 * free them at all because heap will be destroyed at program
+		 * exit and we have no live config reload functionality yet */
+		t = (struct sni_target *)malloc(sizeof(struct sni_target));
+		t->sni_len = strlen(buf);
+    
+		sni_buf = (char *)malloc(t->sni_len + 1);
+		strcpy(sni_buf, buf);
+		t->sni_str = sni_buf;
+
+		/* always insert to head */
+		t->next = config.sni_targets;
+		config.sni_targets = t;
+	}
+	fclose(f);
+
+	if (config.sni_targets == NULL) {
+		printf("parse_sni_list: Domains file have no domains\n");
+		return -3;
+	}
+  
+	return 0;
 }

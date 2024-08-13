@@ -732,29 +732,17 @@ struct tls_verdict analyze_tls_data(
 
 
 			unsigned int j = 0;
-			for (unsigned int i = 0; i <= config.domains_strlen; i++) {
-				if (	i > j &&
-					(i == config.domains_strlen	||	
-					config.domains_str[i] == '\0'	||
-					config.domains_str[i] == ','	|| 
-					config.domains_str[i] == '\n'	)) {
+			struct sni_target *cur = config.sni_targets;
+			while (cur != NULL) {
+				const char *sni_startp = sni_name + sni_len - domain_len;
 
-					unsigned int domain_len = (i - j);
-					const char *sni_startp = sni_name + sni_len - domain_len;
-					const char *domain_startp = config.domains_str + j;
-
-					if (sni_len >= domain_len &&
-						sni_len < 128 && 
-						!strncmp(sni_startp, 
-						domain_startp, 
-						domain_len)) {
-							vrd.target_sni = 1;
-					}
-
-					j = i + 1;
+				if (sni_len >= cur->sni_len &&
+				    sni_len < 128 && 
+				    !strncmp(sni_startp, cur->sni_str, cur->sni_len)) {
+					vrd.target_sni = 1;
 				}
+				cur = cur->next;
 			}
-
 nextExtension:
 			extensionsPtr += 2 + 2 + extensionLen;
 		}

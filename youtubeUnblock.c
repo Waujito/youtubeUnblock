@@ -459,6 +459,11 @@ int main(int argc, char *argv[]) {
 	print_version();
 	print_welcome();
 
+	if (parse_sni_list() < 0) {
+		perror("Unable to populate target SNI list");
+		exit(EXIT_FAILURE);
+	}
+	
 	if (open_raw_socket() < 0) {
 		perror("Unable to open raw socket");
 		exit(EXIT_FAILURE);

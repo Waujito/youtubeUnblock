@@ -14,6 +14,12 @@ struct instance_config_t {
 };
 extern struct instance_config_t instance_config;
 
+struct sni_target {
+	struct sni_target *next;
+	char *sni_str;
+	int sni_len;
+};
+
 struct config_t {
 	unsigned int queue_start_num;
 	int threads;
@@ -28,8 +34,8 @@ struct config_t {
 	int verbose;
 	/* In milliseconds */
 	unsigned int seg2_delay;
-	const char *domains_str;
-	unsigned int domains_strlen;
+	struct sni_target *sni_targets;
+	char *sni_file;
 	unsigned int all_domains;
 	const char *fake_sni_pkt;
 	unsigned int fake_sni_pkt_sz;
@@ -91,6 +97,6 @@ extern struct config_t config;
 
 #define MAX_PACKET_SIZE 8192
 
-static const char defaul_snistr[] = "googlevideo.com,ggpht.com,ytimg.com,youtube.com,play.google.com,youtu.be,googleapis.com,googleusercontent.com,gstatic.com,l.google.com";
+#define MAX_SNI_LEN 128
 
 #endif /* YTB_CONFIG_H */
