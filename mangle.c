@@ -734,11 +734,12 @@ struct tls_verdict analyze_tls_data(
 			unsigned int j = 0;
 			struct sni_target *cur = config.sni_targets;
 			while (cur != NULL) {
+				int domain_len = cur->sni_len;
 				const char *sni_startp = sni_name + sni_len - domain_len;
 
-				if (sni_len >= cur->sni_len &&
+				if (sni_len >= domain_len &&
 				    sni_len < 128 && 
-				    !strncmp(sni_startp, cur->sni_str, cur->sni_len)) {
+				    !strncmp(sni_startp, cur->sni_str, domain_len)) {
 					vrd.target_sni = 1;
 				}
 				cur = cur->next;
