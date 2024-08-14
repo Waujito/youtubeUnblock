@@ -1,6 +1,7 @@
 - [youtubeUnblock](#youtubeunblock)
   - [Configuration](#configuration)
     - [OpenWRT pre configuration](#openwrt-pre-configuration)
+    - [Entware](#entware)
     - [PC configuration](#pc-configuration)
     - [Firewall configuration](#firewall-configuration)
       - [nftables rules](#nftables-rules)
@@ -24,11 +25,9 @@ Bypasses Deep Packet Inspection (DPI) systems that relies on SNI. The package is
 
 The program was primarily developed to bypass YouTube Outage in Russia, but it works good with other websites blocked by SNI. Adjust the list of websites via `--sni-domains` flag for the program.
 
-The program offers binaries via [Github Actions](https://github.com/Waujito/youtubeUnblock/actions). You can find [packages for OpenWRT](https://github.com/Waujito/youtubeUnblock/actions/workflows/build-openwrt.yml). You can check the architecture of your device with command `grep ARCH /etc/openwrt_release`. Also [static binaries for PCs](https://github.com/Waujito/youtubeUnblock/actions/workflows/build-alpine.yml) are available. 
+The program is compatible with routers based on OpenWRT, Entware(Keenetic/ASUS) and host machines. The program offers binaries via [Github Actions](https://github.com/Waujito/youtubeUnblock/actions/workflows/build-ci.yml). If you haven't access to Github Actions, the program offers [development pre-release](https://github.com/Waujito/youtubeUnblock/releases/tag/continuous) which follows the latest commit in main branch with binaries included as assets. On OpenWRT you can check the architecture of your device with command `grep ARCH /etc/openwrt_release`.
 
-The program is also compatible with routers driven by [Entware](https://github.com/Entware/Entware) (Keenetic and some ASUS). You can find [binaries](https://github.com/Waujito/youtubeUnblock/actions/workflows/build-entware.yml) and [installation guide (russian)](https://help.keenetic.com/hc/ru/articles/360021214160-%D0%A3%D1%81%D1%82%D0%B0%D0%BD%D0%BE%D0%B2%D0%BA%D0%B0-%D1%81%D0%B8%D1%81%D1%82%D0%B5%D0%BC%D1%8B-%D0%BF%D0%B0%D0%BA%D0%B5%D1%82%D0%BE%D0%B2-%D1%80%D0%B5%D0%BF%D0%BE%D0%B7%D0%B8%D1%82%D0%BE%D1%80%D0%B8%D1%8F-Entware-%D0%BD%D0%B0-USB-%D0%BD%D0%B0%D0%BA%D0%BE%D0%BF%D0%B8%D1%82%D0%B5%D0%BB%D1%8C).
-
-Install the package with opkg. If you got read-only filesystem error you may unpack the binary manually or specify opkg path `opkg -o <destdir>`.
+On both OpenWRT and Entware install the program with opkg. If you got read-only filesystem error you may unpack the binary manually or specify opkg path `opkg -o <destdir>`.
 
 For Windows use [GoodbyeDPI from ValdikSS](https://github.com/ValdikSS/GoodbyeDPI) (you can find how to use it for YouTube [here](https://github.com/ValdikSS/GoodbyeDPI/issues/378)) The same behavior is also implemented in [zapret package for linux](https://github.com/bol-van/zapret).
 
@@ -63,7 +62,7 @@ kmod-nf-conntrack
 
 Next step is to add required firewall rules. 
 
-For nftables on OpenWRT rules comes out-of-the-box and stored under `/usr/share/nftables.d/ruleset-post/537-youtubeUnblock.nft`. All you need is install requirements and do `/etc/init.d/firewall reload`. If no, go to Firewall configuration.
+For nftables on OpenWRT rules comes out-of-the-box and stored under `/usr/share/nftables.d/ruleset-post/537-youtubeUnblock.nft`. All you need is install requirements and do `/etc/init.d/firewall reload`. If no, go to [Firewall configuration](#firewall-configuration).
 
 Now we are ready to demonize the application.
 
@@ -72,9 +71,18 @@ Elsewhere copy `owrt/youtubeUnblock.owrt` to `/etc/init.d/youtubeUnblock` and pu
 
 You can also run `/etc/init.d/youtubeUnblock enable` to force OpenWRT autostart on boot, but I don't recommend this since if the package has bugs you may lose access to the router (I think you will be able to reset it with reset settings tricks documented for your router). 
 
-### PC configuration
+### Entware
 
-On local host make sure to change **FORWARD** to **OUTPUT** chain in the Firewall rulesets.
+For Entware on Keenetic here is an [installation guide (russian)](https://help.keenetic.com/hc/ru/articles/360021214160-%D0%A3%D1%81%D1%82%D0%B0%D0%BD%D0%BE%D0%B2%D0%BA%D0%B0-%D1%81%D0%B8%D1%81%D1%82%D0%B5%D0%BC%D1%8B-%D0%BF%D0%B0%D0%BA%D0%B5%D1%82%D0%BE%D0%B2-%D1%80%D0%B5%D0%BF%D0%BE%D0%B7%D0%B8%D1%82%D0%BE%D1%80%D0%B8%D1%8F-Entware-%D0%BD%D0%B0-USB-%D0%BD%D0%B0%D0%BA%D0%BE%D0%BF%D0%B8%D1%82%D0%B5%D0%BB%D1%8C). Note that if your Entware router is missing netfilter queue kernel modules, here is no way to deal with it since Entware does not offer kernel modules. You should probably try to install OpenWRT if the problem persist. You can check required modules with command `find /lib/modules/$(uname -r) -type f -name 'nfnetlink_queue.ko*'`. If that command return not null string, everything alright. All you need is to load the modules.
+
+To check whether the modules are loaded, do `lsmod | grep nfnetlink_queue`. If the program return nothing, you should load them manually. 
+```sh
+insmod /lib/modules/3.3.8/kernel/net/netfilter/nfnetlink_queue.ko
+insmod /lib/modules/3.3.8/kernel/net/netfilter/xt_NFQUEUE.ko
+```
+
+### PC configuration
+On local host make sure to change **FORWARD** to **OUTPUT** chain in the following Firewall rulesets.
 
 Copy `youtubeUnblock.service` to `/usr/lib/systemd/system` (you should change the path inside the file to the program position, for example `/usr/bin/youtubeUnblock`, also you may want to delete default iptables rule addition in systemd file to controll it manually). And run `systemctl start youtubeUnblock`.
 
