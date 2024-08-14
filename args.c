@@ -32,10 +32,11 @@ struct config_t config = {
 #endif
 
 #ifdef DEBUG
-	.verbose = true,
+	.verbose = 1,
 #else
-	.verbose = false,
+	.verbose = 0,
 #endif
+
 	.domains_str = defaul_snistr,
 	.domains_strlen = sizeof(defaul_snistr),
 
@@ -53,13 +54,15 @@ struct config_t config = {
 #define OPT_FRAG_SNI_REVERSE	12
 #define OPT_FRAG_SNI_FAKED	13
 #define OPT_FK_WINSIZE		14
+#define OPT_TRACE		15
+#define OPT_QUIC_DROP		16
 #define OPT_SEG2DELAY 		5
 #define OPT_THREADS 		6
 #define OPT_SILENT 		7
 #define OPT_NO_GSO 		8
 #define OPT_QUEUE_NUM		9
 
-#define OPT_MAX OPT_FRAG_SNI_FAKED
+#define OPT_MAX OPT_QUIC_DROP
 
 static struct option long_opt[] = {
 	{"help",		0, 0, 'h'},
@@ -73,9 +76,11 @@ static struct option long_opt[] = {
 	{"frag-sni-reverse",	1, 0, OPT_FRAG_SNI_REVERSE},
 	{"frag-sni-faked",	1, 0, OPT_FRAG_SNI_FAKED},
 	{"fk-winsize",		1, 0, OPT_FK_WINSIZE},
+	{"quic-drop",		0, 0, OPT_QUIC_DROP},
 	{"seg2delay",		1, 0, OPT_SEG2DELAY},
 	{"threads",		1, 0, OPT_THREADS},
 	{"silent",		0, 0, OPT_SILENT},
+	{"trace",		0, 0, OPT_TRACE},
 	{"no-gso",		0, 0, OPT_NO_GSO},
 	{"queue-num",		1, 0, OPT_QUEUE_NUM},
 	{0,0,0,0}
@@ -120,9 +125,11 @@ void print_usage(const char *argv0) {
 	printf("\t--frag-sni-reverse={0|1}\n");
 	printf("\t--frag-sni-faked={0|1}\n");
 	printf("\t--fk-winsize=<winsize>\n");
+	printf("\t--quic-drop\n");
 	printf("\t--seg2delay=<delay>\n");
 	printf("\t--threads=<threads number>\n");
 	printf("\t--silent\n");
+	printf("\t--trace\n");
 	printf("\t--no-gso\n");
 	printf("\n");
 }
@@ -140,11 +147,17 @@ int parse_args(int argc, char *argv[]) {
 		case 'v':
 			print_version();
 			goto stop_exec;
+		case OPT_TRACE:
+			config.verbose = 2;
+			break;
 		case OPT_SILENT:
 			config.verbose = 0;
 			break;
 		case OPT_NO_GSO:
 			config.use_gso = 0;
+			break;
+		case OPT_QUIC_DROP:
+			config.quic_drop = 1;
 			break;
 		case OPT_SNI_DOMAINS:
 			if (!strcmp(optarg, "all")) {
@@ -329,7 +342,12 @@ void print_welcome() {
 		printf("GSO is enabled\n");
 	}
 
+	if (config.quic_drop) {
+		printf("All QUIC packets will be dropped\n");
+	}
+
 	if (config.all_domains) {
 		printf("All Client Hello will be targetted by youtubeUnblock!\n");
 	}
+
 }

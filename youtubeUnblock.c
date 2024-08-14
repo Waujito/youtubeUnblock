@@ -31,6 +31,7 @@
 #include "config.h"
 #include "mangle.h"
 #include "args.h"
+#include "utils.h"
 
 pthread_mutex_t rawsocket_lock;
 int rawsocket = -2;
