@@ -8,6 +8,7 @@
   - [Check it](#check-it)
   - [Flags](#flags)
   - [Troubleshooting](#troubleshooting)
+    - [TV](#tv)
     - [Troubleshooting EPERMS (Operation not permitted)](#troubleshooting-eperms-operation-not-permitted)
   - [How it works:](#how-it-works)
   - [How it processes packets](#how-it-processes-packets)
@@ -137,11 +138,15 @@ Available flags:
 
 - `--frag-sni-faked={0|1}` Specifies **youtubeUnblock** to send fake packets near *ClientHello* (fills payload with zeroes). Defaults to **0**.
 
+- `--quic-drop` Drop all QUIC packets which goes to youtubeUnblock. Won't affect any other UDP packets. Suitable for some TVs.
+
 - `--fk-winsize=<winsize>` Specifies window size for the fragmented TCP packet. Applicable if you want for response to be fragmented. May slowdown connection initialization.
 
 - `--seg2delay=<delay>` This flag forces **youtubeUnblock** to wait a little bit before send the 2nd part of the split packet.
 
 - `--silent` Disables verbose mode.
+
+- `--trace` Maximum verbosity for debugging purposes.
 
 - `--no-gso` Disables support for Google Chrome fat packets which uses GSO. This feature is well tested now, so this flag probably won't fix anything.
 
@@ -154,6 +159,22 @@ If you have troubles with some sites being proxied, you can play with flags valu
 If you are on Chromium you may have to disable *kyber* (the feature that makes the TLS *ClientHello* very big). I've got the problem with it on router, so to escape possible errors, so it is better to disable it: in `chrome://flags` search for kyber and switch it to disabled state. 
 
 If your browser is using QUIC it may not work properly. Disable it in Chrome in `chrome://flags` and in Firefox `network.http.http{2,3}.enable(d)` in `about:config` option.
+
+### TV
+
+Televisions are the biggest headache. Some users report that disabling QUIC + `--sni-domains=all` may work. To disable QUIC you may use `--quic-drop` [flag](#flags) with proper firewall configuration (check description of the flag). Note, that this flag won't disable gQUIC and some TVs may relay on it. To disable gQUIC you will need to block the entire 443 port for udp in firewall configuration:
+
+For **nftables** do
+```
+nft insert rule inet fw4 forward udp dport 443 counter drop
+```
+
+For **iptables**
+```
+iptables -I OUTPUT -p udp --dport 443 -j DROP
+```
+
+Note that these rules may **break the stability of internet** so use them carefully and **only if** --quic-drop doesn't work.
 
 ### Troubleshooting EPERMS (Operation not permitted)
 
