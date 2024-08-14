@@ -9,9 +9,7 @@ on:
       - '.gitignore'
       - 'LICENSE'
       - 'README.md'
-  pull_request:
-    branches:
-      - main
+  workflow_dispatch:
 
 jobs:
   prepare:
@@ -74,7 +72,7 @@ jobs:
         shell: alpine.sh {0}
         run: |
           case $ARCH in
-            x86_64)  PLATFORM=x64 ;;
+            x86_64)  PLATFORM=x86_64 ;;
             x86)     PLATFORM=x86 ;;
             aarch64) PLATFORM=arm64 ;;
             armhf)   PLATFORM=arm ;;
@@ -82,7 +80,12 @@ jobs:
           esac
           make -j$(nproc) CC="ccache gcc -static-libgcc -static" || exit 1
           strip -s build/youtubeUnblock
-          tar -C build -cJvf "youtubeUnblock-$VERSION-$SHA-$PLATFORM.tar.xz" youtubeUnblock
+          rm -rf youtubeUnblock || true
+          mkdir youtubeUnblock
+          cp build/youtubeUnblock youtubeUnblock
+          cp youtubeUnblock.service youtubeUnblock
+          cp README.md youtubeUnblock
+          tar -czvf youtubeUnblock-$VERSION-$SHA-$PLATFORM-static.tar.gz youtubeUnblock
           ccache --show-stats
 
       - name: Upload artifacts
@@ -90,7 +93,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: static-${{ matrix.arch }}
-          path: ./**/youtubeUnblock*.tar.xz
+          path: ./**/youtubeUnblock*.tar.gz
 
   build-openwrt:
     needs: prepare
@@ -144,6 +147,9 @@ jobs:
 
       - name: Build packages
         id: build
+        env:
+          VERSION: ${{ needs.prepare.outputs.version }}
+          SHA: ${{ needs.prepare.outputs.sha }}
         working-directory: /builder
         run: |
           echo "src-link youtubeUnblock $GITHUB_WORKSPACE" >> feeds.conf
@@ -152,13 +158,14 @@ jobs:
           ./scripts/feeds install -a -p youtubeUnblock
           make defconfig
           make package/youtubeUnblock/compile V=s
+          mv $(find ./bin -type f -name 'youtubeUnblock*.ipk') ./youtubeUnblock-$VERSION-$SHA-${{ matrix.arch }}-${{ matrix.branch }}.ipk
 
       - name: Upload packages
         if: steps.build.outcome == 'success'
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.branch }}-${{ matrix.arch }}
-          path: /builder/**/youtubeUnblock*.ipk
+          path: /builder/youtubeUnblock*.ipk
           if-no-files-found: error
 
   build-entware:
@@ -234,17 +241,23 @@ jobs:
       - name: Extract packages
         if: steps.build.outcome == 'success'
         shell: bash
+        env:
+          VERSION: ${{ needs.prepare.outputs.version }}
+          SHA: ${{ needs.prepare.outputs.sha }}
         run: |
           mkdir output
           docker run --rm --user root -i --mount source=entware-home,target=/home/me -v $(pwd):/target -w /home/me/Entware --name builder builder find ./bin -type f -name 'youtubeUnblock*.ipk' -exec cp -v {} /target/output \;
-          tar -C ./output -cvf youtubeUnblock-Entware-${{ matrix.arch }}.tar .
+          rm -rf youtubeUnblock || true
+          mkdir youtubeUnblock
+          bash -c "cp -r ./output/* youtubeUnblock"
+          tar -czvf youtubeUnblock-$VERSION-$SHA-${{ matrix.arch }}-entware.tar.gz youtubeUnblock
 
       - name: Upload packages
         if: steps.build.outcome == 'success'
         uses: actions/upload-artifact@v4
         with:
           name: entware-${{ matrix.arch }}
-          path: ./**/youtubeUnblock-Entware-*.tar
+          path: ./**/youtubeUnblock*-entware.tar.gz
           if-no-files-found: error
 
   pre-release:
@@ -266,5 +279,4 @@ jobs:
           title: 'Development build'
           files: |
             ./**/youtubeUnblock*.ipk
-            ./**/youtubeUnblock*.tar.xz
-            ./**/youtubeUnblock-Entware-*.tar
+            ./**/youtubeUnblock*.tar.gz
