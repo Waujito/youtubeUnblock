@@ -33,6 +33,7 @@ jobs:
           - arm_mpcore
           - armsr-armv8
           - armsr-armv7
+          - ipq807x-generic
           - mips64_octeonplus
           - mips_24kc
           - mips_4kec
