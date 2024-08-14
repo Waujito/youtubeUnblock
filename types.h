@@ -1,6 +1,7 @@
+#define _GNU_SOURCE
 #ifndef TYPES_H
 #define TYPES_H
-#include <bits/endian.h>
+#include <asm/byteorder.h>
 
 #ifdef KERNEL_SCOPE
 #include <linux/errno.h> // IWYU pragma: export
