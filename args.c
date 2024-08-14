@@ -19,6 +19,8 @@ struct config_t config = {
 	.fake_sni = 1,
 	.fake_sni_seq_len = 1,
 
+	.sni_detection = SNI_DETECTION_PARSE,
+
 #ifdef SEG2_DELAY
 	.seg2_delay = SEG2_DELAY,
 #else
@@ -56,6 +58,7 @@ struct config_t config = {
 #define OPT_FK_WINSIZE		14
 #define OPT_TRACE		15
 #define OPT_QUIC_DROP		16
+#define OPT_SNI_DETECTION	17
 #define OPT_SEG2DELAY 		5
 #define OPT_THREADS 		6
 #define OPT_SILENT 		7
@@ -77,6 +80,7 @@ static struct option long_opt[] = {
 	{"frag-sni-faked",	1, 0, OPT_FRAG_SNI_FAKED},
 	{"fk-winsize",		1, 0, OPT_FK_WINSIZE},
 	{"quic-drop",		0, 0, OPT_QUIC_DROP},
+	{"sni-detection",	1, 0, OPT_SNI_DETECTION},
 	{"seg2delay",		1, 0, OPT_SEG2DELAY},
 	{"threads",		1, 0, OPT_THREADS},
 	{"silent",		0, 0, OPT_SILENT},
@@ -126,6 +130,7 @@ void print_usage(const char *argv0) {
 	printf("\t--frag-sni-faked={0|1}\n");
 	printf("\t--fk-winsize=<winsize>\n");
 	printf("\t--quic-drop\n");
+	printf("\t--sni-detection={parse|brute}\n");
 	printf("\t--seg2delay=<delay>\n");
 	printf("\t--threads=<threads number>\n");
 	printf("\t--silent\n");
@@ -166,6 +171,16 @@ int parse_args(int argc, char *argv[]) {
 
 			config.domains_str = optarg;
 			config.domains_strlen = strlen(config.domains_str);
+			break;
+		case OPT_SNI_DETECTION:
+			if (strcmp(optarg, "parse") == 0) {
+				config.sni_detection = SNI_DETECTION_PARSE;
+			} else if (strcmp(optarg, "brute") == 0) {
+				config.sni_detection = SNI_DETECTION_BRUTE;
+			} else {
+				goto invalid_opt;
+			}
+
 			break;
 		case OPT_FRAG:
 			if (strcmp(optarg, "tcp") == 0) {
@@ -344,6 +359,10 @@ void print_welcome() {
 
 	if (config.quic_drop) {
 		printf("All QUIC packets will be dropped\n");
+	}
+
+	if (config.sni_detection == SNI_DETECTION_BRUTE) {
+		printf("Server Name Extension will be parsed in the bruteforce mode\n");
 	}
 
 	if (config.all_domains) {

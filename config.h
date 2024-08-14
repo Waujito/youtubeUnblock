@@ -30,6 +30,9 @@ struct config_t {
 #define VERBOSE_TRACE	2
 	int verbose;
 	int quic_drop;
+#define SNI_DETECTION_PARSE 0
+#define SNI_DETECTION_BRUTE 1
+	int sni_detection;
 	/* In milliseconds */
 	unsigned int seg2_delay;
 	const char *domains_str;
@@ -89,7 +92,7 @@ extern struct config_t config;
 
 // The Maximum Transmission Unit size for rawsocket
 // Larger packets will be fragmented. Applicable for Chrome's kyber.
-#define AVAILABLE_MTU 1384
+#define AVAILABLE_MTU 1500
 
 #define DEFAULT_QUEUE_NUM 537
 

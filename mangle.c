@@ -428,7 +428,25 @@ int post_fake_sni(const struct iphdr *iph, unsigned int iph_len,
 	return 0;
 }
 
+void z_function(const char *str, int *zbuf, size_t len) {
+	zbuf[0] = len;
 
+	ssize_t lh = 0, rh = 1;
+	for (ssize_t i = 1; i < len; i++) {
+		zbuf[i] = 0;
+		if (i < rh) {
+			zbuf[i] = min(zbuf[i - lh], rh - i);
+		}
+
+		while (i + zbuf[i] < len && str[zbuf[i]] == str[i + zbuf[i]])
+			zbuf[i]++;
+
+		if (i + zbuf[i] > rh) {
+			lh = i;
+			rh = i + zbuf[i];
+		}
+	}
+}
 
 #define TLS_CONTENT_TYPE_HANDSHAKE 0x16
 #define TLS_HANDSHAKE_TYPE_CLIENT_HELLO 0x01
@@ -463,12 +481,16 @@ struct tls_verdict analyze_tls_data(
 		uint16_t message_length = ntohs(*(uint16_t *)(msgData + 3));
 		const uint8_t *message_length_ptr = msgData + 3;
 
+		if (tls_vmajor != 0x03) goto nextMessage;
 
-		if (i + 5 + message_length > dlen) break;
+		if (i + 5 > dlen) break;
 
 		if (tls_content_type != TLS_CONTENT_TYPE_HANDSHAKE) 
 			goto nextMessage;
 
+		if (config.sni_detection == SNI_DETECTION_BRUTE) {
+			goto brute;
+		}
 
 		const uint8_t *handshakeProto = msgData + 5;
 
@@ -506,7 +528,7 @@ struct tls_verdict analyze_tls_data(
 
 		const uint8_t *extensionsPtr = msgPtr;
 		const uint8_t *extensions_end = extensionsPtr + extensionsLen;
-		if (extensions_end > data_end) break;
+		if (extensions_end > data_end) extensions_end = data_end;
 
 		while (extensionsPtr < extensions_end) {
 			const uint8_t *extensionPtr = extensionsPtr;
@@ -590,7 +612,53 @@ nextMessage:
 
 out:
 	return vrd;
+
+brute:
+	if (config.all_domains) {
+		vrd.target_sni = 1;
+		vrd.sni_len = 0;
+		vrd.sni_offset = dlen / 2;
+		goto out;
+	}
+
+	unsigned int j = 0;
+	for (unsigned int i = 0; i <= config.domains_strlen; i++) {
+		if (	i > j &&
+			(i == config.domains_strlen	||	
+			config.domains_str[i] == '\0'	||
+			config.domains_str[i] == ','	|| 
+			config.domains_str[i] == '\n'	)) {
+
+			uint8_t buf[MAX_PACKET_SIZE]; 
+			int zbuf[MAX_PACKET_SIZE]; 
+			unsigned int domain_len = (i - j);
+			const char *domain_startp = config.domains_str + j;
+
+			if (domain_len + dlen + 1> MAX_PACKET_SIZE) continue;
+
+			memcpy(buf, domain_startp, domain_len);
+			memcpy(buf + domain_len, "#", 1);
+			memcpy(buf + domain_len + 1, data, dlen);
+
+			z_function((char *)buf, zbuf, domain_len + 1 + dlen);
+
+			for (unsigned int k = 0; k < dlen; k++) {
+				if (zbuf[k] == domain_len) {
+					vrd.target_sni = 1;
+					vrd.sni_len = domain_len;
+					vrd.sni_offset = (k - domain_len - 1);
+					goto out;
+				}
+			}
+
+
+			j = i + 1;
+		}
+	}
+
+	goto out;
 }
+
 
 int gen_fake_sni(const struct iphdr *iph, const struct tcphdr *tcph, 
 		 uint8_t *buf, uint32_t *buflen) {
