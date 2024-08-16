@@ -136,7 +136,11 @@ Available flags:
 
 - `--fake-sni-seq-len=<length>` This flag specifies **youtubeUnblock** to build a complicated construction of fake client hello packets. length determines how much fakes will be sent. Defaults to **1**.
 
-- `--faking-strategy={ack,ttl}` This flag determines the strategy of fake packets invalidation. `ack` specifies that random sequence/acknowledgemend random will be set. These options may be handled by provider which uses *conntrack* with drop on invalid *conntrack* state firewall rule enabled. `ttl` specifies that packet will be invalidated after `--faking-ttl=n` hops. `ttl` is better but may cause issues if unconfigured. Defaults to `ack`
+- `--faking-strategy={randseq|ttl|tcp_check|pastseq}` This flag determines the strategy of fake packets invalidation. Defaults to `randseq`
+  - `randseq` specifies that random sequence/acknowledgemend random will be set. This option may be handled by provider which uses *conntrack* with drop on invalid *conntrack* state firewall rule enabled. 
+  - `ttl` specifies that packet will be invalidated after `--faking-ttl=n` hops. `ttl` is better but may cause issues if unconfigured. 
+  - `pastseq` is like `randseq` but sequence number is not random but references the packet sent in the past (before current).
+  - `tcp_check` will invalidate faking packet with invalid checksum. May be handled and dropped by some providers/TSPUs.
 
 - `--faking-ttl=<ttl>` Tunes the time to live (TTL) of fake SNI messages. TTL is specified like that the packet will go through the DPI system and captured by it, but will not reach the destination server. Defaults to **8**.
 
@@ -146,7 +150,7 @@ Available flags:
 
 - `--frag-sni-faked={0|1}` Specifies **youtubeUnblock** to send fake packets near *ClientHello* (fills payload with zeroes). Defaults to **0**.
 
-- `--quic-drop` Drop all QUIC packets which goes to youtubeUnblock. Won't affect any other UDP packets. Suitable for some TVs.
+- `--quic-drop` Drop all QUIC packets which goes to youtubeUnblock. Won't affect any other UDP packets. Suitable for some TVs. Note, that for this option to work you should also add proxy udp to youtubeUnblock in firewall. `connbytes` may also be used with udp.
 
 - `--fk-winsize=<winsize>` Specifies window size for the fragmented TCP packet. Applicable if you want for response to be fragmented. May slowdown connection initialization.
 
@@ -172,19 +176,23 @@ If your browser is using QUIC it may not work properly. Disable it in Chrome in 
 
 ### TV
 
-Televisions are the biggest headache. Some users report that disabling QUIC + `--sni-domains=all` may work. To disable QUIC you may use `--quic-drop` [flag](#flags) with proper firewall configuration (check description of the flag). Note, that this flag won't disable gQUIC and some TVs may relay on it. To disable gQUIC you will need to block the entire 443 port for udp in firewall configuration:
+Televisions are the biggest headache. 
+
+In [this issue](https://github.com/Waujito/youtubeUnblock/issues/59) the problem has been resolved. 
+
+If you have troubles with televisions try `--faking-strategy=ttl` flag and play around with `--faking-ttl=n`. See [#flags](#flags) for more details. Also you might be have to disable QUIC. To do it you may use `--quic-drop` [flag](#flags) with proper firewall configuration (check description of the flag). Note, that this flag won't disable gQUIC and some TVs may relay on it. To disable gQUIC you will need to block the entire 443 port for udp in firewall configuration:
 
 For **nftables** do
 ```
-nft insert rule inet fw4 forward udp dport 443 counter drop
+nft insert rule inet fw4 forward ip saddr 192.168.. udp dport 443 counter drop
 ```
 
 For **iptables**
 ```
-iptables -I OUTPUT -p udp --dport 443 -j DROP
+iptables -I OUTPUT --src 192.168.. -p udp --dport 443 -j DROP
 ```
 
-Note that these rules may **break the stability of internet** so use them carefully and **only if** --quic-drop doesn't work.
+Where you have to replace 192.168.. with ip of your television.
 
 ### Troubleshooting EPERMS (Operation not permitted)
 

@@ -710,7 +710,7 @@ int fail4_packet(uint8_t *payload, uint32_t plen) {
 		return ret;
 	}
 
-	if (config.faking_strategy == FAKE_STRAT_ACK_SEQ) {
+	if (config.faking_strategy == FAKE_STRAT_RAND_SEQ) {
 #ifdef KERNEL_SCOPE
 		tcph->seq = 124;
 		tcph->ack_seq = 124;
@@ -718,12 +718,18 @@ int fail4_packet(uint8_t *payload, uint32_t plen) {
 		tcph->seq = random();
 		tcph->ack_seq = random();
 #endif
+	} else if (config.faking_strategy == FAKE_STRAT_PAST_SEQ) {
+		tcph->seq = htonl(ntohl(tcph->seq) - dlen);
 	} else if (config.faking_strategy == FAKE_STRAT_TTL) {
 		iph->ttl = config.faking_ttl;
 	}
 
 	ip4_set_checksum(iph);
 	tcp4_set_checksum(tcph, iph);
+
+	if (config.faking_strategy == FAKE_STRAT_TCP_CHECK) {
+		tcph->check += 1;
+	}
 
 	return 0;
 }

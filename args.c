@@ -124,7 +124,7 @@ void print_usage(const char *argv0) {
 	printf("\t--fake-sni={1|0}\n");
 	printf("\t--fake-sni-seq-len=<length>\n");
 	printf("\t--faking-ttl=<ttl>\n");
-	printf("\t--faking-strategy={ack,ttl}\n");
+	printf("\t--faking-strategy={randseq|ttl|tcp_check|pastseq}\n");
 	printf("\t--frag={tcp,ip,none}\n");
 	printf("\t--frag-sni-reverse={0|1}\n");
 	printf("\t--frag-sni-faked={0|1}\n");
@@ -215,10 +215,14 @@ int parse_args(int argc, char *argv[]) {
 
 			break;
 		case OPT_FAKING_STRATEGY:
-			if (strcmp(optarg, "ack") == 0) {
-				config.faking_strategy = FAKE_STRAT_ACK_SEQ;
+			if (strcmp(optarg, "randseq") == 0) {
+				config.faking_strategy = FAKE_STRAT_RAND_SEQ;
 			} else if (strcmp(optarg, "ttl") == 0) {
 				config.faking_strategy = FAKE_STRAT_TTL;
+			} else if (strcmp(optarg, "tcp_check") == 0) {
+				config.faking_strategy = FAKE_STRAT_TCP_CHECK;
+			} else if (strcmp(optarg, "pastseq") == 0) {
+				config.faking_strategy = FAKE_STRAT_PAST_SEQ;
 			} else {
 				goto invalid_opt;
 			}
@@ -343,8 +347,14 @@ void print_welcome() {
 		case FAKE_STRAT_TTL:
 			printf("TTL faking strategy will be used with TTL %d\n", config.faking_ttl);
 			break;
-		case FAKE_STRAT_ACK_SEQ:
-			printf("Ack-Seq faking strategy will be used\n");
+		case FAKE_STRAT_RAND_SEQ:
+			printf("Random seq faking strategy will be used\n");
+			break;
+		case FAKE_STRAT_TCP_CHECK:
+			printf("TCP checksum faking strategy will be used\n");
+			break;
+		case FAKE_STRAT_PAST_SEQ:
+			printf("Past seq faking strategy will be used\n");
 			break;
 	}
 

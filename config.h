@@ -76,14 +76,16 @@ extern struct config_t config;
 #define FAKE_TTL 8
 
 // Will invalidate fake packets by out-of-ack_seq out-of-seq request
-#define FAKE_STRAT_ACK_SEQ 1
+#define FAKE_STRAT_RAND_SEQ	1
 // Will assume that GGC server is located further than FAKE_TTL
 // Thus, Fake packet will be eliminated automatically.
-#define FAKE_STRAT_TTL 2
+#define FAKE_STRAT_TTL		2
+#define FAKE_STRAT_PAST_SEQ	3
+#define FAKE_STRAT_TCP_CHECK	4
 
 
 #ifndef FAKING_STRATEGY
-#define FAKING_STRATEGY FAKE_STRAT_ACK_SEQ
+#define FAKING_STRATEGY FAKE_STRAT_RAND_SEQ
 #endif
 
 #if !defined(SILENT) && !defined(KERNEL_SPACE)
