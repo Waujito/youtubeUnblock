@@ -4,6 +4,7 @@ USE_PROCD=1
 START=50
 STOP=50
 
+
 # Openwrt procd script: https://openwrt.org/docs/guide-developer/procd-init-script-example
 # The program should be put into /usr/bin/
 # This file should be put into /etc/init.d/
