@@ -106,9 +106,24 @@ int process_tcp4_packet(const uint8_t *raw_payload, uint32_t raw_payload_len) {
 				ipd_offset = vrd.sni_offset;
 				mid_offset = ipd_offset + vrd.sni_len / 2;
 
-				uint32_t poses[] = { 2, mid_offset };
+				uint32_t poses[2];
+				int cnt = 0;
 
-				ret = send_tcp4_frags(payload, payload_len, poses, 2, 0);
+				if (config.frag_sni_pos && dlen > config.frag_sni_pos) {
+					poses[cnt++] = config.frag_sni_pos;
+				}
+
+				if (config.frag_middle_sni) {
+					poses[cnt++] = mid_offset;
+				}
+
+				if (cnt > 1 && poses[0] > poses[1]) {
+					uint32_t tmp = poses[0];
+					poses[0] = poses[1];
+					poses[1] = tmp;
+				}
+
+				ret = send_tcp4_frags(payload, payload_len, poses, cnt, 0);
 				if (ret < 0) {
 					lgerror("tcp4 send frags", ret);
 					goto accept;
@@ -122,8 +137,26 @@ int process_tcp4_packet(const uint8_t *raw_payload, uint32_t raw_payload_len) {
 				mid_offset = ipd_offset + vrd.sni_len / 2;
 				mid_offset += 8 - mid_offset % 8;
 
-				uint32_t poses[] = { mid_offset };
-				ret = send_ip4_frags(payload, payload_len, poses, 1, 0);
+				uint32_t poses[2];
+				int cnt = 0;
+
+				if (config.frag_sni_pos && dlen > config.frag_sni_pos) {
+					poses[cnt] = config.frag_sni_pos + ((char *)data - (char *)tcph);
+					poses[cnt] += 8 - poses[cnt] % 8;
+					cnt++;
+				}
+
+				if (config.frag_middle_sni) {
+					poses[cnt++] = mid_offset;
+				}
+
+				if (cnt > 1 && poses[0] > poses[1]) {
+					uint32_t tmp = poses[0];
+					poses[0] = poses[1];
+					poses[1] = tmp;
+				}
+
+				ret = send_ip4_frags(payload, payload_len, poses, cnt, 0);
 				if (ret < 0) {
 					lgerror("ip4 send frags", ret);
 					goto accept;

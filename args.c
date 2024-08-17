@@ -18,6 +18,8 @@ struct config_t config = {
 	.faking_ttl = FAKE_TTL,
 	.fake_sni = 1,
 	.fake_sni_seq_len = 1,
+	.frag_middle_sni = 1,
+	.frag_sni_pos = 2,
 
 	.sni_detection = SNI_DETECTION_PARSE,
 
@@ -43,8 +45,8 @@ struct config_t config = {
 	.domains_strlen = sizeof(defaul_snistr),
 
 	.queue_start_num = DEFAULT_QUEUE_NUM,
-	.fake_sni_pkt = fake_sni,
-	.fake_sni_pkt_sz = sizeof(fake_sni) - 1, // - 1 for null-terminator
+	.fake_sni_pkt = fake_sni_old,
+	.fake_sni_pkt_sz = sizeof(fake_sni_old) - 1, // - 1 for null-terminator
 };
 
 #define OPT_SNI_DOMAINS		1
@@ -55,6 +57,8 @@ struct config_t config = {
 #define OPT_FRAG    		4
 #define OPT_FRAG_SNI_REVERSE	12
 #define OPT_FRAG_SNI_FAKED	13
+#define OPT_FRAG_MIDDLE_SNI	18
+#define OPT_FRAG_SNI_POS	19
 #define OPT_FK_WINSIZE		14
 #define OPT_TRACE		15
 #define OPT_QUIC_DROP		16
@@ -65,7 +69,7 @@ struct config_t config = {
 #define OPT_NO_GSO 		8
 #define OPT_QUEUE_NUM		9
 
-#define OPT_MAX OPT_QUIC_DROP
+#define OPT_MAX OPT_FRAG_SNI_POS
 
 static struct option long_opt[] = {
 	{"help",		0, 0, 'h'},
@@ -78,6 +82,8 @@ static struct option long_opt[] = {
 	{"frag",		1, 0, OPT_FRAG},
 	{"frag-sni-reverse",	1, 0, OPT_FRAG_SNI_REVERSE},
 	{"frag-sni-faked",	1, 0, OPT_FRAG_SNI_FAKED},
+	{"frag-middle-sni",	1, 0, OPT_FRAG_MIDDLE_SNI},
+	{"frag-sni-pos",	1, 0, OPT_FRAG_SNI_POS},
 	{"fk-winsize",		1, 0, OPT_FK_WINSIZE},
 	{"quic-drop",		0, 0, OPT_QUIC_DROP},
 	{"sni-detection",	1, 0, OPT_SNI_DETECTION},
@@ -128,6 +134,8 @@ void print_usage(const char *argv0) {
 	printf("\t--frag={tcp,ip,none}\n");
 	printf("\t--frag-sni-reverse={0|1}\n");
 	printf("\t--frag-sni-faked={0|1}\n");
+	printf("\t--frag-middle-sni={0|1}\n");
+	printf("\t--frag-sni-pos=<pos>\n");
 	printf("\t--fk-winsize=<winsize>\n");
 	printf("\t--quic-drop\n");
 	printf("\t--sni-detection={parse|brute}\n");
@@ -213,6 +221,24 @@ int parse_args(int argc, char *argv[]) {
 				goto invalid_opt;
 			}
 
+			break;
+		case OPT_FRAG_MIDDLE_SNI:
+			if (strcmp(optarg, "1") == 0) {
+				config.frag_middle_sni = 1;
+			} else if (strcmp(optarg, "0") == 0) {
+				config.frag_middle_sni = 0;
+			} else {
+				goto invalid_opt;
+			}
+
+			break;
+		case OPT_FRAG_SNI_POS:
+			num = parse_numeric_option(optarg);
+			if (errno != 0 || num < 0) {
+				goto invalid_opt;
+			}
+
+			config.frag_sni_pos = num;
 			break;
 		case OPT_FAKING_STRATEGY:
 			if (strcmp(optarg, "randseq") == 0) {

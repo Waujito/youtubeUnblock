@@ -22,6 +22,8 @@ struct config_t {
 	int frag_sni_reverse;
 	int frag_sni_faked;
 	int faking_strategy;
+	int frag_middle_sni;
+	int frag_sni_pos;
 	unsigned char faking_ttl;
 	int fake_sni;
 	unsigned int fake_sni_seq_len;
