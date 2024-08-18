@@ -9,6 +9,11 @@ $(KMAKE_TARGETS):
 	@$(MAKE) -f kmake.mk $@
 
 clean:
-	-@$(MAKE) -f kmake.mk kclean
-	@$(MAKE) -f uspace.mk clean
+	-@$(MAKE) -f uspace.mk clean
 
+distclean: clean
+	-@$(MAKE) -f uspace.mk distclean
+
+
+kclean:
+	-@$(MAKE) -f kmake.mk kclean

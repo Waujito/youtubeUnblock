@@ -25,10 +25,10 @@ APP:=$(BUILD_DIR)/youtubeUnblock
 SRCS := youtubeUnblock.c mangle.c args.c utils.c quic.c
 OBJS := $(SRCS:%.c=$(BUILD_DIR)/%.o)
 
-LIBNFNETLINK := $(DEPSDIR)/lib/libnfnetlink.a
-LIBMNL := $(DEPSDIR)/lib/libmnl.a
-LIBNETFILTER_QUEUE := $(DEPSDIR)/lib/libnetfilter_queue.a
-
+LIBNFNETLINK := $(DEPSDIR)/lib/libnfnetlink.la
+LIBMNL := $(DEPSDIR)/lib/libmnl.la
+LIBNETFILTER_QUEUE := $(DEPSDIR)/lib/libnetfilter_queue.la
+#LIBCRYPTO := $(DEPSDIR)/lib64/libcrypto.a
 
 .PHONY: default all dev dev_attrs prepare_dirs
 default: all
@@ -47,6 +47,11 @@ prepare_dirs:
 	mkdir -p $(BUILD_DIR)
 	mkdir -p $(DEPSDIR)
 
+$(LIBCRYPTO):
+	cd deps/openssl && ./Configure --prefix=$(DEPSDIR) $(if $(CROSS_COMPILE_PLATFORM),--cross-compile-prefix=$(CROSS_COMPILE_PLATFORM)-,) --no-shared
+	$(MAKE) -C deps/openssl
+	$(MAKE) install_sw -C deps/openssl
+
 $(LIBNFNETLINK):
 	cd deps/libnfnetlink && ./autogen.sh && ./configure --prefix=$(DEPSDIR) $(if $(CROSS_COMPILE_PLATFORM),--host=$(CROSS_COMPILE_PLATFORM),) --enable-static --disable-shared
 	$(MAKE) -C deps/libnfnetlink
@@ -57,16 +62,16 @@ $(LIBMNL):
 	$(MAKE) -C deps/libmnl
 	$(MAKE) install -C deps/libmnl
 
-$(LIBNETFILTER_QUEUE): $(LIBNFNETLINK) $(LIBMNL)
+$(LIBNETFILTER_QUEUE): $(LIBNFNETLINK) $(LIBMNL) 
 	cd deps/libnetfilter_queue && ./autogen.sh && ./configure --prefix=$(DEPSDIR) $(if $(CROSS_COMPILE_PLATFORM),--host=$(CROSS_COMPILE_PLATFORM),) --enable-static --disable-shared
 	$(MAKE) -C deps/libnetfilter_queue
 	$(MAKE) install -C deps/libnetfilter_queue
 
-$(APP): $(OBJS) $(LIBNETFILTER_QUEUE) $(LIBMNL)
+$(APP): $(OBJS) $(LIBNETFILTER_QUEUE) $(LIBMNL) $(LIBCRYPTO)
 	@echo 'CCLD $(APP)'
 	$(CCLD) $(OBJS) -o $(APP) $(LDFLAGS) -lmnl -lnetfilter_queue -lpthread
 
-$(BUILD_DIR)/%.o: %.c $(LIBNETFILTER_QUEUE) $(LIBMNL) config.h
+$(BUILD_DIR)/%.o: %.c $(LIBNETFILTER_QUEUE) $(LIBMNL) $(LIBCRYPTO) config.h
 	@echo 'CC $@'
 	$(CC) -c $(CFLAGS) $(LDFLAGS) $< -o $@
 
@@ -84,8 +89,12 @@ uninstall:
 	-systemctl disable youtubeUnblock.service
 
 clean:
+	find $(BUILD_DIR) -maxdepth 1 -type f | xargs rm -rf
+
+distclean: clean
 	rm -rf $(BUILD_DIR)
 	$(MAKE) distclean -C deps/libnetfilter_queue || true
 	$(MAKE) distclean -C deps/libmnl || true
 	$(MAKE) distclean -C deps/libnfnetlink || true
+	#$(MAKE) distclean -C deps/openssl || true
 
