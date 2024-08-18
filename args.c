@@ -18,6 +18,10 @@ struct config_t config = {
 	.faking_ttl = FAKE_TTL,
 	.fake_sni = 1,
 	.fake_sni_seq_len = 1,
+	.frag_middle_sni = 1,
+	.frag_sni_pos = 2,
+
+	.sni_detection = SNI_DETECTION_PARSE,
 
 #ifdef SEG2_DELAY
 	.seg2_delay = SEG2_DELAY,
@@ -32,16 +36,17 @@ struct config_t config = {
 #endif
 
 #ifdef DEBUG
-	.verbose = true,
+	.verbose = 1,
 #else
-	.verbose = false,
+	.verbose = 0,
 #endif
+
 	.domains_str = defaul_snistr,
 	.domains_strlen = sizeof(defaul_snistr),
 
 	.queue_start_num = DEFAULT_QUEUE_NUM,
-	.fake_sni_pkt = fake_sni,
-	.fake_sni_pkt_sz = sizeof(fake_sni) - 1, // - 1 for null-terminator
+	.fake_sni_pkt = fake_sni_old,
+	.fake_sni_pkt_sz = sizeof(fake_sni_old) - 1, // - 1 for null-terminator
 };
 
 #define OPT_SNI_DOMAINS		1
@@ -52,14 +57,19 @@ struct config_t config = {
 #define OPT_FRAG    		4
 #define OPT_FRAG_SNI_REVERSE	12
 #define OPT_FRAG_SNI_FAKED	13
+#define OPT_FRAG_MIDDLE_SNI	18
+#define OPT_FRAG_SNI_POS	19
 #define OPT_FK_WINSIZE		14
+#define OPT_TRACE		15
+#define OPT_QUIC_DROP		16
+#define OPT_SNI_DETECTION	17
 #define OPT_SEG2DELAY 		5
 #define OPT_THREADS 		6
 #define OPT_SILENT 		7
 #define OPT_NO_GSO 		8
 #define OPT_QUEUE_NUM		9
 
-#define OPT_MAX OPT_FRAG_SNI_FAKED
+#define OPT_MAX OPT_FRAG_SNI_POS
 
 static struct option long_opt[] = {
 	{"help",		0, 0, 'h'},
@@ -72,10 +82,15 @@ static struct option long_opt[] = {
 	{"frag",		1, 0, OPT_FRAG},
 	{"frag-sni-reverse",	1, 0, OPT_FRAG_SNI_REVERSE},
 	{"frag-sni-faked",	1, 0, OPT_FRAG_SNI_FAKED},
+	{"frag-middle-sni",	1, 0, OPT_FRAG_MIDDLE_SNI},
+	{"frag-sni-pos",	1, 0, OPT_FRAG_SNI_POS},
 	{"fk-winsize",		1, 0, OPT_FK_WINSIZE},
+	{"quic-drop",		0, 0, OPT_QUIC_DROP},
+	{"sni-detection",	1, 0, OPT_SNI_DETECTION},
 	{"seg2delay",		1, 0, OPT_SEG2DELAY},
 	{"threads",		1, 0, OPT_THREADS},
 	{"silent",		0, 0, OPT_SILENT},
+	{"trace",		0, 0, OPT_TRACE},
 	{"no-gso",		0, 0, OPT_NO_GSO},
 	{"queue-num",		1, 0, OPT_QUEUE_NUM},
 	{0,0,0,0}
@@ -115,14 +130,19 @@ void print_usage(const char *argv0) {
 	printf("\t--fake-sni={1|0}\n");
 	printf("\t--fake-sni-seq-len=<length>\n");
 	printf("\t--faking-ttl=<ttl>\n");
-	printf("\t--faking-strategy={ack,ttl}\n");
+	printf("\t--faking-strategy={randseq|ttl|tcp_check|pastseq}\n");
 	printf("\t--frag={tcp,ip,none}\n");
 	printf("\t--frag-sni-reverse={0|1}\n");
 	printf("\t--frag-sni-faked={0|1}\n");
+	printf("\t--frag-middle-sni={0|1}\n");
+	printf("\t--frag-sni-pos=<pos>\n");
 	printf("\t--fk-winsize=<winsize>\n");
+	printf("\t--quic-drop\n");
+	printf("\t--sni-detection={parse|brute}\n");
 	printf("\t--seg2delay=<delay>\n");
 	printf("\t--threads=<threads number>\n");
 	printf("\t--silent\n");
+	printf("\t--trace\n");
 	printf("\t--no-gso\n");
 	printf("\n");
 }
@@ -134,155 +154,180 @@ int parse_args(int argc, char *argv[]) {
 
 	while ((opt = getopt_long(argc, argv, "hv", long_opt, &optIdx)) != -1) {
 		switch (opt) {
-			case 'h':
-				print_usage(argv[0]);
-				goto out;
-			case 'v':
-				print_version();
-				goto out;
-			case OPT_SILENT:
-				config.verbose = 0;
-				break;
-			case OPT_NO_GSO:
-				config.use_gso = 0;
-				break;
-			case OPT_SNI_DOMAINS:
-				if (!strcmp(optarg, "all")) {
-					config.all_domains = 1;
-				}
+		case 'h':
+			print_usage(argv[0]);
+			goto stop_exec;
+		case 'v':
+			print_version();
+			goto stop_exec;
+		case OPT_TRACE:
+			config.verbose = 2;
+			break;
+		case OPT_SILENT:
+			config.verbose = 0;
+			break;
+		case OPT_NO_GSO:
+			config.use_gso = 0;
+			break;
+		case OPT_QUIC_DROP:
+			config.quic_drop = 1;
+			break;
+		case OPT_SNI_DOMAINS:
+			if (!strcmp(optarg, "all")) {
+				config.all_domains = 1;
+			}
 
-				config.domains_str = optarg;
-				config.domains_strlen = strlen(config.domains_str);
+			config.domains_str = optarg;
+			config.domains_strlen = strlen(config.domains_str);
+			break;
+		case OPT_SNI_DETECTION:
+			if (strcmp(optarg, "parse") == 0) {
+				config.sni_detection = SNI_DETECTION_PARSE;
+			} else if (strcmp(optarg, "brute") == 0) {
+				config.sni_detection = SNI_DETECTION_BRUTE;
+			} else {
+				goto invalid_opt;
+			}
 
-				break;
-			case OPT_FRAG:
-				if (strcmp(optarg, "tcp") == 0) {
-					config.fragmentation_strategy = FRAG_STRAT_TCP;
-				} else if (strcmp(optarg, "ip") == 0) {
-					config.fragmentation_strategy = FRAG_STRAT_IP;
-				} else if (strcmp(optarg, "none") == 0) {
-					config.fragmentation_strategy = FRAG_STRAT_NONE;
-				} else {
-					printf("Invalid option %s\n", long_opt[optIdx].name);
-					goto error;
-				}
+			break;
+		case OPT_FRAG:
+			if (strcmp(optarg, "tcp") == 0) {
+				config.fragmentation_strategy = FRAG_STRAT_TCP;
+			} else if (strcmp(optarg, "ip") == 0) {
+				config.fragmentation_strategy = FRAG_STRAT_IP;
+			} else if (strcmp(optarg, "none") == 0) {
+				config.fragmentation_strategy = FRAG_STRAT_NONE;
+			} else {
+				goto invalid_opt;
+			}
 
-				break;
-			case OPT_FRAG_SNI_FAKED:
-				if (strcmp(optarg, "1") == 0) {
-					config.frag_sni_faked = 1;				
-				} else if (strcmp(optarg, "0") == 0) {
-					config.frag_sni_faked = 0;
-				} else {
-					errno = EINVAL;
-					printf("Invalid option %s\n", long_opt[optIdx].name);
-					goto error;
-				}
+			break;
+		case OPT_FRAG_SNI_FAKED:
+			if (strcmp(optarg, "1") == 0) {
+				config.frag_sni_faked = 1;
+			} else if (strcmp(optarg, "0") == 0) {
+				config.frag_sni_faked = 0;
+			} else {
+				goto invalid_opt;
+			}
 
-				break;
-			case OPT_FRAG_SNI_REVERSE:
-				if (strcmp(optarg, "1") == 0) {
-					config.frag_sni_reverse = 1;				
-				} else if (strcmp(optarg, "0") == 0) {
-					config.frag_sni_reverse = 0;
-				} else {
-					errno = EINVAL;
-					printf("Invalid option %s\n", long_opt[optIdx].name);
-					goto error;
-				}
+			break;
+		case OPT_FRAG_SNI_REVERSE:
+			if (strcmp(optarg, "1") == 0) {
+				config.frag_sni_reverse = 1;
+			} else if (strcmp(optarg, "0") == 0) {
+				config.frag_sni_reverse = 0;
+			} else {
+				goto invalid_opt;
+			}
 
-				break;
-			case OPT_FAKING_STRATEGY:
-				if (strcmp(optarg, "ack") == 0) {
-					config.faking_strategy = FAKE_STRAT_ACK_SEQ;
-				} else if (strcmp(optarg, "ttl") == 0) {
-					config.faking_strategy = FAKE_STRAT_TTL;
-				} else {
-					errno = EINVAL;
-					printf("Invalid option %s\n", long_opt[optIdx].name);
-					goto error;
-				}
+			break;
+		case OPT_FRAG_MIDDLE_SNI:
+			if (strcmp(optarg, "1") == 0) {
+				config.frag_middle_sni = 1;
+			} else if (strcmp(optarg, "0") == 0) {
+				config.frag_middle_sni = 0;
+			} else {
+				goto invalid_opt;
+			}
 
-				break;
-			case OPT_FAKING_TTL:
-				num = parse_numeric_option(optarg);
-				if (errno != 0 || num < 0 || num > 255) {
-					printf("Invalid option %s\n", long_opt[optIdx].name);
-					goto error;
-				}
+			break;
+		case OPT_FRAG_SNI_POS:
+			num = parse_numeric_option(optarg);
+			if (errno != 0 || num < 0) {
+				goto invalid_opt;
+			}
 
-				config.faking_ttl = num;
-				break;
+			config.frag_sni_pos = num;
+			break;
+		case OPT_FAKING_STRATEGY:
+			if (strcmp(optarg, "randseq") == 0) {
+				config.faking_strategy = FAKE_STRAT_RAND_SEQ;
+			} else if (strcmp(optarg, "ttl") == 0) {
+				config.faking_strategy = FAKE_STRAT_TTL;
+			} else if (strcmp(optarg, "tcp_check") == 0) {
+				config.faking_strategy = FAKE_STRAT_TCP_CHECK;
+			} else if (strcmp(optarg, "pastseq") == 0) {
+				config.faking_strategy = FAKE_STRAT_PAST_SEQ;
+			} else {
+				goto invalid_opt;
+			}
 
-			case OPT_FAKE_SNI:
-				if (strcmp(optarg, "1") == 0) {
-					config.fake_sni = 1;				
-				} else if (strcmp(optarg, "0") == 0) {
-					config.fake_sni = 0;
-				} else {
-					errno = EINVAL;
-					printf("Invalid option %s\n", long_opt[optIdx].name);
-					goto error;
-				}
+			break;
+		case OPT_FAKING_TTL:
+			num = parse_numeric_option(optarg);
+			if (errno != 0 || num < 0 || num > 255) {
+				goto invalid_opt;
+			}
 
-				break;
-			case OPT_FAKE_SNI_SEQ_LEN:
-				num = parse_numeric_option(optarg);
-				if (errno != 0 || num < 0 || num > 255) {
-					printf("Invalid option %s\n", long_opt[optIdx].name);
-					goto error;
-				}
+			config.faking_ttl = num;
+			break;
 
-				config.fake_sni_seq_len = num;
-				break;
-			case OPT_FK_WINSIZE:
-				num = parse_numeric_option(optarg);
-				if (errno != 0 || num < 0) {
-					printf("Invalid option %s\n", long_opt[optIdx].name);
-					goto error;
-				}
+		case OPT_FAKE_SNI:
+			if (strcmp(optarg, "1") == 0) {
+				config.fake_sni = 1;				
+			} else if (strcmp(optarg, "0") == 0) {
+				config.fake_sni = 0;
+			} else {
+				goto invalid_opt;
+			}
 
-				config.fk_winsize = num;
-				break;
-			case OPT_SEG2DELAY:
-				num = parse_numeric_option(optarg);
-				if (errno != 0 || num < 0) {
-					printf("Invalid option %s\n", long_opt[optIdx].name);
-					goto error;
-				}
+			break;
+		case OPT_FAKE_SNI_SEQ_LEN:
+			num = parse_numeric_option(optarg);
+			if (errno != 0 || num < 0 || num > 255) {
+				goto invalid_opt;
+			}
 
-				config.seg2_delay = num;
-				break;
-			case OPT_THREADS:
-				num = parse_numeric_option(optarg);
-				if (errno != 0 || num < 0 || num > MAX_THREADS) {
-					printf("Invalid option %s\n", long_opt[optIdx].name);
-					goto error;
-				}
+			config.fake_sni_seq_len = num;
+			break;
+		case OPT_FK_WINSIZE:
+			num = parse_numeric_option(optarg);
+			if (errno != 0 || num < 0) {
+				goto invalid_opt;
+			}
 
-				config.threads = num;
-				break;
-			case OPT_QUEUE_NUM:
-				num = parse_numeric_option(optarg);
-				if (errno != 0 || num < 0) {
-					printf("Invalid option %s\n", long_opt[optIdx].name);
-					goto error;
-				}
+			config.fk_winsize = num;
+			break;
+		case OPT_SEG2DELAY:
+			num = parse_numeric_option(optarg);
+			if (errno != 0 || num < 0) {
+				goto invalid_opt;
+			}
 
-				config.queue_start_num = num;
-				break;
-			default:
-				goto error;
+			config.seg2_delay = num;
+			break;
+		case OPT_THREADS:
+			num = parse_numeric_option(optarg);
+			if (errno != 0 || num < 0 || num > MAX_THREADS) {
+				goto invalid_opt;
+			}
+
+			config.threads = num;
+			break;
+		case OPT_QUEUE_NUM:
+			num = parse_numeric_option(optarg);
+			if (errno != 0 || num < 0) {
+				goto invalid_opt;
+			}
+
+			config.queue_start_num = num;
+			break;
+		default:
+			goto error;
 		}
 	}
 
-	
 
+// out:
 	errno = 0;
 	return 0;
-out:
+stop_exec:
 	errno = 0;
 	return 1;
+
+invalid_opt:
+	printf("Invalid option %s\n", long_opt[optIdx].name);
 error:
 	print_usage(argv[0]);
 	errno = EINVAL;
@@ -328,8 +373,14 @@ void print_welcome() {
 		case FAKE_STRAT_TTL:
 			printf("TTL faking strategy will be used with TTL %d\n", config.faking_ttl);
 			break;
-		case FAKE_STRAT_ACK_SEQ:
-			printf("Ack-Seq faking strategy will be used\n");
+		case FAKE_STRAT_RAND_SEQ:
+			printf("Random seq faking strategy will be used\n");
+			break;
+		case FAKE_STRAT_TCP_CHECK:
+			printf("TCP checksum faking strategy will be used\n");
+			break;
+		case FAKE_STRAT_PAST_SEQ:
+			printf("Past seq faking strategy will be used\n");
 			break;
 	}
 
@@ -342,7 +393,16 @@ void print_welcome() {
 		printf("GSO is enabled\n");
 	}
 
+	if (config.quic_drop) {
+		printf("All QUIC packets will be dropped\n");
+	}
+
+	if (config.sni_detection == SNI_DETECTION_BRUTE) {
+		printf("Server Name Extension will be parsed in the bruteforce mode\n");
+	}
+
 	if (config.all_domains) {
 		printf("All Client Hello will be targetted by youtubeUnblock!\n");
 	}
+
 }

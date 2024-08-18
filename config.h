@@ -22,10 +22,19 @@ struct config_t {
 	int frag_sni_reverse;
 	int frag_sni_faked;
 	int faking_strategy;
+	int frag_middle_sni;
+	int frag_sni_pos;
 	unsigned char faking_ttl;
 	int fake_sni;
 	unsigned int fake_sni_seq_len;
+#define VERBOSE_INFO	0
+#define VERBOSE_DEBUG	1
+#define VERBOSE_TRACE	2
 	int verbose;
+	int quic_drop;
+#define SNI_DETECTION_PARSE 0
+#define SNI_DETECTION_BRUTE 1
+	int sni_detection;
 	/* In milliseconds */
 	unsigned int seg2_delay;
 	const char *domains_str;
@@ -69,14 +78,16 @@ extern struct config_t config;
 #define FAKE_TTL 8
 
 // Will invalidate fake packets by out-of-ack_seq out-of-seq request
-#define FAKE_STRAT_ACK_SEQ 1
+#define FAKE_STRAT_RAND_SEQ	1
 // Will assume that GGC server is located further than FAKE_TTL
 // Thus, Fake packet will be eliminated automatically.
-#define FAKE_STRAT_TTL 2
+#define FAKE_STRAT_TTL		2
+#define FAKE_STRAT_PAST_SEQ	3
+#define FAKE_STRAT_TCP_CHECK	4
 
 
 #ifndef FAKING_STRATEGY
-#define FAKING_STRATEGY FAKE_STRAT_ACK_SEQ
+#define FAKING_STRATEGY FAKE_STRAT_RAND_SEQ
 #endif
 
 #if !defined(SILENT) && !defined(KERNEL_SPACE)
@@ -85,7 +96,7 @@ extern struct config_t config;
 
 // The Maximum Transmission Unit size for rawsocket
 // Larger packets will be fragmented. Applicable for Chrome's kyber.
-#define AVAILABLE_MTU 1384
+#define AVAILABLE_MTU 1500
 
 #define DEFAULT_QUEUE_NUM 537
 

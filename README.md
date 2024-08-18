@@ -9,6 +9,7 @@
   - [Check it](#check-it)
   - [Flags](#flags)
   - [Troubleshooting](#troubleshooting)
+    - [TV](#tv)
     - [Troubleshooting EPERMS (Operation not permitted)](#troubleshooting-eperms-operation-not-permitted)
   - [How it works:](#how-it-works)
   - [How it processes packets](#how-it-processes-packets)
@@ -135,7 +136,11 @@ Available flags:
 
 - `--fake-sni-seq-len=<length>` This flag specifies **youtubeUnblock** to build a complicated construction of fake client hello packets. length determines how much fakes will be sent. Defaults to **1**.
 
-- `--faking-strategy={ack,ttl}` This flag determines the strategy of fake packets invalidation. `ack` specifies that random sequence/acknowledgemend random will be set. These options may be handled by provider which uses *conntrack* with drop on invalid *conntrack* state firewall rule enabled. `ttl` specifies that packet will be invalidated after `--faking-ttl=n` hops. `ttl` is better but may cause issues if unconfigured. Defaults to `ack`
+- `--faking-strategy={randseq|ttl|tcp_check|pastseq}` This flag determines the strategy of fake packets invalidation. Defaults to `randseq`
+  - `randseq` specifies that random sequence/acknowledgemend random will be set. This option may be handled by provider which uses *conntrack* with drop on invalid *conntrack* state firewall rule enabled. 
+  - `ttl` specifies that packet will be invalidated after `--faking-ttl=n` hops. `ttl` is better but may cause issues if unconfigured. 
+  - `pastseq` is like `randseq` but sequence number is not random but references the packet sent in the past (before current).
+  - `tcp_check` will invalidate faking packet with invalid checksum. May be handled and dropped by some providers/TSPUs.
 
 - `--faking-ttl=<ttl>` Tunes the time to live (TTL) of fake SNI messages. TTL is specified like that the packet will go through the DPI system and captured by it, but will not reach the destination server. Defaults to **8**.
 
@@ -145,11 +150,21 @@ Available flags:
 
 - `--frag-sni-faked={0|1}` Specifies **youtubeUnblock** to send fake packets near *ClientHello* (fills payload with zeroes). Defaults to **0**.
 
+- `--frag-middle-sni={0|1}` With this options **youtubeUnblock** will split the packet in the middle of SNI data. Defaults to 1.
+
+- `--frag-sni-pos=<pos>` With this option **youtubeUnblock** will split the packet at the position pos. Defaults to 2.
+
+- `--quic-drop` Drop all QUIC packets which goes to youtubeUnblock. Won't affect any other UDP packets. Suitable for some TVs. Note, that for this option to work you should also add proxy udp to youtubeUnblock in firewall. `connbytes` may also be used with udp.
+
 - `--fk-winsize=<winsize>` Specifies window size for the fragmented TCP packet. Applicable if you want for response to be fragmented. May slowdown connection initialization.
+
+- `--sni-detection={parse|brute}` Specifies how to detect SNI. Parse will normally detect it by parsing the Client Hello message. Brute will go through the entire message and check possibility of SNI occurrence. Please note, that when `--sni-domains` option is not all brute will be O(nm) time complexity where n stands for length of the message and m is number of domains. Defaults to parse.
 
 - `--seg2delay=<delay>` This flag forces **youtubeUnblock** to wait a little bit before send the 2nd part of the split packet.
 
 - `--silent` Disables verbose mode.
+
+- `--trace` Maximum verbosity for debugging purposes.
 
 - `--no-gso` Disables support for Google Chrome fat packets which uses GSO. This feature is well tested now, so this flag probably won't fix anything.
 
@@ -157,11 +172,32 @@ Available flags:
 
 ## Troubleshooting
 
-If you have troubles with some sites being proxied, you can play with flags values. For example, for someone `--fake-sni=ttl` works. You should specify proper `--fake-sni-ttl=<ttl value>` where ttl is the amount of hops between you and DPI.
+If you got troubles with some sites and you sure that they are blocked by SNI (youtube for example), use may play around with [flags](#flags) and their combinations. At first it is recommended to try `--faking-strategy` flag and `--frag-sni-faked=1`.
+If you have troubles with some sites being proxied, you can play with flags values. For example, for someone `--faking-strategy=ttl` works. You should specify proper `--fake-sni-ttl=<ttl value>` where ttl is the amount of hops between you and DPI.
 
-If you are on Chromium you may have to disable *kyber* (the feature that makes the TLS *ClientHello* very big). I've got the problem with it on router, so to escape possible errors, so it is better to disable it: in `chrome://flags` search for kyber and switch it to disabled state. 
+If you are on Chromium you may have to disable *kyber* (the feature that makes the TLS *ClientHello* very big). I've got the problem with it on router, so to escape possible errors, so it is better to disable it: in `chrome://flags` search for kyber and switch it to disabled state. Alternatively you may set `--sni-detection=brute` and probably adjust `--sni-domains` flag.
 
 If your browser is using QUIC it may not work properly. Disable it in Chrome in `chrome://flags` and in Firefox `network.http.http{2,3}.enable(d)` in `about:config` option.
+
+### TV
+
+Televisions are the biggest headache. 
+
+In [this issue](https://github.com/Waujito/youtubeUnblock/issues/59) the problem has been resolved. 
+
+If you have troubles with televisions try `--faking-strategy=ttl` flag and play around with `--faking-ttl=n`. See [#flags](#flags) for more details. Also you might be have to disable QUIC. To do it you may use `--quic-drop` [flag](#flags) with proper firewall configuration (check description of the flag). Note, that this flag won't disable gQUIC and some TVs may relay on it. To disable gQUIC you will need to block the entire 443 port for udp in firewall configuration:
+
+For **nftables** do
+```
+nft insert rule inet fw4 forward ip saddr 192.168.. udp dport 443 counter drop
+```
+
+For **iptables**
+```
+iptables -I OUTPUT --src 192.168.. -p udp --dport 443 -j DROP
+```
+
+Where you have to replace 192.168.. with ip of your television.
 
 ### Troubleshooting EPERMS (Operation not permitted)
 

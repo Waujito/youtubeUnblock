@@ -31,6 +31,8 @@
 #include "config.h"
 #include "mangle.h"
 #include "args.h"
+#include "utils.h"
+#include "logging.h"
 
 pthread_mutex_t rawsocket_lock;
 int rawsocket = -2;
@@ -192,13 +194,15 @@ static int send_raw_socket(const uint8_t *pkt, uint32_t pktlen) {
 		}
 	};
 
-	pthread_mutex_lock(&rawsocket_lock);
+	if (config.threads != 1)
+		pthread_mutex_lock(&rawsocket_lock);
 
 	int sent = sendto(rawsocket, 
 	    pkt, pktlen, 0, 
 	    (struct sockaddr *)&daddr, sizeof(daddr));
 
-	pthread_mutex_unlock(&rawsocket_lock);
+	if (config.threads != 1)
+		pthread_mutex_unlock(&rawsocket_lock);
 
 	/* The function will return -errno on error as well as errno value set itself */
 	if (sent < 0) sent = -errno;
@@ -277,9 +281,6 @@ void delay_packet_send(const unsigned char *data, unsigned int data_len, unsigne
 	pthread_detach(thr);
 }
 
-
-
-		     
 static int queue_cb(const struct nlmsghdr *nlh, void *data) {
 	char buf[MNL_SOCKET_BUFFER_SIZE];
 	
@@ -399,12 +400,18 @@ int init_queue(int queue_num) {
 		ret = mnl_socket_recvfrom(nl, buf, BUF_SIZE);
 		if (ret == -1) {
 			perror("mnl_socket_recvfrom");
-			continue;
+			goto die;
 		}
 
 		ret = mnl_cb_run(buf, ret, 0, portid, queue_cb, &qdata);
 		if (ret < 0) {
-			perror("mnl_cb_run");
+			lgerror("mnl_cb_run", -EPERM);
+			if (errno == EPERM) {
+				printf("Probably another instance of youtubeUnblock with the same queue number is running\n");
+			} else {
+				printf("Make sure the nfnetlink_queue kernel module is loaded\n");
+			}
+			goto die;
 		}
 	}
 
@@ -501,6 +508,6 @@ int main(int argc, char *argv[]) {
 		exit(EXIT_FAILURE);
 	}
 
-	return qres->status;
+	return -qres->status;
 }
 
