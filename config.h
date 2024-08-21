@@ -87,7 +87,7 @@ extern struct config_t config;
 
 
 #ifndef FAKING_STRATEGY
-#define FAKING_STRATEGY FAKE_STRAT_RAND_SEQ
+#define FAKING_STRATEGY FAKE_STRAT_PAST_SEQ
 #endif
 
 #if !defined(SILENT) && !defined(KERNEL_SPACE)
