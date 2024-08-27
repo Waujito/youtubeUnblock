@@ -429,9 +429,9 @@ send_fake:
 			memset(fake_pad + iphfl + tcphfl, 0, f2len - iphfl - tcphfl);
 			struct tcphdr *fakethdr = (void *)(fake_pad + iphfl);
 			if (config.faking_strategy == FAKE_STRAT_PAST_SEQ) {
-				lgtrace("frag fake sent with %d -> ", ntohl(fakethdr->seq));
+				lgtrace("frag fake sent with %u -> ", ntohl(fakethdr->seq));
 				fakethdr->seq = htonl(ntohl(fakethdr->seq) - dvs);
-				lgtrace_addp("%d, ", ntohl(fakethdr->seq));
+				lgtrace_addp("%u, ", ntohl(fakethdr->seq));
 			}
 			ret = fail_packet(fake_pad, f2len);
 			if (ret < 0) {
@@ -821,6 +821,7 @@ int fail_packet(uint8_t *payload, uint32_t plen) {
 
 
 	if (config.faking_strategy == FAKE_STRAT_RAND_SEQ) {
+		lgtrace("fake seq: %u -> ", ntohl(tcph->seq));
 #ifdef KERNEL_SCOPE
 		tcph->seq = 124;
 		tcph->ack_seq = 124;
@@ -828,12 +829,15 @@ int fail_packet(uint8_t *payload, uint32_t plen) {
 		tcph->seq = random();
 		tcph->ack_seq = random();
 #endif
+		lgtrace_addp("%u", ntohl(tcph->seq));
 	} else if (config.faking_strategy == FAKE_STRAT_PAST_SEQ) {
-		lgtrace("fake sent with %d -> ", ntohl(tcph->seq));
+		lgtrace("fake seq: %u -> ", ntohl(tcph->seq));
 		tcph->seq = htonl(ntohl(tcph->seq) - dlen);
-		lgtrace_addp("%d", ntohl(tcph->seq));
+		lgtrace_addp("%u", ntohl(tcph->seq));
 
 	} else if (config.faking_strategy == FAKE_STRAT_TTL) {
+		lgtrace_addp("set fake ttl to %d", config.faking_ttl);
+
 		uint32_t ipxv = netproto_version(payload, plen);
 		if (ipxv == IP4VERSION) {
 			((struct iphdr *)iph)->ttl = config.faking_ttl;
@@ -849,6 +853,7 @@ int fail_packet(uint8_t *payload, uint32_t plen) {
 	set_tcp_checksum(tcph, iph, iph_len);
 
 	if (config.faking_strategy == FAKE_STRAT_TCP_CHECK) {
+		lgtrace_addp("break fake tcp checksum");
 		tcph->check += 1;
 	}
 
