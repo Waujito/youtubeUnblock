@@ -25,7 +25,7 @@ Bypasses Deep Packet Inspection (DPI) systems that relies on SNI. The package is
 
 The program was primarily developed to bypass YouTube Outage in Russia, but it works good with other websites blocked by SNI. Adjust the list of websites via `--sni-domains` flag for the program.
 
-The program is compatible with routers based on OpenWRT, Entware(Keenetic/ASUS) and host machines. The program offers binaries via [Github Actions](https://github.com/Waujito/youtubeUnblock/actions/workflows/build-ci.yml). If you haven't access to Github Actions, the program offers [development pre-release](https://github.com/Waujito/youtubeUnblock/releases/tag/continuous) which follows the latest commit in main branch with binaries included as assets. On OpenWRT you can check the architecture of your device with command `grep ARCH /etc/openwrt_release`.
+The program is compatible with routers based on OpenWRT, Entware(Keenetic/ASUS) and host machines. The program offers binaries via Github Actions. The binaries of main branch are published in the [development pre-release](https://github.com/Waujito/youtubeUnblock/releases/tag/continuous). Check out [Github Actions](https://github.com/Waujito/youtubeUnblock/actions/workflows/build-ci.yml) if you want to see all the binaries compiled ever. You should know the arcitecture of your hardware to use binaries. On OpenWRT you can check it with command `grep ARCH /etc/openwrt_release`.
 
 On both OpenWRT and Entware install the program with opkg. If you got read-only filesystem error you may unpack the binary manually or specify opkg path `opkg -o <destdir>`.
 
@@ -125,6 +125,8 @@ curl -o/dev/null -k --connect-to ::google.com -k -L -H Host:\ mirror.gcr.io http
 ```
 
 ## Flags
+
+Put flags to the **BINARY**, not an init script. If you are on OpenWRT you should put the flags inside the script: open `/etc/init.d/youtubeUnblock` with any text editor, like vi or nano and put your flags after `procd_set_param command /usr/bin/youtubeUnblock` line.
 
 Available flags:
 

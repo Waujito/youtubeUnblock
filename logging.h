@@ -25,8 +25,11 @@
 
 #define lgdebugmsg(msg, ...) lgdebug(msg "\n", ##__VA_ARGS__)
 
-#define lgtracemsg(msg, ...) \
-(LOG_LEVEL >= VERBOSE_TRACE ? printf(msg "\n", ##__VA_ARGS__) : 0)
+
+#define lgtrace(msg, ...) \
+(LOG_LEVEL >= VERBOSE_TRACE ? printf(msg, ##__VA_ARGS__) : 0)
+
+#define lgtracemsg(msg, ...) lgtrace(msg "\n", __VA_ARGS__)
 
 #define lgtrace_start(msg, ...) \
 (LOG_LEVEL >= VERBOSE_TRACE ? printf("[TRACE] " msg " ( ", ##__VA_ARGS__) : 0)

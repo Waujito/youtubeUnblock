@@ -427,6 +427,12 @@ send_fake:
 			}
 			memcpy(fake_pad, frag2, iphfl + tcphfl);
 			memset(fake_pad + iphfl + tcphfl, 0, f2len - iphfl - tcphfl);
+			struct tcphdr *fakethdr = (void *)(fake_pad + iphfl);
+			if (config.faking_strategy == FAKE_STRAT_PAST_SEQ) {
+				lgtrace("frag fake sent with %d -> ", ntohl(fakethdr->seq));
+				fakethdr->seq = htonl(ntohl(fakethdr->seq) - dvs);
+				lgtrace_addp("%d, ", ntohl(fakethdr->seq));
+			}
 			ret = fail_packet(fake_pad, f2len);
 			if (ret < 0) {
 				lgerror("Failed to fail packet", ret);
@@ -823,7 +829,10 @@ int fail_packet(uint8_t *payload, uint32_t plen) {
 		tcph->ack_seq = random();
 #endif
 	} else if (config.faking_strategy == FAKE_STRAT_PAST_SEQ) {
+		lgtrace("fake sent with %d -> ", ntohl(tcph->seq));
 		tcph->seq = htonl(ntohl(tcph->seq) - dlen);
+		lgtrace_addp("%d", ntohl(tcph->seq));
+
 	} else if (config.faking_strategy == FAKE_STRAT_TTL) {
 		uint32_t ipxv = netproto_version(payload, plen);
 		if (ipxv == IP4VERSION) {

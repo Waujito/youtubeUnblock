@@ -1,3 +1,6 @@
+#Check for using system libs
+USE_SYS_LIBS := no
+
 #Userspace app makes here
 BUILD_DIR := $(CURDIR)/build
 DEPSDIR := $(BUILD_DIR)/deps
@@ -5,8 +8,14 @@ DEPSDIR := $(BUILD_DIR)/deps
 CC:=gcc
 CCLD:=$(CC)
 LD:=ld
-override CFLAGS += -Wall -Wpedantic -Wno-unused-variable -I$(DEPSDIR)/include -std=gnu11
-override LDFLAGS += -L$(DEPSDIR)/lib
+
+ifeq ($(USE_SYS_LIBS), no)
+	override CFLAGS += -Wall -Wpedantic -Wno-unused-variable -I$(DEPSDIR)/include -std=gnu11
+	override LDFLAGS += -L$(DEPSDIR)/lib
+	REQ = $(LIBNETFILTER_QUEUE) $(LIBMNL) $(LIBCRYPTO)
+else
+	override CFLAGS += -Wall -Wpedantic -Wno-unused-variable -std=gnu11
+endif
 
 LIBNFNETLINK_CFLAGS := -I$(DEPSDIR)/include
 LIBNFNETLINK_LIBS := -L$(DEPSDIR)/lib
@@ -67,11 +76,11 @@ $(LIBNETFILTER_QUEUE): $(LIBNFNETLINK) $(LIBMNL)
 	$(MAKE) -C deps/libnetfilter_queue
 	$(MAKE) install -C deps/libnetfilter_queue
 
-$(APP): $(OBJS) $(LIBNETFILTER_QUEUE) $(LIBMNL) $(LIBCRYPTO)
+$(APP): $(OBJS) $(REQ)
 	@echo 'CCLD $(APP)'
 	$(CCLD) $(OBJS) -o $(APP) $(LDFLAGS) -lmnl -lnetfilter_queue -lpthread
 
-$(BUILD_DIR)/%.o: %.c $(LIBNETFILTER_QUEUE) $(LIBMNL) $(LIBCRYPTO) config.h
+$(BUILD_DIR)/%.o: %.c $(REQ) config.h
 	@echo 'CC $@'
 	$(CC) -c $(CFLAGS) $(LDFLAGS) $< -o $@
 
@@ -93,8 +102,9 @@ clean:
 
 distclean: clean
 	rm -rf $(BUILD_DIR)
+ifeq ($(USE_SYS_LIBS), no)
 	$(MAKE) distclean -C deps/libnetfilter_queue || true
 	$(MAKE) distclean -C deps/libmnl || true
 	$(MAKE) distclean -C deps/libnfnetlink || true
 	#$(MAKE) distclean -C deps/openssl || true
-
+endif
