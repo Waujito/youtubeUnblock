@@ -41,6 +41,7 @@ typedef __i64	int64_t;
 #define USER_SPACE
 #include <arpa/inet.h>		// IWYU pragma: export
 #include <netinet/ip.h>		// IWYU pragma: export
+#include <netinet/ip6.h>	// IWYU pragma: export
 #include <netinet/tcp.h>	// IWYU pragma: export
 #include <netinet/udp.h>	// IWYU pragma: export
 #endif

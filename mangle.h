@@ -22,14 +22,15 @@ struct tls_verdict analyze_tls_data(const uint8_t *data, uint32_t dlen);
 /**
  * Generates fake client hello message
  */
-int gen_fake_sni(const struct iphdr *iph, const struct tcphdr *tcph, 
+int gen_fake_sni(const void *iph, uint32_t iph_len, 
+		 const struct tcphdr *tcph, uint32_t tcph_len, 
 		 uint8_t *buf, uint32_t *buflen);
 
 /**
  * Invalidates the raw packet. The function aims to invalid the packet
  * in such way as it will be accepted by DPI, but dropped by target server
  */
-int fail4_packet(uint8_t *payload, uint32_t plen);
+int fail_packet(uint8_t *payload, uint32_t plen);
 
 #define PKT_ACCEPT	0
 #define PKT_DROP	1
@@ -45,7 +46,7 @@ int process_packet(const uint8_t *packet, uint32_t packet_len);
  * Processe the TCP packet.
  * Returns verdict.
  */
-int process_tcp4_packet(const uint8_t *raw_payload, uint32_t raw_payload_len);
+int process_tcp_packet(const uint8_t *raw_payload, uint32_t raw_payload_len);
 
 
 /**
@@ -57,7 +58,7 @@ int process_udp4_packet(const uint8_t *pkt, uint32_t pktlen);
 /**
  * Sends fake client hello.
  */
-int post_fake_sni(const struct iphdr *iph, unsigned int iph_len, 
+int post_fake_sni(const void *iph, unsigned int iph_len, 
 		     const struct tcphdr *tcph, unsigned int tcph_len,
 		     unsigned char sequence_len);
 
@@ -66,7 +67,7 @@ int post_fake_sni(const struct iphdr *iph, unsigned int iph_len,
  * Poses are relative to start of TCP payload.
  * dvs used internally and should be zero.
  */
-int send_tcp4_frags(
+int send_tcp_frags(
 	const uint8_t *packet, uint32_t pktlen, 
 	const uint32_t *poses, uint32_t poses_len, uint32_t dvs);
 

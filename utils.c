@@ -1,11 +1,13 @@
 #include "utils.h"
 #include "logging.h"
+#include <netinet/in.h>
 
 #ifdef KERNEL_SPACE
 #include <linux/ip.h>
 #else 
 #include <stdlib.h>
 #include <libnetfilter_queue/libnetfilter_queue_ipv4.h>
+#include <libnetfilter_queue/libnetfilter_queue_ipv6.h>
 #include <libnetfilter_queue/libnetfilter_queue_tcp.h>
 #endif
 
@@ -34,6 +36,36 @@ void ip4_set_checksum(struct iphdr *iph)
 #endif
 }
 
+void tcp6_set_checksum(struct tcphdr *tcph, struct ip6_hdr *iph) {
+	uint16_t old_check = ntohs(tcph->check);
+
+	nfq_tcp_compute_checksum_ipv6(tcph, iph);
+}
+
+int set_ip_checksum(void *iph, uint32_t iphb_len) {
+	int ipvx = netproto_version(iph, iphb_len);
+
+	if (ipvx == IP4VERSION) {
+		ip4_set_checksum(iph);
+	} else if (ipvx == IP6VERSION) { // IP6 has no checksums
+	} else 
+		return -1;
+
+	return 0;
+}
+
+int set_tcp_checksum(struct tcphdr *tcph, void *iph, uint32_t iphb_len) {
+	int ipvx = netproto_version(iph, iphb_len);
+
+	if (ipvx == IP4VERSION) {
+		tcp4_set_checksum(tcph, iph);
+	} else if (ipvx == IP6VERSION) {
+		tcp6_set_checksum(tcph, iph);
+	} else 
+		return -1;
+
+	return 0;
+}
 
 int ip4_payload_split(uint8_t *pkt, uint32_t buflen,
 		       struct iphdr **iph, uint32_t *iph_len, 
@@ -44,7 +76,7 @@ int ip4_payload_split(uint8_t *pkt, uint32_t buflen,
 	}
 
 	struct iphdr *hdr = (struct iphdr *)pkt;
-	if (hdr->version != IPVERSION) {
+	if (netproto_version(pkt, buflen) != IP4VERSION) {
 		lgerror("ip4_payload_split: ipversion", -EINVAL);
 		return -EINVAL;
 	}
@@ -109,6 +141,97 @@ int tcp4_payload_split(uint8_t *pkt, uint32_t buflen,
 
 	return 0;
 }
+
+int ip6_payload_split(uint8_t *pkt, uint32_t buflen,
+		       struct ip6_hdr **iph, uint32_t *iph_len, 
+		       uint8_t **payload, uint32_t *plen) {
+	if (pkt == NULL || buflen < sizeof(struct ip6_hdr)) {
+		lgerror("ip6_payload_split: pkt|buflen", -EINVAL);
+		return -EINVAL;
+	}
+
+	struct ip6_hdr *hdr = (struct ip6_hdr *)pkt;
+	if (netproto_version(pkt, buflen) != 6) {
+		lgerror("ip6_payload_split: ip6version", -EINVAL);
+		return -EINVAL;
+	}
+
+	uint32_t hdr_len = sizeof(struct ip6_hdr);
+	uint32_t pktlen = ntohs(hdr->ip6_ctlun.ip6_un1.ip6_un1_plen);
+	if (buflen < pktlen) {
+		lgerror("ip6_payload_split: buflen cmp pktlen: %d %d", -EINVAL, buflen, pktlen);
+		return -EINVAL;
+	}
+
+	if (iph) 
+		*iph = hdr;
+	if (iph_len)
+		*iph_len = hdr_len;
+	if (payload)
+		*payload = pkt + hdr_len;
+	if (plen)
+		*plen = pktlen;
+
+	return 0;
+}
+
+int tcp6_payload_split(uint8_t *pkt, uint32_t buflen,
+		       struct ip6_hdr **iph, uint32_t *iph_len,
+		       struct tcphdr **tcph, uint32_t *tcph_len,
+		       uint8_t **payload, uint32_t *plen) {
+	struct ip6_hdr *hdr;
+	uint32_t hdr_len;
+	struct tcphdr *thdr;
+	uint32_t thdr_len;
+	
+	uint8_t *tcph_pl;
+	uint32_t tcph_plen;
+
+	if (ip6_payload_split(pkt, buflen, &hdr, &hdr_len, 
+			&tcph_pl, &tcph_plen)){
+		return -EINVAL;
+	}
+
+
+	if (
+		hdr->ip6_ctlun.ip6_un1.ip6_un1_nxt != IPPROTO_TCP || 
+		tcph_plen < sizeof(struct tcphdr)) {
+		return -EINVAL;
+	}
+
+
+	thdr = (struct tcphdr *)(tcph_pl);
+	thdr_len = thdr->doff * 4;
+
+	if (thdr_len > tcph_plen) {
+		return -EINVAL;
+	}
+
+	if (iph) *iph = hdr;
+	if (iph_len) *iph_len = hdr_len;
+	if (tcph) *tcph = thdr;
+	if (tcph_len) *tcph_len = thdr_len;
+	if (payload) *payload = tcph_pl + thdr_len;
+	if (plen) *plen = tcph_plen - thdr_len;
+
+	return 0;
+}
+
+int tcp_payload_split(uint8_t *pkt, uint32_t buflen,
+		      void **iph, uint32_t *iph_len,
+		      struct tcphdr **tcph, uint32_t *tcph_len,
+		      uint8_t **payload, uint32_t *plen) {
+	int netvers = netproto_version(pkt, buflen);
+	if (netvers == IP4VERSION) {
+		return tcp4_payload_split(pkt, buflen, (struct iphdr **)iph, iph_len, tcph, tcph_len, payload, plen);
+	} else if (netvers == IP6VERSION) {
+		return tcp6_payload_split(pkt, buflen, (struct ip6_hdr **)iph, iph_len, tcph, tcph_len, payload, plen);
+	} else {
+		lgerror("Internet Protocol version is unsupported", -EINVAL);
+		return -EINVAL;
+	}
+}
+
 
 int udp4_payload_split(uint8_t *pkt, uint32_t buflen,
 		       struct iphdr **iph, uint32_t *iph_len,
@@ -222,9 +345,6 @@ int ip4_frag(const uint8_t *pkt, uint32_t buflen, uint32_t payload_offset,
 	f2_hdr->frag_off = htons(f2_frag_off);
 	f2_hdr->tot_len = htons(f2_dlen);
 
-
-	lgdebugmsg("Packet split in portion %u %u", f1_plen, f2_plen);
-
 	ip4_set_checksum(f1_hdr);
 	ip4_set_checksum(f2_hdr);
 
@@ -232,11 +352,12 @@ int ip4_frag(const uint8_t *pkt, uint32_t buflen, uint32_t payload_offset,
 }
 
 // split packet to two tcp-on-ipv4 segments.
-int tcp4_frag(const uint8_t *pkt, uint32_t buflen, uint32_t payload_offset, 
+int tcp_frag(const uint8_t *pkt, uint32_t buflen, uint32_t payload_offset, 
 			uint8_t *seg1, uint32_t *s1len, 
 			uint8_t *seg2, uint32_t *s2len) {
 
-	struct iphdr *hdr;
+	// struct ip6_hdr *hdr6;
+	void *hdr;
 	uint32_t hdr_len;
 	struct tcphdr *tcph;
 	uint32_t tcph_len;
@@ -247,23 +368,28 @@ int tcp4_frag(const uint8_t *pkt, uint32_t buflen, uint32_t payload_offset,
 	if (!seg1 || !s1len || !seg2 || !s2len)
 		return -EINVAL;
 
-	if ((ret = tcp4_payload_split((uint8_t *)pkt, buflen,
+	if ((ret = tcp_payload_split((uint8_t *)pkt, buflen,
 				&hdr, &hdr_len,
 				&tcph, &tcph_len,
 				(uint8_t **)&payload, &plen)) < 0) {
-		lgerror("tcp4_frag: tcp4_payload_split", ret);
+		lgerror("tcp_frag: tcp_payload_split", ret);
 
 		return -EINVAL;
 	}
 
+	int ipvx = netproto_version(pkt, buflen);
 
-	if (
-		ntohs(hdr->frag_off) & IP_MF || 
-		ntohs(hdr->frag_off) & IP_OFFMASK) {
-		lgdebugmsg("tcp4_frag: frag value: %d",
-			ntohs(hdr->frag_off));
-		lgerror("tcp4_frag: ip fragmentation is set", -EINVAL);
-		return -EINVAL;
+
+	if (ipvx == IP4VERSION) {
+		struct iphdr *iphdr = hdr;
+		if (
+			ntohs(iphdr->frag_off) & IP_MF || 
+			ntohs(iphdr->frag_off) & IP_OFFMASK) {
+			lgdebugmsg("tcp_frag: ip4: frag value: %d",
+				ntohs(iphdr->frag_off));
+			lgerror("tcp_frag: ip4: ip fragmentation is set", -EINVAL);
+			return -EINVAL;
+		}
 	}
 
 
@@ -292,21 +418,25 @@ int tcp4_frag(const uint8_t *pkt, uint32_t buflen, uint32_t payload_offset,
 	memcpy(seg1 + hdr_len + tcph_len, payload, s1_plen);
 	memcpy(seg2 + hdr_len + tcph_len, payload + payload_offset, s2_plen);
 
-	struct iphdr *s1_hdr = (void *)seg1;
-	struct iphdr *s2_hdr = (void *)seg2;
+	if (ipvx == IP4VERSION) {
+		struct iphdr *s1_hdr = (void *)seg1;
+		struct iphdr *s2_hdr = (void *)seg2;
+		s1_hdr->tot_len = htons(s1_dlen);
+		s2_hdr->tot_len = htons(s2_dlen);
+	} else {
+		struct ip6_hdr *s1_hdr = (void *)seg1;
+		struct ip6_hdr *s2_hdr = (void *)seg2;
+		s1_hdr->ip6_ctlun.ip6_un1.ip6_un1_plen = htons(s1_dlen - hdr_len);
+		s2_hdr->ip6_ctlun.ip6_un1.ip6_un1_plen = htons(s2_dlen - hdr_len);
+	}
 
 	struct tcphdr *s1_tcph = (void *)(seg1 + hdr_len);
 	struct tcphdr *s2_tcph = (void *)(seg2 + hdr_len);
-
-	s1_hdr->tot_len = htons(s1_dlen);
-	s2_hdr->tot_len = htons(s2_dlen);
-
+	
 	s2_tcph->seq = htonl(ntohl(s2_tcph->seq) + payload_offset);
 
-	lgdebugmsg("Packet split in portion %u %u", s1_plen, s2_plen);
-
-	tcp4_set_checksum(s1_tcph, s1_hdr);
-	tcp4_set_checksum(s2_tcph, s2_hdr);
+	set_tcp_checksum(s1_tcph, seg1, hdr_len);
+	set_tcp_checksum(s2_tcph, seg2, hdr_len);
 
 	return 0;
 }

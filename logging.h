@@ -20,9 +20,10 @@
 })
 #endif /* PROGRAM_SPACE */
 
+#define lgdebug(msg, ...) \
+(LOG_LEVEL >= VERBOSE_DEBUG ? printf(msg, ##__VA_ARGS__) : 0)
 
-#define lgdebugmsg(msg, ...) \
-(LOG_LEVEL >= VERBOSE_DEBUG ? printf(msg "\n", ##__VA_ARGS__) : 0)
+#define lgdebugmsg(msg, ...) lgdebug(msg "\n", ##__VA_ARGS__)
 
 #define lgtracemsg(msg, ...) \
 (LOG_LEVEL >= VERBOSE_TRACE ? printf(msg "\n", ##__VA_ARGS__) : 0)
