@@ -35,7 +35,7 @@ int process_packet(const uint8_t *raw_payload, uint32_t raw_payload_len) {
 
 		transport_proto = iph ->protocol;
 
-	} else if (ipver == IP6VERSION) {
+	} else if (ipver == IP6VERSION && config.use_ipv6) {
 		ret = ip6_payload_split((uint8_t *)raw_payload, raw_payload_len,
 			 (struct ip6_hdr **)&ip6h, &iph_len, 
 			 (uint8_t **)&ip_payload, &ip_payload_len);
@@ -45,11 +45,11 @@ int process_packet(const uint8_t *raw_payload, uint32_t raw_payload_len) {
 
 		transport_proto = ip6h->ip6_ctlun.ip6_un1.ip6_un1_nxt;
 
+	} else {
+		lgtracemsg("Unknown layer 3 protocol version: %d", ipver);
+		goto accept;
 	}
 
-
-	if (ret < 0) 
-		goto accept;
 	
 	switch (transport_proto) {
 	case IPPROTO_TCP:

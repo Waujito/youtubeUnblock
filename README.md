@@ -6,6 +6,7 @@
     - [Firewall configuration](#firewall-configuration)
       - [nftables rules](#nftables-rules)
       - [Iptables rules](#iptables-rules)
+    - [IPv6](#ipv6)
   - [Check it](#check-it)
   - [Flags](#flags)
   - [Troubleshooting](#troubleshooting)
@@ -104,6 +105,16 @@ iptables -t mangle -A FORWARD -p tcp --dport 443 -m connbytes --connbytes-dir or
 iptables -I OUTPUT -m mark --mark 32768/32768 -j ACCEPT
 ```
 
+#### IPv6
+
+For IPv6 on iptables you need to duplicate rules above for ip6tables:
+```sh
+ip6tables -t mangle -A FORWARD -p tcp --dport 443 -m connbytes --connbytes-dir original --connbytes-mode packets --connbytes 0:19 -j NFQUEUE --queue-num 537 --queue-bypass
+ip6tables -I OUTPUT -m mark --mark 32768/32768 -j ACCEPT
+```
+
+
+
 Note that above rules use *conntrack* to route only first 20 packets from the connection to **youtubeUnblock**. 
 If you got some troubles with it, for example **youtubeUnblock** doesn't detect YouTube, try to delete *connbytes* from the rules. But it is an unlikely behavior and you should probably check your ruleset.
 
@@ -169,6 +180,8 @@ Available flags:
 - `--trace` Maximum verbosity for debugging purposes.
 
 - `--no-gso` Disables support for Google Chrome fat packets which uses GSO. This feature is well tested now, so this flag probably won't fix anything.
+
+- `--no-ipv6` Disables support for ipv6. May be useful if you don't want for ipv6 socket to be opened.
 
 - `--threads=<threads number>` Specifies the amount of threads you want to be running for your program. This defaults to **1** and shouldn't be edited for normal use. If you have performance issues, consult [performance chaptr](https://github.com/Waujito/youtubeUnblock?tab=readme-ov-file#performance)
 

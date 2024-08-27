@@ -579,10 +579,12 @@ int main(int argc, char *argv[]) {
 		exit(EXIT_FAILURE);
 	}
 
-	if (open_raw6_socket() < 0) {
-		perror("Unable to open raw socket for ipv6");
-		close_raw_socket();
-		exit(EXIT_FAILURE);
+	if (config.use_ipv6) {
+		if (open_raw6_socket() < 0) {
+			perror("Unable to open raw socket for ipv6");
+			close_raw_socket();
+			exit(EXIT_FAILURE);
+		}
 	}
 
 	struct queue_res *qres = &defqres;
@@ -618,7 +620,8 @@ int main(int argc, char *argv[]) {
 	}
 
 	close_raw_socket();
-	close_raw6_socket();
+	if (config.use_ipv6)
+		close_raw6_socket();
 
 	return -qres->status;
 }
