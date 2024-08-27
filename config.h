@@ -18,6 +18,7 @@ struct config_t {
 	unsigned int queue_start_num;
 	int threads;
 	int use_gso;
+	int use_ipv6;
 	int fragmentation_strategy;
 	int frag_sni_reverse;
 	int frag_sni_faked;

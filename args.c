@@ -20,6 +20,7 @@ struct config_t config = {
 	.fake_sni_seq_len = 1,
 	.frag_middle_sni = 1,
 	.frag_sni_pos = 2,
+	.use_ipv6 = 1,
 
 	.sni_detection = SNI_DETECTION_PARSE,
 
@@ -63,13 +64,14 @@ struct config_t config = {
 #define OPT_TRACE		15
 #define OPT_QUIC_DROP		16
 #define OPT_SNI_DETECTION	17
+#define OPT_NO_IPV6		20
 #define OPT_SEG2DELAY 		5
 #define OPT_THREADS 		6
 #define OPT_SILENT 		7
 #define OPT_NO_GSO 		8
 #define OPT_QUEUE_NUM		9
 
-#define OPT_MAX OPT_FRAG_SNI_POS
+#define OPT_MAX OPT_NO_IPV6
 
 static struct option long_opt[] = {
 	{"help",		0, 0, 'h'},
@@ -92,6 +94,7 @@ static struct option long_opt[] = {
 	{"silent",		0, 0, OPT_SILENT},
 	{"trace",		0, 0, OPT_TRACE},
 	{"no-gso",		0, 0, OPT_NO_GSO},
+	{"no-ipv6",		0, 0, OPT_NO_IPV6},
 	{"queue-num",		1, 0, OPT_QUEUE_NUM},
 	{0,0,0,0}
 };
@@ -144,6 +147,7 @@ void print_usage(const char *argv0) {
 	printf("\t--silent\n");
 	printf("\t--trace\n");
 	printf("\t--no-gso\n");
+	printf("\t--no-ipv6\n");
 	printf("\n");
 }
 
@@ -168,6 +172,9 @@ int parse_args(int argc, char *argv[]) {
 			break;
 		case OPT_NO_GSO:
 			config.use_gso = 0;
+			break;
+		case OPT_NO_IPV6:
+			config.use_ipv6 = 0;
 			break;
 		case OPT_QUIC_DROP:
 			config.quic_drop = 1;
@@ -391,6 +398,12 @@ void print_welcome() {
 
 	if (config.use_gso) {
 		printf("GSO is enabled\n");
+	}
+
+	if (config.use_ipv6) {
+		printf("IPv6 is enabled\n");
+	} else {
+		printf("IPv6 is disabled\n");
 	}
 
 	if (config.quic_drop) {

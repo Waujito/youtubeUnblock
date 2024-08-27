@@ -37,6 +37,9 @@
 pthread_mutex_t rawsocket_lock;
 int rawsocket = -2;
 
+pthread_mutex_t raw6socket_lock;
+int raw6socket = -2;
+
 static int open_socket(struct mnl_socket **_nl) {
 	struct mnl_socket *nl = NULL;
 	nl = mnl_socket_open(NETLINK_NETFILTER);
@@ -123,6 +126,134 @@ static int close_raw_socket(void) {
 	return 0;
 }
 
+static int open_raw6_socket(void) {
+	if (raw6socket != -2) {
+		errno = EALREADY;
+		perror("Raw socket is already opened");
+		return -1;
+	}
+	
+	raw6socket = socket(AF_INET6, SOCK_RAW, IPPROTO_RAW);
+	if (rawsocket == -1) {
+		perror("Unable to create raw socket");
+		return -1;
+	}
+
+	int mark = RAWSOCKET_MARK;
+	if (setsockopt(raw6socket, SOL_SOCKET, SO_MARK, &mark, sizeof(mark)) < 0)
+	{
+		fprintf(stderr, "setsockopt(SO_MARK, %d) failed\n", mark);
+		return -1;
+	}
+
+	int mst = pthread_mutex_init(&raw6socket_lock, NULL);
+	if (mst) {
+		fprintf(stderr, "Mutex err: %d\n", mst);
+		close(raw6socket);
+		errno = mst;
+
+		return -1;
+	}
+
+
+	return raw6socket;
+}
+
+static int close_raw6_socket(void) {
+	if (raw6socket < 0) {
+		errno = EALREADY;
+		perror("Raw socket is not set");
+		return -1;
+	}
+
+	if (close(raw6socket)) {
+		perror("Unable to close raw socket");
+		pthread_mutex_destroy(&rawsocket_lock);
+		return -1;
+	}
+
+	pthread_mutex_destroy(&raw6socket_lock);
+
+	raw6socket = -2;
+	return 0;
+}
+
+static int send_raw_ipv4(const uint8_t *pkt, uint32_t pktlen) {
+	int ret;
+	if (pktlen > AVAILABLE_MTU) return -ENOMEM;
+
+	struct iphdr *iph;
+
+	if ((ret = ip4_payload_split(
+	(uint8_t *)pkt, pktlen, &iph, NULL, NULL, NULL)) < 0) {
+		errno = -ret;
+		return ret;
+	}
+
+	struct sockaddr_in daddr = {
+		.sin_family = AF_INET,
+		/* Always 0 for raw socket */
+		.sin_port = 0,
+		.sin_addr = {
+			.s_addr = iph->daddr
+		}
+	};
+
+	if (config.threads != 1)
+		pthread_mutex_lock(&rawsocket_lock);
+
+	int sent = sendto(rawsocket, 
+	    pkt, pktlen, 0, 
+	    (struct sockaddr *)&daddr, sizeof(daddr));
+
+	if (config.threads != 1)
+		pthread_mutex_unlock(&rawsocket_lock);
+
+	/* The function will return -errno on error as well as errno value set itself */
+	if (sent < 0) sent = -errno;
+
+	return sent;
+}
+
+static int send_raw_ipv6(const uint8_t *pkt, uint32_t pktlen) {
+	int ret;
+	if (pktlen > AVAILABLE_MTU) return -ENOMEM;
+
+	struct ip6_hdr *iph;
+
+	if ((ret = ip6_payload_split(
+	(uint8_t *)pkt, pktlen, &iph, NULL, NULL, NULL)) < 0) {
+		errno = -ret;
+		return ret;
+	}
+
+	struct sockaddr_in6 daddr = {
+		.sin6_family = AF_INET6,
+		/* Always 0 for raw socket */
+		.sin6_port = 0,
+		.sin6_addr = iph->ip6_dst
+	};
+
+	tcp6_set_checksum((void *)(uint8_t *)pkt + sizeof(struct ip6_hdr), (void *)pkt);
+
+
+	if (config.threads != 1)
+		pthread_mutex_lock(&rawsocket_lock);
+
+	int sent = sendto(raw6socket, 
+	    pkt, pktlen, 0, 
+	    (struct sockaddr *)&daddr, sizeof(daddr));
+
+	lgtrace_addp("rawsocket sent %d", sent);
+
+	if (config.threads != 1)
+		pthread_mutex_unlock(&rawsocket_lock);
+
+	/* The function will return -errno on error as well as errno value set itself */
+	if (sent < 0) sent = -errno;
+
+	return sent;
+}
 
 static int send_raw_socket(const uint8_t *pkt, uint32_t pktlen) {
 	int ret;
@@ -138,7 +269,7 @@ static int send_raw_socket(const uint8_t *pkt, uint32_t pktlen) {
 
 		switch (config.fragmentation_strategy) {
 			case FRAG_STRAT_TCP:
-				if ((ret = tcp4_frag(pkt, pktlen, AVAILABLE_MTU-128,
+				if ((ret = tcp_frag(pkt, pktlen, AVAILABLE_MTU-128,
 					buff1, &buff1_size, buff2, &buff2_size)) < 0) {
 
 					errno = -ret;
@@ -175,39 +306,16 @@ static int send_raw_socket(const uint8_t *pkt, uint32_t pktlen) {
 
 		return sent;
 	}
+	
+	int ipvx = netproto_version(pkt, pktlen);
 
+	if (ipvx == IP4VERSION) 
+		return send_raw_ipv4(pkt, pktlen);
+	else if (ipvx == IP6VERSION) 
+		return send_raw_ipv6(pkt, pktlen);
 
-	struct iphdr *iph;
-
-	if ((ret = ip4_payload_split(
-	(uint8_t *)pkt, pktlen, &iph, NULL, NULL, NULL)) < 0) {
-		errno = -ret;
-		return ret;
-	}
-
-	struct sockaddr_in daddr = {
-		.sin_family = AF_INET,
-		/* Always 0 for raw socket */
-		.sin_port = 0,
-		.sin_addr = {
-			.s_addr = iph->daddr
-		}
-	};
-
-	if (config.threads != 1)
-		pthread_mutex_lock(&rawsocket_lock);
-
-	int sent = sendto(rawsocket, 
-	    pkt, pktlen, 0, 
-	    (struct sockaddr *)&daddr, sizeof(daddr));
-
-	if (config.threads != 1)
-		pthread_mutex_unlock(&rawsocket_lock);
-
-	/* The function will return -errno on error as well as errno value set itself */
-	if (sent < 0) sent = -errno;
-
-	return sent;
+	printf("proto version %d is unsupported\n", ipvx);
+	return -EINVAL;
 }
 
 
@@ -471,6 +579,14 @@ int main(int argc, char *argv[]) {
 		exit(EXIT_FAILURE);
 	}
 
+	if (config.use_ipv6) {
+		if (open_raw6_socket() < 0) {
+			perror("Unable to open raw socket for ipv6");
+			close_raw_socket();
+			exit(EXIT_FAILURE);
+		}
+	}
+
 	struct queue_res *qres = &defqres;
 
 	if (config.threads == 1) {
@@ -503,10 +619,9 @@ int main(int argc, char *argv[]) {
 		}
 	}
 
-	if (close_raw_socket() < 0) {
-		perror("Unable to close raw socket");
-		exit(EXIT_FAILURE);
-	}
+	close_raw_socket();
+	if (config.use_ipv6)
+		close_raw6_socket();
 
 	return -qres->status;
 }
