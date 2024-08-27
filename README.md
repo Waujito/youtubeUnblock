@@ -157,6 +157,8 @@ Available flags:
 
 - `--faking-ttl=<ttl>` Tunes the time to live (TTL) of fake SNI messages. TTL is specified like that the packet will go through the DPI system and captured by it, but will not reach the destination server. Defaults to **8**.
 
+- `--fake-seq-offset` Tunes the offset from original sequence number for fake packets. Used by randseq faking strategy. Defaults to 10000. If 0, random sequence number will be set.
+
 - `--frag={tcp,ip,none}` Specifies the fragmentation strategy for the packet. tcp is used by default. Ip fragmentation may be blocked by DPI system. None specifies no fragmentation. Probably this won't work, but may be will work for some fake sni strategies.
 
 - `--frag-sni-reverse={0|1}` Specifies **youtubeUnblock** to send *ClientHello* fragments in the reverse order. Defaults to **1**.

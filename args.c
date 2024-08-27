@@ -21,6 +21,7 @@ struct config_t config = {
 	.frag_middle_sni = 1,
 	.frag_sni_pos = 2,
 	.use_ipv6 = 1,
+	.fakeseq_offset = 10000,
 
 	.sni_detection = SNI_DETECTION_PARSE,
 
@@ -65,13 +66,14 @@ struct config_t config = {
 #define OPT_QUIC_DROP		16
 #define OPT_SNI_DETECTION	17
 #define OPT_NO_IPV6		20
+#define OPT_FAKE_SEQ_OFFSET	21
 #define OPT_SEG2DELAY 		5
 #define OPT_THREADS 		6
 #define OPT_SILENT 		7
 #define OPT_NO_GSO 		8
 #define OPT_QUEUE_NUM		9
 
-#define OPT_MAX OPT_NO_IPV6
+#define OPT_MAX OPT_FAKE_SEQ_OFFSET
 
 static struct option long_opt[] = {
 	{"help",		0, 0, 'h'},
@@ -80,6 +82,7 @@ static struct option long_opt[] = {
 	{"fake-sni",		1, 0, OPT_FAKE_SNI},
 	{"fake-sni-seq-len",	1, 0, OPT_FAKE_SNI_SEQ_LEN},
 	{"faking-strategy",	1, 0, OPT_FAKING_STRATEGY},
+	{"fake-seq-offset",	1, 0, OPT_FAKE_SEQ_OFFSET},
 	{"faking-ttl",		1, 0, OPT_FAKING_TTL},
 	{"frag",		1, 0, OPT_FRAG},
 	{"frag-sni-reverse",	1, 0, OPT_FRAG_SNI_REVERSE},
@@ -132,6 +135,7 @@ void print_usage(const char *argv0) {
 	printf("\t--sni-domains=<comma separated domain list>|all\n");
 	printf("\t--fake-sni={1|0}\n");
 	printf("\t--fake-sni-seq-len=<length>\n");
+	printf("\t--fake-seq-offset=<offset>\n");
 	printf("\t--faking-ttl=<ttl>\n");
 	printf("\t--faking-strategy={randseq|ttl|tcp_check|pastseq}\n");
 	printf("\t--frag={tcp,ip,none}\n");
@@ -269,7 +273,14 @@ int parse_args(int argc, char *argv[]) {
 
 			config.faking_ttl = num;
 			break;
+		case OPT_FAKE_SEQ_OFFSET:
+			num = parse_numeric_option(optarg);
+			if (errno != 0 || num < 0) {
+				goto invalid_opt;
+			}
 
+			config.fakeseq_offset = num;
+			break;
 		case OPT_FAKE_SNI:
 			if (strcmp(optarg, "1") == 0) {
 				config.fake_sni = 1;				
@@ -382,6 +393,7 @@ void print_welcome() {
 			break;
 		case FAKE_STRAT_RAND_SEQ:
 			printf("Random seq faking strategy will be used\n");
+			printf("Fake seq offset set to %u\n", config.fakeseq_offset);
 			break;
 		case FAKE_STRAT_TCP_CHECK:
 			printf("TCP checksum faking strategy will be used\n");

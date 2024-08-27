@@ -822,13 +822,18 @@ int fail_packet(uint8_t *payload, uint32_t plen) {
 
 	if (config.faking_strategy == FAKE_STRAT_RAND_SEQ) {
 		lgtrace("fake seq: %u -> ", ntohl(tcph->seq));
+
+		if (config.fakeseq_offset) {
+			tcph->seq = htonl(ntohl(tcph->seq) - config.fakeseq_offset);
+		} else {
 #ifdef KERNEL_SCOPE
-		tcph->seq = 124;
-		tcph->ack_seq = 124;
+			tcph->seq = 124;
 #else
-		tcph->seq = random();
-		tcph->ack_seq = random();
+			tcph->seq = random();
 #endif
+
+		}
+
 		lgtrace_addp("%u", ntohl(tcph->seq));
 	} else if (config.faking_strategy == FAKE_STRAT_PAST_SEQ) {
 		lgtrace("fake seq: %u -> ", ntohl(tcph->seq));

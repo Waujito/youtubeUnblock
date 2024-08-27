@@ -44,6 +44,7 @@ struct config_t {
 	const char *fake_sni_pkt;
 	unsigned int fake_sni_pkt_sz;
 	unsigned int fk_winsize;
+	unsigned int fakeseq_offset;
 };
 
 extern struct config_t config;
