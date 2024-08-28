@@ -220,7 +220,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          ref: 'openwrt'
+          ref: 'entware'
 
       - name: Prepare build
         env:
