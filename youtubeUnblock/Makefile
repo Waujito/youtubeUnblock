@@ -3,8 +3,8 @@
 include $(TOPDIR)/rules.mk
 
 PKG_NAME:=youtubeUnblock
-PKG_VERSION:=0.2.2
-PKG_REV:=7d60fd885490fdeaa0987741f1dd6a607e903862
+PKG_VERSION:=0.3.1
+PKG_REV:=725dc1a6d22503b89e37a77c9c2587244d63c74f
 PKG_RELEASE:=1
 
 PKG_SOURCE_URL:=https://github.com/Waujito/youtubeUnblock.git
@@ -17,9 +17,9 @@ define Package/youtubeUnblock
 	SECTION:=net
 	CATEGORY:=Networking
 	TITLE:=youtubeUnblock
+	DEPENDS:=+libpthread
 	URL:=https://github.com/Waujito/youtubeUnblock
 	MAINTAINER:=Vadim Vetrov <vetrovvd@gmail.com>
-	DEPENDS:=+kmod-nft-queue
 endef
 
 define Package/youtubeUnblock/description
