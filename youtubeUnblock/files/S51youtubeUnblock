@@ -1,0 +1,179 @@
+#!/bin/sh
+
+# Pass your args here
+ARGS=""
+
+ENABLED=yes
+PROCS=youtubeUnblock
+PATH=/opt/sbin:/opt/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+IPV6=1
+
+ACTION=$1
+CALLER=$2
+
+# . /opt/etc/nfqws/nfqws.conf
+
+ansi_red="\033[1;31m";
+ansi_white="\033[1;37m";
+ansi_green="\033[1;32m";
+ansi_yellow="\033[1;33m";
+ansi_blue="\033[1;34m";
+ansi_bell="\007";
+ansi_blink="\033[5m";
+ansi_std="\033[m";
+ansi_rev="\033[7m";
+ansi_ul="\033[4m";
+
+is_running() {
+	PID_RUNNING=$(pgrep -nx "$PROCS" 2>/dev/null)
+	
+	if [ -z "$PID_RUNNING" ]; then
+		return 1
+	fi
+	
+	return 0
+}
+
+start() {
+	if [ "$CALLER" = "cron" -a "$ENABLED" != yes ]; then
+		return 8
+	fi
+
+	if is_running; then
+		echo -e "$ansi_white $PROCS is already running $ansi_std" >&2
+		return 1
+	fi
+	
+	kernel_modules_load
+
+	if [ $IPV6 -eq 0 ]; then
+		ARGS+=" --no-ipv6"
+	fi
+	
+	$PROCS $ARGS 2>&1 >/dev/null &
+	
+	firewall_start_v4
+	firewall_start_v6
+	system_config
+	
+        echo -e "$ansi_white Started $PROCS $ansi_std"
+}
+
+stop() {
+        echo -e "$ansi_white Shutting down $PROCS $ansi_std"
+
+	firewall_stop_v4
+	firewall_stop_v6
+	
+	killall $PROCS 2> /dev/null
+}
+
+_iptables()
+{
+	ARG="$@"	
+	CMD=$1 # iptables or ip6tables
+	ACTION=$2 # -I, -A, -D
+	RULE=${@:3}  
+
+	$CMD -C $RULE 2>/dev/null
+	exists=$(( ! $? ))
+
+	if [[ $ACTION == "-A" ]] || [[ $ACTION == "-I" ]]
+	then
+		if [ $exists -eq 0 ]; then
+			$ARG
+		fi
+	else # -D
+		if [ $exists -ne 0 ]; then
+			$ARG
+		fi
+	fi
+}
+
+firewall_start_v4() {
+	_iptables iptables -A FORWARD -t mangle -p tcp --dport 443 -m connbytes --connbytes-dir original --connbytes-mode packets --connbytes 0:19 -j NFQUEUE --queue-num 537 --queue-bypass	
+	_iptables iptables -I OUTPUT -m mark --mark 32768/32768 -j ACCEPT
+}
+
+firewall_stop_v4() {
+	_iptables iptables -D FORWARD -t mangle -p tcp --dport 443 -m connbytes --connbytes-dir original --connbytes-mode packets --connbytes 0:19 -j NFQUEUE --queue-num 537 --queue-bypass	
+	_iptables iptables -D OUTPUT -t filter -m mark --mark 32768/32768 -j ACCEPT
+}
+
+firewall_start_v6() {
+	if [ $IPV6 -eq 0 ]; then
+		return 0
+	fi
+
+	_iptables ip6tables -A FORWARD -t mangle -p tcp --dport 443 -m connbytes --connbytes-dir original --connbytes-mode packets --connbytes 0:19 -j NFQUEUE --queue-num 537 --queue-bypass	
+	_iptables ip6tables -I OUTPUT -m mark --mark 32768/32768 -j ACCEPT
+}
+
+firewall_stop_v6() {
+	if [ $IPV6 -eq 0 ]; then
+		return 0
+	fi
+
+	_iptables ip6tables -D FORWARD -t mangle -p tcp --dport 443 -m connbytes --connbytes-dir original --connbytes-mode packets --connbytes 0:19 -j NFQUEUE --queue-num 537 --queue-bypass	
+	_iptables ip6tables -D OUTPUT -t filter -m mark --mark 32768/32768 -j ACCEPT
+}
+
+kernel_modules_load() {
+	KERNEL=$(uname -r)
+
+	if [ -z "$(lsmod 2>/dev/null | grep "xt_connbytes ")" ]; then
+		insmod /lib/modules/$KERNEL/xt_connbytes.ko &> /dev/null
+		echo "xt_connbytes.ko loaded"
+	fi
+
+	if [ -z "$(lsmod 2>/dev/null | grep "xt_NFQUEUE ")" ]; then
+		insmod /lib/modules/$KERNEL/xt_NFQUEUE.ko &> /dev/null
+		echo "xt_NFQUEUE.ko loaded"
+	fi
+}
+
+system_config() {
+	sysctl -w net.netfilter.nf_conntrack_checksum=0 &> /dev/null
+	sysctl -w net.netfilter.nf_conntrack_tcp_be_liberal=1 &> /dev/null
+}
+
+status() {
+	if is_running; then
+		echo "running"
+  	else
+		echo "stopped"
+  	fi
+}
+
+case $ACTION in
+	start)
+		start
+		;;
+	stop)
+		stop
+		;;
+	status)
+		status
+		;;
+	restart)
+		stop
+		start
+		;;
+	firewall-load)
+		firewall_start_v4
+		firewall_start_v6
+		;;
+	firewall-stop)
+		firewall_stop_v4
+		firewall_stop_v6
+		;;
+	init-system)
+		kernel_modules_load
+		system_config
+		;;
+	*)
+		echo "Usage: $0 {start|stop|restart|status|firewall-load|firewall-stop||init-system}"
+esac
+
+
+

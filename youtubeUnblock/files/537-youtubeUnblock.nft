@@ -1,5 +1,0 @@
-#!/usr/sbin/nft -f
-# This file 
-
-insert rule inet fw4 mangle_forward tcp dport 443 ct original packets < 20 counter queue num 537 bypass
-insert rule inet fw4 output mark and 0x8000 == 0x8000 counter accept

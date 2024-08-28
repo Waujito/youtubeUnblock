@@ -41,12 +41,10 @@ define Build/Compile
 endef
 
 define Package/youtubeUnblock/install
-	$(INSTALL_DIR) $(1)/usr/bin
-	$(INSTALL_BIN) $(PKG_BUILD_DIR)/build/youtubeUnblock $(1)/usr/bin
-	$(INSTALL_DIR) $(1)/etc/init.d
-	$(INSTALL_BIN) ./files/youtubeUnblock.owrt $(1)/etc/init.d/youtubeUnblock
-	$(INSTALL_DIR) $(1)/usr/share/nftables.d/ruleset-post/
-	$(CP) ./files/537-youtubeUnblock.nft $(1)/usr/share/nftables.d/ruleset-post/537-youtubeUnblock.nft
+	$(INSTALL_DIR) $(1)/opt/bin
+	$(INSTALL_BIN) $(PKG_BUILD_DIR)/build/youtubeUnblock $(1)/opt/bin
+	$(INSTALL_DIR) $(1)/opt/etc/init.d
+	$(INSTALL_BIN) ./files/S51youtubeUnblock $(1)/opt/etc/init.d/S51youtubeUnblock
 endef
 
 $(eval $(call BuildPackage,youtubeUnblock))
