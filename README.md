@@ -24,13 +24,13 @@
 
 Bypasses Deep Packet Inspection (DPI) systems that relies on SNI. The package is for Linux only. It is also fully compatible with routers running [OpenWRT](https://github.com/openwrt). 
 
-The program was primarily developed to bypass YouTube Outage in Russia, but it works good with other websites blocked by SNI. Adjust the list of websites via `--sni-domains` flag for the program.
+The program was primarily developed to bypass YouTube Outage in Russia.
 
 The program is compatible with routers based on OpenWRT, Entware(Keenetic/ASUS) and host machines. The program offers binaries via Github Actions. The binaries of main branch are published in the [development pre-release](https://github.com/Waujito/youtubeUnblock/releases/tag/continuous). Check out [Github Actions](https://github.com/Waujito/youtubeUnblock/actions/workflows/build-ci.yml) if you want to see all the binaries compiled ever. You should know the arcitecture of your hardware to use binaries. On OpenWRT you can check it with command `grep ARCH /etc/openwrt_release`.
 
 On both OpenWRT and Entware install the program with opkg. If you got read-only filesystem error you may unpack the binary manually or specify opkg path `opkg -o <destdir>`.
 
-For Windows use [GoodbyeDPI from ValdikSS](https://github.com/ValdikSS/GoodbyeDPI) (you can find how to use it for YouTube [here](https://github.com/ValdikSS/GoodbyeDPI/issues/378)) The same behavior is also implemented in [zapret package for linux](https://github.com/bol-van/zapret).
+For Windows use [GoodbyeDPI by ValdikSS](https://github.com/ValdikSS/GoodbyeDPI) (you can find how to use it for YouTube [here](https://github.com/ValdikSS/GoodbyeDPI/issues/378)) The same behavior is also implemented in [zapret package for linux](https://github.com/bol-van/zapret).
 
 ## Configuration
 
@@ -141,7 +141,7 @@ Put flags to the **BINARY**, not an init script. If you are on OpenWRT you shoul
 
 Available flags:
 
-- `--sni-domains=<comma separated domain list>|all` List of domains you want to be handled by SNI. Use this string if you want to change default domain list. Defaults is `googlevideo.com,ggpht.com,ytimg.com,youtube.com,play.google.com,youtu.be,googleapis.com,googleusercontent.com,gstatic.com,l.google.com`. You can pass **all** if you want for every *ClientHello* to be handled.
+- `--sni-domains=<comma separated domain list>|all` List of domains you want to be handled by SNI. Use this string if you want to change default domain list. Defaults to `googlevideo.com,ggpht.com,ytimg.com,youtube.com,play.google.com,youtu.be,googleapis.com,googleusercontent.com,gstatic.com,l.google.com`. You can pass **all** if you want for every *ClientHello* to be handled.
 
 - `--queue-num=<number of netfilter queue>` The number of netfilter queue **youtubeUnblock** will be linked to. Defaults to **537**.
 
