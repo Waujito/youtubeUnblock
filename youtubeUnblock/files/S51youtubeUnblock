@@ -50,7 +50,7 @@ start() {
 		ARGS+=" --no-ipv6"
 	fi
 	
-	$PROCS $ARGS 2>&1 >/dev/null &
+	$PROCS $ARGS &>/dev/null &
 	
 	firewall_start_v4
 	firewall_start_v6
@@ -81,7 +81,7 @@ _iptables()
 	if [[ $ACTION == "-A" ]] || [[ $ACTION == "-I" ]]
 	then
 		if [ $exists -eq 0 ]; then
-			$ARG
+			$ARG || exit 1
 		fi
 	else # -D
 		if [ $exists -ne 0 ]; then
@@ -122,19 +122,19 @@ kernel_modules_load() {
 	KERNEL=$(uname -r)
 
 	if [ -z "$(lsmod 2>/dev/null | grep "xt_connbytes ")" ]; then
-		insmod /lib/modules/$KERNEL/xt_connbytes.ko &> /dev/null
+		insmod /lib/modules/$KERNEL/xt_connbytes.ko > /dev/null || exit 1
 		echo "xt_connbytes.ko loaded"
 	fi
 
 	if [ -z "$(lsmod 2>/dev/null | grep "xt_NFQUEUE ")" ]; then
-		insmod /lib/modules/$KERNEL/xt_NFQUEUE.ko &> /dev/null
+		insmod /lib/modules/$KERNEL/xt_NFQUEUE.ko > /dev/null || exit 1
 		echo "xt_NFQUEUE.ko loaded"
 	fi
 }
 
 system_config() {
-	sysctl -w net.netfilter.nf_conntrack_checksum=0 &> /dev/null
-	sysctl -w net.netfilter.nf_conntrack_tcp_be_liberal=1 &> /dev/null
+	sysctl -w net.netfilter.nf_conntrack_checksum=0 > /dev/null || exit 1
+	sysctl -w net.netfilter.nf_conntrack_tcp_be_liberal=1 > /dev/null || exit 1
 }
 
 status() {
@@ -172,7 +172,7 @@ case $ACTION in
 		system_config
 		;;
 	*)
-		echo "Usage: $0 {start|stop|restart|status|firewall-load|firewall-stop||init-system}"
+		echo "Usage: $0 {start|stop|restart|status|firewall-load|firewall-stop|init-system}"
 esac
 
 
