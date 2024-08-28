@@ -50,7 +50,7 @@ start() {
 		ARGS+=" --no-ipv6"
 	fi
 	
-	$PROCS $ARGS 2>&1 >/dev/null &
+	$PROCS $ARGS &>/dev/null &
 	
 	firewall_start_v4
 	firewall_start_v6
@@ -81,7 +81,7 @@ _iptables()
 	if [[ $ACTION == "-A" ]] || [[ $ACTION == "-I" ]]
 	then
 		if [ $exists -eq 0 ]; then
-			$ARG
+			$ARG || exit 1
 		fi
 	else # -D
 		if [ $exists -ne 0 ]; then
@@ -118,23 +118,55 @@ firewall_stop_v6() {
 	_iptables ip6tables -D OUTPUT -t filter -m mark --mark 32768/32768 -j ACCEPT
 }
 
+check_ipt_connbytes() {
+	iptables -C FORWARD -m connbytes --connbytes-dir original --connbytes-mode packets --connbytes 0:19 -j ACCEPT &>/dev/null
+
+	if [ $? -eq 2 ]; then
+		return 1
+	else 
+		return 0
+	fi
+}
+
+check_ipt_nfqueue() {
+	iptables -C FORWARD -t mangle -j NFQUEUE --queue-num 537 &>/dev/null
+
+	if [ $? -eq 2 ]; then
+		return 1
+	else 
+		return 0
+	fi
+}
+
 kernel_modules_load() {
 	KERNEL=$(uname -r)
 
-	if [ -z "$(lsmod 2>/dev/null | grep "xt_connbytes ")" ]; then
-		insmod /lib/modules/$KERNEL/xt_connbytes.ko &> /dev/null
-		echo "xt_connbytes.ko loaded"
+	if ! check_ipt_connbytes; then
+		connbytes_mod_path=$(find /lib/modules/$(uname -r) -name "xt_connbytes.ko*")
+
+		if [ -z "$connbytes_mod_path" ]; then
+			echo -e "$ansi_red Cannot find xt_connbytes.ko module $ansi_std"
+		else 
+			insmod "$connbytes_mod_path" || exit 1
+			echo "xt_connbytes.ko loaded"
+		fi
 	fi
 
-	if [ -z "$(lsmod 2>/dev/null | grep "xt_NFQUEUE ")" ]; then
-		insmod /lib/modules/$KERNEL/xt_NFQUEUE.ko &> /dev/null
-		echo "xt_NFQUEUE.ko loaded"
+	if ! check_ipt_nfqueue; then
+		nfqueue_mod_path=$(find /lib/modules/$(uname -r) -name "xt_NFQUEUE.ko*")
+
+		if [ -z "$nfqueue_mod_path" ]; then
+			echo -e "$ansi_red Cannot find xt_NFQUEUE.ko module $ansi_std"
+		else 
+			insmod "$nfqueue_mod_path" || exit 1
+			echo "xt_NFQUEUE.ko loaded"
+		fi
 	fi
 }
 
 system_config() {
-	sysctl -w net.netfilter.nf_conntrack_checksum=0 &> /dev/null
-	sysctl -w net.netfilter.nf_conntrack_tcp_be_liberal=1 &> /dev/null
+	sysctl -w net.netfilter.nf_conntrack_checksum=0 &> /dev/null || exit 1
+	sysctl -w net.netfilter.nf_conntrack_tcp_be_liberal=1 &> /dev/null || exit 1
 }
 
 status() {
@@ -172,7 +204,7 @@ case $ACTION in
 		system_config
 		;;
 	*)
-		echo "Usage: $0 {start|stop|restart|status|firewall-load|firewall-stop||init-system}"
+		echo "Usage: $0 {start|stop|restart|status|firewall-load|firewall-stop|init-system}"
 esac
 
 
