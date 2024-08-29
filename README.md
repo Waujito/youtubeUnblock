@@ -74,13 +74,9 @@ You can also run `/etc/init.d/youtubeUnblock enable` to force OpenWRT autostart 
 
 ### Entware
 
-For Entware on Keenetic here is an [installation guide (russian)](https://help.keenetic.com/hc/ru/articles/360021214160-%D0%A3%D1%81%D1%82%D0%B0%D0%BD%D0%BE%D0%B2%D0%BA%D0%B0-%D1%81%D0%B8%D1%81%D1%82%D0%B5%D0%BC%D1%8B-%D0%BF%D0%B0%D0%BA%D0%B5%D1%82%D0%BE%D0%B2-%D1%80%D0%B5%D0%BF%D0%BE%D0%B7%D0%B8%D1%82%D0%BE%D1%80%D0%B8%D1%8F-Entware-%D0%BD%D0%B0-USB-%D0%BD%D0%B0%D0%BA%D0%BE%D0%BF%D0%B8%D1%82%D0%B5%D0%BB%D1%8C). Note that if your Entware router is missing netfilter queue kernel modules, here is no way to deal with it since Entware does not offer kernel modules. You should probably try to install OpenWRT if the problem persist. You can check required modules with command `find /lib/modules/$(uname -r) -type f -name 'nfnetlink_queue.ko*'`. If that command return not null string, everything alright. All you need is to load the modules.
+For Entware on Keenetic here is an [installation guide (russian)](https://help.keenetic.com/hc/ru/articles/360021214160-%D0%A3%D1%81%D1%82%D0%B0%D0%BD%D0%BE%D0%B2%D0%BA%D0%B0-%D1%81%D0%B8%D1%81%D1%82%D0%B5%D0%BC%D1%8B-%D0%BF%D0%B0%D0%BA%D0%B5%D1%82%D0%BE%D0%B2-%D1%80%D0%B5%D0%BF%D0%BE%D0%B7%D0%B8%D1%82%D0%BE%D1%80%D0%B8%D1%8F-Entware-%D0%BD%D0%B0-USB-%D0%BD%D0%B0%D0%BA%D0%BE%D0%BF%D0%B8%D1%82%D0%B5%D0%BB%D1%8C). Note that if your Entware router is missing netfilter queue kernel modules, here is no way to deal with it since Entware does not offer kernel modules. 
 
-To check whether the modules are loaded, do `lsmod | grep nfnetlink_queue`. If the program return nothing, you should load them manually. 
-```sh
-insmod /lib/modules/3.3.8/kernel/net/netfilter/nfnetlink_queue.ko
-insmod /lib/modules/3.3.8/kernel/net/netfilter/xt_NFQUEUE.ko
-```
+Install the binary with `opkg install youtubeUnblock-*.ipk`. After installation, the binary in /opt/bin and the init script in /opt/etc/init.d/S51youtubeUnblock will be available. To run the youtubeUnblock, simply run `/opt/etc/init.d/S51youtubeUnblock start`
 
 ### PC configuration
 On local host make sure to change **FORWARD** to **OUTPUT** chain in the following Firewall rulesets.
