@@ -46,6 +46,7 @@ struct config_t {
 	unsigned int fk_winsize;
 	unsigned int fakeseq_offset;
 	unsigned int mark;
+	int synfake;
 };
 
 extern struct config_t config;

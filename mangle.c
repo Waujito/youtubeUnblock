@@ -67,6 +67,8 @@ drop:
 }
 
 int process_tcp_packet(const uint8_t *raw_payload, uint32_t raw_payload_len) {
+	const void *ipxh;
+	uint32_t iph_len;
 	const struct tcphdr *tcph;
 	uint32_t tcph_len;
 	const uint8_t *data;
@@ -78,13 +80,40 @@ int process_tcp_packet(const uint8_t *raw_payload, uint32_t raw_payload_len) {
 	lgtrace_addp("IPv%d", ipxv);
 
 	int ret = tcp_payload_split((uint8_t *)raw_payload, raw_payload_len,
-			      NULL, NULL,
+			      (void *)&ipxh, &iph_len,
 			      (struct tcphdr **)&tcph, &tcph_len,
 			      (uint8_t **)&data, &dlen);
 
 
 	if (ret < 0) {
 		goto accept;
+	}
+
+	if (tcph->syn && config.synfake) {
+		lgtrace_addp("TCP syn alter");
+		uint8_t payload[MAX_PACKET_SIZE];
+		memcpy(payload, ipxh, iph_len);
+		memcpy(payload + iph_len, tcph, tcph_len);
+		memcpy(payload + iph_len + tcph_len, config.fake_sni_pkt, config.fake_sni_pkt_sz);
+
+
+		struct tcphdr *tcph = (struct tcphdr *)(payload + iph_len);
+		if (ipxv == IP4VERSION) {
+			struct iphdr *iph = (struct iphdr *)payload;
+			iph->tot_len = htons(iph_len + tcph_len + config.fake_sni_pkt_sz);
+			set_ip_checksum(payload, iph_len);
+			set_tcp_checksum(tcph, iph, iph_len);
+		} else if (ipxv == IP6VERSION) {
+			struct ip6_hdr *ip6h = (struct ip6_hdr *)payload;
+			ip6h->ip6_ctlun.ip6_un1.ip6_un1_plen = ntohs(tcph_len + config.fake_sni_pkt_sz);
+			set_ip_checksum(ip6h, iph_len);
+			set_tcp_checksum(tcph, ip6h, iph_len);
+		}
+
+
+
+		instance_config.send_raw_packet(payload, iph_len + tcph_len + config.fake_sni_pkt_sz);
+		goto drop;
 	}
 
 	struct tls_verdict vrd = analyze_tls_data(data, dlen);
