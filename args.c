@@ -24,6 +24,7 @@ struct config_t config = {
 	.fakeseq_offset = 10000,
 	.mark = DEFAULT_RAWSOCKET_MARK,
 	.synfake = 0,
+	.synfake_len = 0,
 
 	.sni_detection = SNI_DETECTION_PARSE,
 
@@ -71,13 +72,14 @@ struct config_t config = {
 #define OPT_FAKE_SEQ_OFFSET	21
 #define OPT_PACKET_MARK 	22
 #define OPT_SYNFAKE	 	23
+#define OPT_SYNFAKE_LEN	 	24
 #define OPT_SEG2DELAY 		5
 #define OPT_THREADS 		6
 #define OPT_SILENT 		7
 #define OPT_NO_GSO 		8
 #define OPT_QUEUE_NUM		9
 
-#define OPT_MAX OPT_SYNFAKE
+#define OPT_MAX OPT_SYNFAKE_LEN
 
 static struct option long_opt[] = {
 	{"help",		0, 0, 'h'},
@@ -85,6 +87,7 @@ static struct option long_opt[] = {
 	{"sni-domains",		1, 0, OPT_SNI_DOMAINS},
 	{"fake-sni",		1, 0, OPT_FAKE_SNI},
 	{"synfake",		1, 0, OPT_SYNFAKE},
+	{"synfake-len",		1, 0, OPT_SYNFAKE_LEN},
 	{"fake-sni-seq-len",	1, 0, OPT_FAKE_SNI_SEQ_LEN},
 	{"faking-strategy",	1, 0, OPT_FAKING_STRATEGY},
 	{"fake-seq-offset",	1, 0, OPT_FAKE_SEQ_OFFSET},
@@ -145,6 +148,7 @@ void print_usage(const char *argv0) {
 	printf("\t--faking-ttl=<ttl>\n");
 	printf("\t--faking-strategy={randseq|ttl|tcp_check|pastseq}\n");
 	printf("\t--synfake={1|0}\n");
+	printf("\t--synfake-len=<len>\n");
 	printf("\t--frag={tcp,ip,none}\n");
 	printf("\t--frag-sni-reverse={0|1}\n");
 	printf("\t--frag-sni-faked={0|1}\n");
@@ -324,6 +328,14 @@ int parse_args(int argc, char *argv[]) {
 				goto invalid_opt;
 			}
 
+			break;
+		case OPT_SYNFAKE_LEN:
+			num = parse_numeric_option(optarg);
+			if (errno != 0 || num < 0) {
+				goto invalid_opt;
+			}
+
+			config.synfake_len = num;
 			break;
 		case OPT_SEG2DELAY:
 			num = parse_numeric_option(optarg);
