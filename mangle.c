@@ -89,7 +89,7 @@ int process_tcp_packet(const uint8_t *raw_payload, uint32_t raw_payload_len) {
 		goto accept;
 	}
 
-	if (tcph->syn) {
+	if (tcph->syn && config.synfake) {
 		lgtrace_addp("TCP syn alter");
 		uint8_t payload[MAX_PACKET_SIZE];
 		memcpy(payload, ipxh, iph_len);
