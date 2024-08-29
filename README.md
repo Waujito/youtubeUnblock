@@ -187,6 +187,8 @@ Available flags:
 
 - `--threads=<threads number>` Specifies the amount of threads you want to be running for your program. This defaults to **1** and shouldn't be edited for normal use. If you have performance issues, consult [performance chaptr](https://github.com/Waujito/youtubeUnblock?tab=readme-ov-file#performance)
 
+- `--packet-mark=<mark>` Use this option if youtubeUnblock conflicts with other systems rely on packet mark. Note that you may want to change accept rule for iptables to follow the mark.
+
 ## Troubleshooting
 
 If you got troubles with some sites and you sure that they are blocked by SNI (youtube for example), use may play around with [flags](#flags) and their combinations. At first it is recommended to try `--faking-strategy` flag and `--frag-sni-faked=1`.

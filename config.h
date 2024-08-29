@@ -45,6 +45,7 @@ struct config_t {
 	unsigned int fake_sni_pkt_sz;
 	unsigned int fk_winsize;
 	unsigned int fakeseq_offset;
+	unsigned int mark;
 };
 
 extern struct config_t config;
@@ -71,7 +72,7 @@ extern struct config_t config;
 #define FRAGMENTATION_STRATEGY FRAG_STRAT_TCP
 #endif
 
-#define RAWSOCKET_MARK (1 << 15)
+#define DEFAULT_RAWSOCKET_MARK (1 << 15)
 
 #ifdef USE_SEG2_DELAY
 #define SEG2_DELAY 100

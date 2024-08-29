@@ -87,7 +87,7 @@ static int open_raw_socket(void) {
 		return -1;
 	}
 
-	int mark = RAWSOCKET_MARK;
+	int mark = config.mark;
 	if (setsockopt(rawsocket, SOL_SOCKET, SO_MARK, &mark, sizeof(mark)) < 0)
 	{
 		fprintf(stderr, "setsockopt(SO_MARK, %d) failed\n", mark);
@@ -139,7 +139,7 @@ static int open_raw6_socket(void) {
 		return -1;
 	}
 
-	int mark = RAWSOCKET_MARK;
+	int mark = config.mark;
 	if (setsockopt(raw6socket, SOL_SOCKET, SO_MARK, &mark, sizeof(mark)) < 0)
 	{
 		fprintf(stderr, "setsockopt(SO_MARK, %d) failed\n", mark);
@@ -424,8 +424,8 @@ static int queue_cb(const struct nlmsghdr *nlh, void *data) {
 
 	if (attr[NFQA_MARK] != NULL) {
 		// Skip packets sent by rawsocket to escape infinity loop.
-		if ((ntohl(mnl_attr_get_u32(attr[NFQA_MARK])) & RAWSOCKET_MARK) == 
-			RAWSOCKET_MARK) {
+		if ((ntohl(mnl_attr_get_u32(attr[NFQA_MARK])) & config.mark) == 
+			config.mark) {
 			return fallback_accept_packet(packet.id, *qdata);
 		}
 	}
