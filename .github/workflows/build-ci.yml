@@ -108,31 +108,31 @@ jobs:
         branch:
           - openwrt-23.05
         arch:
-          - aarch64_cortex-a53
-          - aarch64_cortex-a72
-          - aarch64_generic
-          - arm_arm1176jzf-s_vfp
-          - arm_arm926ej-s
-          - arm_cortex-a15_neon-vfpv4
-          - arm_cortex-a5_vfpv4
-          - arm_cortex-a7
-          - arm_cortex-a7_neon-vfpv4
-          - arm_cortex-a7_vfpv4
-          - arm_cortex-a8_vfpv3
-          - arm_cortex-a9
-          - arm_cortex-a9_neon
-          - arm_cortex-a9_vfpv3-d16
-          - arm_fa526
-          - arm_mpcore
-          - arm_xscale
-          - mips64_octeonplus
-          - mips_24kc
-          - mips_4kec
-          - mips_mips32
-          - mipsel_24kc
-          - mipsel_24kc_24kf
-          - mipsel_74kc
-          - mipsel_mips32
+          # - aarch64_cortex-a53
+          # - aarch64_cortex-a72
+          # - aarch64_generic
+          # - arm_arm1176jzf-s_vfp
+          # - arm_arm926ej-s
+          # - arm_cortex-a15_neon-vfpv4
+          # - arm_cortex-a5_vfpv4
+          # - arm_cortex-a7
+          # - arm_cortex-a7_neon-vfpv4
+          # - arm_cortex-a7_vfpv4
+          # - arm_cortex-a8_vfpv3
+          # - arm_cortex-a9
+          # - arm_cortex-a9_neon
+          # - arm_cortex-a9_vfpv3-d16
+          # - arm_fa526
+          # - arm_mpcore
+          # - arm_xscale
+          # - mips64_octeonplus
+          # - mips_24kc
+          # - mips_4kec
+          # - mips_mips32
+          # - mipsel_24kc
+          # - mipsel_24kc_24kf
+          # - mipsel_74kc
+          # - mipsel_mips32
           - x86_64
     container:
       image: openwrt/sdk:${{ matrix.arch }}-${{ matrix.branch }}
@@ -171,6 +171,91 @@ jobs:
         with:
           name: ${{ matrix.branch }}-${{ matrix.arch }}
           path: /builder/youtubeUnblock*.ipk
+          if-no-files-found: error
+  build-openwrt-kmod:
+    needs: prepare
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        branch:
+          - openwrt-23.05
+          - openwrt-22.03
+          - openwrt-21.02
+          - openwrt-19.07
+        include:
+          - branch: openwrt-23.05
+            wd_path: /builder
+          - branch: openwrt-22.03
+            wd_path: /builder
+          - branch: openwrt-21.02
+            wd_path: /builder
+          - branch: openwrt-19.07
+            wd_path: /home/build/openwrt
+        arch:
+          # - aarch64_cortex-a53
+          # - aarch64_cortex-a72
+          # - aarch64_generic
+          # - arm_arm1176jzf-s_vfp
+          # - arm_arm926ej-s
+          # - arm_cortex-a15_neon-vfpv4
+          # - arm_cortex-a5_vfpv4
+          # - arm_cortex-a7
+          # - arm_cortex-a7_neon-vfpv4
+          # - arm_cortex-a7_vfpv4
+          # - arm_cortex-a8_vfpv3
+          # - arm_cortex-a9
+          # - arm_cortex-a9_neon
+          # - arm_cortex-a9_vfpv3-d16
+          # - arm_fa526
+          # - arm_mpcore
+          # - arm_xscale
+          # - mips64_octeonplus
+          # - mips_24kc
+          # - mips_4kec
+          # - mips_mips32
+          - mipsel_24kc
+          # - mipsel_24kc_24kf
+          # - mipsel_74kc
+          # - mipsel_mips32
+          # - x86_64
+    container:
+      image: openwrt/sdk:${{ matrix.arch }}-${{ matrix.branch }}
+      options: --user root
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: 'openwrt'
+
+      - name: Prepare build
+        env:
+          VERSION: ${{ needs.prepare.outputs.version }}
+          SHA: ${{ needs.prepare.outputs.sha }}
+        run: |
+          sed -i "s/PKG_REV:=.*$/PKG_REV:=$SHA/;s/PKG_VERSION:=.*$/PKG_VERSION:=$VERSION-$SHA/" kyoutubeUnblock/Makefile
+
+      - name: Build packages
+        id: build
+        env:
+          VERSION: ${{ needs.prepare.outputs.version }}
+          SHA: ${{ needs.prepare.outputs.sha }}
+        working-directory: ${{ matrix.wd_path }}
+        run: |
+          pwd
+          echo "src-link youtubeUnblock $GITHUB_WORKSPACE" >> feeds.conf
+          cat feeds.conf
+          ./scripts/feeds update youtubeUnblock
+          ./scripts/feeds install -a -p youtubeUnblock
+          make defconfig
+          make package/kyoutubeUnblock/compile V=s
+          cp $(find ./bin -type f -name 'youtubeUnblock*.ipk') ./
+
+      - name: Upload packages
+        if: steps.build.outcome == 'success'
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.branch }}-${{ matrix.arch }}
+          path: ${{ matrix.wd_path }}/youtubeUnblock*.ipk
           if-no-files-found: error
 
   build-entware:
@@ -267,7 +352,7 @@ jobs:
 
   pre-release:
     if: github.event_name != 'pull_request' && github.ref_name == 'main'
-    needs: [build-static, build-openwrt, build-entware]
+    needs: [build-static, build-openwrt, build-entware, build-openwrt-kmod]
     permissions:
       contents: write
     runs-on: ubuntu-latest
