@@ -56,7 +56,7 @@ struct config_t config = {
 #ifdef DEBUG
 	.verbose = 2,
 #else
-	.verbose = 0,
+	.verbose = 1,
 #endif
 
 	.domains_str = defaul_snistr,
@@ -76,26 +76,24 @@ MODULE_DESCRIPTION("Linux kernel module for youtube unblock");
 static unsigned int ykb_nf_hook(void *priv, 
 			struct sk_buff *skb, 
 			const struct nf_hook_state *state) {
+	int ret;
+
 	if ((skb->mark & config.mark) == config.mark) 
-		goto accept_no_free;
+		goto accept;
 	
 	if (skb->head == NULL) 
-		goto accept_no_free;
+		goto accept;
 	
-	uint32_t buflen = skb->len;
-	if (buflen > MAX_PACKET_SIZE)
-		goto accept_no_free;
+	if (skb->len > MAX_PACKET_SIZE)
+		goto accept;
 
-	NETBUF_ALLOC(buf, buflen);
-	if (!NETBUF_CHECK(buf))
-		goto accept_no_free;
-
-	if (skb_copy_bits(skb, 0, buf, buflen) < 0) {
-		pr_err("Unable copy bits\n");
+	ret = skb_linearize(skb);
+	if (ret < 0) {
+		lgerror("Cannot linearize", ret);
 		goto accept;
 	}
 
-	int vrd = process_packet(buf, buflen);
+	int vrd = process_packet(skb->data, skb->len);
 
 	switch(vrd) {
 		case PKT_ACCEPT:
@@ -105,11 +103,8 @@ static unsigned int ykb_nf_hook(void *priv,
 	}
 
 accept:
-	NETBUF_FREE(buf);
-accept_no_free:
 	return NF_ACCEPT;
 drop:
-	NETBUF_FREE(buf);
 	kfree_skb(skb);
 	return NF_STOLEN;
 }
