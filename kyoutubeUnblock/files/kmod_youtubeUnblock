@@ -1,0 +1,13 @@
+#!/bin/sh /etc/rc.common
+START=91
+STOP=91
+
+# Openwrt init script. It just runs and stops the kernel module.
+
+start() {
+	modprobe kyoutubeUnblock
+}
+
+stop() {
+	rmmod kyoutubeUnblock
+}
