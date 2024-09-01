@@ -234,9 +234,6 @@ static int send_raw_ipv6(const uint8_t *pkt, uint32_t pktlen) {
 		.sin6_addr = iph->ip6_dst
 	};
 
-	tcp6_set_checksum((void *)(uint8_t *)pkt + sizeof(struct ip6_hdr), (void *)pkt);
-
-
 	if (config.threads != 1)
 		pthread_mutex_lock(&rawsocket_lock);
 
