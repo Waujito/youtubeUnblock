@@ -91,7 +91,7 @@ typedef __u64 	uint64_t;
  * Use NETBUF_CHECK to check that buffer was properly allocated.
  */
 #ifdef KERNEL_SPACE
-#include <linux/gfp_types.h>
+#include <linux/gfp.h>
 #define NETBUF_ALLOC(buf, buf_len) __u8* buf = kmalloc(buf_len, GFP_ATOMIC);
 #define NETBUF_CHECK(buf) ((buf) != NULL)
 #define NETBUF_FREE(buf) kfree(buf);

@@ -7,8 +7,6 @@ LD	:= ld
 CFLAGS	:=
 LDFLAGS	:=
 
-IPT_CFLAGS := -Wall -Wpedantic -O2
-
 .PHONY: kmake kload kunload kreload kclean kmclean xclean
 kmake: kmod
 
