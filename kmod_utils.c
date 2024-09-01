@@ -30,21 +30,9 @@ int open_raw_socket(void) {
 		goto err;
 	}
 
-	sockptr_t optval = {
-		.kernel = NULL,
-		.is_kernel = 1
-	};
-
-	int mark = config.mark;
-	optval.kernel = &mark;
-	ret = sock_setsockopt(rawsocket, SOL_SOCKET, SO_MARK, optval, sizeof(mark));
-	if (ret < 0)
-	{
-		pr_alert("setsockopt(SO_MARK, %d) failed\n", mark);
-		goto sr_err;
-	}
-	int one = 1;
-	optval.kernel = &one;
+	// That's funny, but this is how it is done in the kernel
+	// https://elixir.bootlin.com/linux/v3.17.7/source/net/core/sock.c#L916
+	rawsocket->sk->sk_mark=config.mark;
 
 	return 0;
 sr_err:
@@ -104,21 +92,9 @@ int open_raw6_socket(void) {
 		goto err;
 	}
 
-	sockptr_t optval = {
-		.kernel = NULL,
-		.is_kernel = 1
-	};
-
-	int mark = config.mark;
-	optval.kernel = &mark;
-	ret = sock_setsockopt(raw6socket, SOL_SOCKET, SO_MARK, optval, sizeof(mark));
-	if (ret < 0)
-	{
-		pr_alert("setsockopt(SO_MARK, %d) failed\n", mark);
-		goto sr_err;
-	}
-	int one = 1;
-	optval.kernel = &one;
+	// That's funny, but this is how it is done in the kernel
+	// https://elixir.bootlin.com/linux/v3.17.7/source/net/core/sock.c#L916
+	raw6socket->sk->sk_mark=config.mark;
 
 	return 0;
 sr_err:
