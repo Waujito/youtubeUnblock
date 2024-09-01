@@ -66,9 +66,11 @@ MODULE_VERSION("0.3.2");
 MODULE_AUTHOR("Vadim Vetrov <vetrovvd@gmail.com>");
 MODULE_DESCRIPTION("Linux kernel module for youtube unblock");
 
-static int rsfd;
 static struct socket *rawsocket;
 DEFINE_MUTEX(rslock);
+
+static struct socket *raw6socket;
+DEFINE_MUTEX(rs6lock);
 
 static int open_raw_socket(void) {
 	int ret = 0;
@@ -144,6 +146,79 @@ static int send_raw_ipv4(const uint8_t *pkt, uint32_t pktlen) {
 	return ret;
 }
 
+static int open_raw6_socket(void) {
+	int ret = 0;
+	ret = sock_create(AF_INET6, SOCK_RAW, IPPROTO_RAW, &raw6socket);
+
+	if (ret < 0) {
+		pr_alert("Unable to create raw socket\n");
+		goto err;
+	}
+
+	sockptr_t optval = {
+		.kernel = NULL,
+		.is_kernel = 1
+	};
+
+	int mark = config.mark;
+	optval.kernel = &mark;
+	ret = sock_setsockopt(raw6socket, SOL_SOCKET, SO_MARK, optval, sizeof(mark));
+	if (ret < 0)
+	{
+		pr_alert("setsockopt(SO_MARK, %d) failed\n", mark);
+		goto sr_err;
+	}
+	int one = 1;
+	optval.kernel = &one;
+
+	return 0;
+sr_err:
+	sock_release(raw6socket);
+err:
+	return ret;
+}
+
+static void close_raw6_socket(void) {
+	sock_release(raw6socket);
+}
+
+static int send_raw_ipv6(const uint8_t *pkt, uint32_t pktlen) {
+	int ret = 0;
+	if (pktlen > AVAILABLE_MTU) return -ENOMEM;
+
+	struct ip6_hdr *iph;
+
+	if ((ret = ip6_payload_split(
+	(uint8_t *)pkt, pktlen, &iph, NULL, NULL, NULL)) < 0) {
+		return ret;
+	}
+
+	struct sockaddr_in6 daddr = {
+		.sin6_family = AF_INET6,
+		/* Always 0 for raw socket */
+		.sin6_port = 0,
+		.sin6_addr = iph->ip6_dst
+	};
+
+	struct msghdr msg;
+	struct kvec iov;
+	iov.iov_base = (__u8 *)pkt;
+	iov.iov_len = pktlen;
+	iov_iter_kvec(&msg.msg_iter, READ, &iov, 1, 1);
+
+	msg.msg_flags = 0;
+	msg.msg_name = &daddr;
+	msg.msg_namelen = sizeof(struct sockaddr_in6);
+	msg.msg_control = NULL;
+	msg.msg_controllen = 0;
+
+	mutex_lock(&rs6lock);
+	ret = kernel_sendmsg(raw6socket, &msg, &iov, 1, pktlen);
+	mutex_unlock(&rs6lock);
+
+	return ret;
+}
+
 static int send_raw_socket(const uint8_t *pkt, uint32_t pktlen) {
 	int ret;
 
@@ -213,8 +288,8 @@ erret_lc:
 	if (ipvx == IP4VERSION) 
 		return send_raw_ipv4(pkt, pktlen);
 
-	// else if (ipvx == IP6VERSION) 
-		// return send_raw_ipv6(pkt, pktlen);
+	else if (ipvx == IP6VERSION) 
+		return send_raw_ipv6(pkt, pktlen);
 
 	printf("proto version %d is unsupported\n", ipvx);
 	return -EINVAL;
@@ -286,17 +361,42 @@ static struct xt_target ykb_tg_reg __read_mostly = {
 	.me		= THIS_MODULE,
 };
 
+static struct xt_target ykb6_tg_reg __read_mostly = {
+	.name		= "YTUNBLOCK",
+	.target		= ykb_tg,
+	.table		= "mangle",
+	.hooks		= (1 << NF_INET_LOCAL_OUT) | (1 << NF_INET_FORWARD), 
+	.targetsize	= sizeof(struct xt_ytunblock_tginfo),
+	.proto		= IPPROTO_TCP,
+	.family		= NFPROTO_IPV6,
+	.checkentry	= ykb_chk,
+	.me		= THIS_MODULE,
+};
+
 static int __init ykb_init(void) {
 	int ret = 0;
 
 	ret = open_raw_socket();
 	if (ret < 0) goto err;
 
+	if (config.use_ipv6) {
+		ret = open_raw6_socket();
+		if (ret < 0) goto close_rawsocket;
+
+		ret = xt_register_target(&ykb6_tg_reg);
+		if (ret < 0) goto close_raw6socket;
+	}
+
 	ret = xt_register_target(&ykb_tg_reg);
-	if (ret < 0) goto close_rawsocket;
+	if (ret < 0) goto close_xt6_target;
 
 	pr_info("youtubeUnblock kernel module started.\n");
 	return 0;
+
+close_xt6_target:
+	if (config.use_ipv6) xt_unregister_target(&ykb6_tg_reg);
+close_raw6socket:
+	if (config.use_ipv6) close_raw6_socket();
 close_rawsocket:
 	close_raw_socket();
 err:
@@ -305,6 +405,8 @@ err:
 
 static void __exit ykb_destroy(void) {
 	xt_unregister_target(&ykb_tg_reg);
+	if (config.use_ipv6) xt_unregister_target(&ykb6_tg_reg);
+	if (config.use_ipv6) close_raw6_socket();
 	close_raw_socket();
 	pr_info("youtubeUnblock kernel module destroyed.\n");
 }

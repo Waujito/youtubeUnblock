@@ -37,7 +37,14 @@ void ip4_set_checksum(struct iphdr *iph)
 void tcp6_set_checksum(struct tcphdr *tcph, struct ip6_hdr *iph) {
 	uint16_t old_check = ntohs(tcph->check);
 
-	// nfq_tcp_compute_checksum_ipv6(tcph, iph);
+#ifdef KERNEL_SPACE
+	tcph->check = 0;
+	tcph->check = csum_ipv6_magic(&iph->saddr, &iph->daddr, 
+		 ntohs(iph->ip6_plen), IPPROTO_TCP, 
+		 csum_partial(tcph, ntohs(iph->ip6_plen), 0));
+#else
+	nfq_tcp_compute_checksum_ipv6(tcph, iph);
+#endif
 }
 
 int set_ip_checksum(void *iph, uint32_t iphb_len) {
