@@ -277,6 +277,60 @@ int udp4_payload_split(uint8_t *pkt, uint32_t buflen,
 	return 0;
 }
 
+int udp6_payload_split(uint8_t *pkt, uint32_t buflen,
+		       struct ip6_hdr **iph, uint32_t *iph_len,
+		       struct udphdr **udph,
+		       uint8_t **payload, uint32_t *plen) {
+	struct ip6_hdr *hdr;
+	uint32_t hdr_len;
+	struct udphdr *uhdr;
+	uint32_t uhdr_len;
+	
+	uint8_t *ip_ph;
+	uint32_t ip_phlen;
+
+	if (ip6_payload_split(pkt, buflen, &hdr, &hdr_len, 
+			&ip_ph, &ip_phlen)){
+		return -EINVAL;
+	}
+
+
+	if (
+		hdr->ip6_nxt != IPPROTO_UDP || 
+		ip_phlen < sizeof(struct udphdr)) {
+		return -EINVAL;
+	}
+
+
+	uhdr = (struct udphdr *)(ip_ph);
+	if (uhdr->len != 0 && ntohs(uhdr->len) != ip_phlen) {
+		return -EINVAL;
+	}
+
+	if (iph) *iph = hdr;
+	if (iph_len) *iph_len = hdr_len;
+	if (udph) *udph = uhdr;
+	if (payload) *payload = ip_ph + sizeof(struct udphdr);
+	if (plen) *plen = ip_phlen - sizeof(struct udphdr);
+
+	return 0;
+}
+
+int udp_payload_split(uint8_t *pkt, uint32_t buflen,
+		      void **iph, uint32_t *iph_len,
+		      struct udphdr **udph,
+		      uint8_t **payload, uint32_t *plen) {
+	int netvers = netproto_version(pkt, buflen);
+	if (netvers == IP4VERSION) {
+		return udp4_payload_split(pkt, buflen, (struct iphdr **)iph, iph_len, udph, payload, plen);
+	} else if (netvers == IP6VERSION) {
+		return udp6_payload_split(pkt, buflen, (struct ip6_hdr **)iph, iph_len, udph, payload, plen);
+	} else {
+		lgerror("Internet Protocol version is unsupported", -EINVAL);
+		return -EINVAL;
+	}
+}
+
 // split packet to two ipv4 fragments.
 int ip4_frag(const uint8_t *pkt, uint32_t buflen, uint32_t payload_offset, 
 			uint8_t *frag1, uint32_t *f1len, 

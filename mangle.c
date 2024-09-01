@@ -56,7 +56,7 @@ int process_packet(const uint8_t *raw_payload, uint32_t raw_payload_len) {
 	case IPPROTO_TCP:
 		return process_tcp_packet(raw_payload, raw_payload_len);
 	case IPPROTO_UDP:
-		return process_udp4_packet(raw_payload, raw_payload_len);
+		return process_udp_packet(raw_payload, raw_payload_len);
 	default:
 		goto accept;
 	}
@@ -290,15 +290,15 @@ drop:
 	return PKT_DROP;
 }
 
-int process_udp4_packet(const uint8_t *pkt, uint32_t pktlen) {
-	const struct iphdr *iph;
+int process_udp_packet(const uint8_t *pkt, uint32_t pktlen) {
+	const void *iph;
 	uint32_t iph_len;
 	const struct udphdr *udph;
 	const uint8_t *data;
 	uint32_t dlen;
 
-	int ret = udp4_payload_split((uint8_t *)pkt, pktlen,
-			      (struct iphdr **)&iph, &iph_len, 
+	int ret = udp_payload_split((uint8_t *)pkt, pktlen,
+			      (void **)&iph, &iph_len, 
 			      (struct udphdr **)&udph,
 			      (uint8_t **)&data, &dlen);
 

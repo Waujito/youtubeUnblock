@@ -53,7 +53,7 @@ int process_tcp_packet(const uint8_t *raw_payload, uint32_t raw_payload_len);
  * Processes the UDP packet.
  * Returns verdict.
  */
-int process_udp4_packet(const uint8_t *pkt, uint32_t pktlen);
+int process_udp_packet(const uint8_t *pkt, uint32_t pktlen);
 
 /**
  * Sends fake client hello.

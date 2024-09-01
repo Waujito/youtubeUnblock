@@ -81,6 +81,16 @@ int udp4_payload_split(uint8_t *pkt, uint32_t buflen,
 		       struct udphdr **udph,
 		       uint8_t **payload, uint32_t *plen);
 
+int udp6_payload_split(uint8_t *pkt, uint32_t buflen,
+		       struct ip6_hdr **iph, uint32_t *iph_len,
+		       struct udphdr **udph,
+		       uint8_t **payload, uint32_t *plen);
+
+int udp_payload_split(uint8_t *pkt, uint32_t buflen,
+		      void **iph, uint32_t *iph_len,
+		      struct udphdr **udph,
+		      uint8_t **payload, uint32_t *plen);
+
 void tcp4_set_checksum(struct tcphdr *tcph, struct iphdr *iph);
 void ip4_set_checksum(struct iphdr *iph);
 void ip6_set_checksum(struct ip6_hdr *iph);
