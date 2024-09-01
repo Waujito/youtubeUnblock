@@ -9,8 +9,11 @@
 #include <linux/mutex.h>
 #include <linux/socket.h>
 #include <linux/net.h>
-#include <linux/netfilter/x_tables.h>
-#include "ipt_YTUNBLOCK.h"
+#include <linux/version.h>
+
+#include <linux/netfilter.h>
+#include <linux/netfilter_ipv4.h>
+#include <linux/netfilter_ipv6.h>
 
 #include "mangle.h"
 #include "config.h"
@@ -69,20 +72,23 @@ MODULE_VERSION("0.3.2");
 MODULE_AUTHOR("Vadim Vetrov <vetrovvd@gmail.com>");
 MODULE_DESCRIPTION("Linux kernel module for youtube unblock");
 
-static unsigned int ykb_tg(struct sk_buff *skb, const struct xt_action_param *par) 
-{
+
+static unsigned int ykb_nf_hook(void *priv, 
+			struct sk_buff *skb, 
+			const struct nf_hook_state *state) {
 	if ((skb->mark & config.mark) == config.mark) 
-		return XT_CONTINUE;
+		goto accept_no_free;
 	
-	if (skb->head == NULL) return XT_CONTINUE;
+	if (skb->head == NULL) 
+		goto accept_no_free;
 	
 	uint32_t buflen = skb->len;
 	if (buflen > MAX_PACKET_SIZE)
-		goto accept;
+		goto accept_no_free;
 
 	NETBUF_ALLOC(buf, buflen);
 	if (!NETBUF_CHECK(buf))
-		goto no_free;
+		goto accept_no_free;
 
 	if (skb_copy_bits(skb, 0, buf, buflen) < 0) {
 		pr_err("Unable copy bits\n");
@@ -100,39 +106,27 @@ static unsigned int ykb_tg(struct sk_buff *skb, const struct xt_action_param *pa
 
 accept:
 	NETBUF_FREE(buf);
-no_free:
-	return XT_CONTINUE;
+accept_no_free:
+	return NF_ACCEPT;
 drop:
 	NETBUF_FREE(buf);
 	kfree_skb(skb);
 	return NF_STOLEN;
 }
 
-static int ykb_chk(const struct xt_tgchk_param *par) {
-	return 0;
-}
 
-
-static struct xt_target ykb_tg_reg __read_mostly = {
-	.name		= "YTUNBLOCK",
-	.target		= ykb_tg,
-	.table		= "mangle",
-	.hooks		= (1 << NF_INET_LOCAL_OUT) | (1 << NF_INET_FORWARD), 
-	.targetsize	= sizeof(struct xt_ytunblock_tginfo),
-	.family		= NFPROTO_IPV4,
-	.checkentry	= ykb_chk,
-	.me		= THIS_MODULE,
+static struct nf_hook_ops ykb_nf_reg __read_mostly = {
+	.hook		= ykb_nf_hook,
+	.pf		= NFPROTO_IPV4,
+	.hooknum	= NF_INET_POST_ROUTING,
+	.priority	= NF_IP_PRI_MANGLE,
 };
 
-static struct xt_target ykb6_tg_reg __read_mostly = {
-	.name		= "YTUNBLOCK",
-	.target		= ykb_tg,
-	.table		= "mangle",
-	.hooks		= (1 << NF_INET_LOCAL_OUT) | (1 << NF_INET_FORWARD), 
-	.targetsize	= sizeof(struct xt_ytunblock_tginfo),
-	.family		= NFPROTO_IPV6,
-	.checkentry	= ykb_chk,
-	.me		= THIS_MODULE,
+static struct nf_hook_ops ykb6_nf_reg __read_mostly = {
+	.hook		= ykb_nf_hook,
+	.pf		= NFPROTO_IPV6,
+	.hooknum	= NF_INET_POST_ROUTING,
+	.priority	= NF_IP6_PRI_MANGLE,
 };
 
 static int __init ykb_init(void) {
@@ -141,24 +135,39 @@ static int __init ykb_init(void) {
 	ret = open_raw_socket();
 	if (ret < 0) goto err;
 
+
 	if (config.use_ipv6) {
 		ret = open_raw6_socket();
 		if (ret < 0) goto close_rawsocket;
 
-		ret = xt_register_target(&ykb6_tg_reg);
-		if (ret < 0) goto close_raw6socket;
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4,13,0)
+		struct net *n;
+		for_each_net(n) {
+			ret = nf_register_net_hook(n, &ykb6_nf_reg);
+			if (ret < 0) 
+				lgerror("bad rat",ret);
+		}
+#else
+		nf_register_hook(&ykb6_nf_reg);
+#endif
 	}
 
-	ret = xt_register_target(&ykb_tg_reg);
-	if (ret < 0) goto close_xt6_target;
+
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4,13,0)
+	struct net *n;
+
+	for_each_net(n) {
+		ret = nf_register_net_hook(n, &ykb_nf_reg);
+		if (ret < 0) 
+			lgerror("bad rat",ret);
+	}
+#else
+	nf_register_hook(&ykb_nf_reg);
+#endif
 
 	pr_info("youtubeUnblock kernel module started.\n");
 	return 0;
 
-close_xt6_target:
-	if (config.use_ipv6) xt_unregister_target(&ykb6_tg_reg);
-close_raw6socket:
-	if (config.use_ipv6) close_raw6_socket();
 close_rawsocket:
 	close_raw_socket();
 err:
@@ -166,9 +175,25 @@ err:
 }
 
 static void __exit ykb_destroy(void) {
-	xt_unregister_target(&ykb_tg_reg);
-	if (config.use_ipv6) xt_unregister_target(&ykb6_tg_reg);
-	if (config.use_ipv6) close_raw6_socket();
+	if (config.use_ipv6) {
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4,13,0)
+		struct net *n;
+		for_each_net(n)
+			nf_unregister_net_hook(n, &ykb6_nf_reg);
+#else
+		nf_unregister_hook(&ykb6_nf_reg);
+#endif
+		close_raw6_socket();
+	}
+
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4,13,0)
+	struct net *n;
+	for_each_net(n)
+		nf_unregister_net_hook(n, &ykb_nf_reg);
+#else
+	nf_unregister_hook(&ykb_nf_reg);
+#endif
+
 	close_raw_socket();
 	pr_info("youtubeUnblock kernel module destroyed.\n");
 }
