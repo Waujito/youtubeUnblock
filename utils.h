@@ -89,4 +89,6 @@ void tcp6_set_checksum(struct tcphdr *tcph, struct ip6_hdr *iph);
 int  set_ip_checksum(void *iph, uint32_t iphb_len);
 int  set_tcp_checksum(struct tcphdr *tcph, void *iph, uint32_t iphb_len);
 
+void z_function(const char *str, int *zbuf, size_t len);
+
 #endif /* UTILS_H */

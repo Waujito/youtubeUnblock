@@ -48,7 +48,7 @@ int quic_parse_data(uint8_t *raw_payload, uint32_t raw_payload_len,
 	}
 
 	uint8_t found = 0;
-	for (uint8_t i = 0; i < sizeof(supported_versions); i++) {
+	for (uint8_t i = 0; i < 2; i++) {
 		if (ntohl(nqch->version) == supported_versions[i]) {
 			found = 1;
 		}

@@ -1,6 +1,10 @@
 #ifndef YTB_CONFIG_H
 #define YTB_CONFIG_H
 
+#ifndef KERNEL_SPACE
+#define USER_SPACE
+#endif
+
 typedef int (*raw_send_t)(const unsigned char *data, unsigned int data_len);
 /**
  * Sends the packet after delay_ms. The function should schedule send and return immediately

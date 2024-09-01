@@ -1,10 +1,8 @@
 #include "utils.h"
 #include "logging.h"
-#include <netinet/in.h>
+#include "types.h"
 
-#ifdef KERNEL_SPACE
-#include <linux/ip.h>
-#else 
+#ifndef KERNEL_SPACE 
 #include <stdlib.h>
 #include <libnetfilter_queue/libnetfilter_queue_ipv4.h>
 #include <libnetfilter_queue/libnetfilter_queue_ipv6.h>
@@ -39,7 +37,7 @@ void ip4_set_checksum(struct iphdr *iph)
 void tcp6_set_checksum(struct tcphdr *tcph, struct ip6_hdr *iph) {
 	uint16_t old_check = ntohs(tcph->check);
 
-	nfq_tcp_compute_checksum_ipv6(tcph, iph);
+	// nfq_tcp_compute_checksum_ipv6(tcph, iph);
 }
 
 int set_ip_checksum(void *iph, uint32_t iphb_len) {
@@ -157,7 +155,7 @@ int ip6_payload_split(uint8_t *pkt, uint32_t buflen,
 	}
 
 	uint32_t hdr_len = sizeof(struct ip6_hdr);
-	uint32_t pktlen = ntohs(hdr->ip6_ctlun.ip6_un1.ip6_un1_plen);
+	uint32_t pktlen = ntohs(hdr->ip6_plen);
 	if (buflen < pktlen) {
 		lgerror("ip6_payload_split: buflen cmp pktlen: %d %d", -EINVAL, buflen, pktlen);
 		return -EINVAL;
@@ -194,7 +192,7 @@ int tcp6_payload_split(uint8_t *pkt, uint32_t buflen,
 
 
 	if (
-		hdr->ip6_ctlun.ip6_un1.ip6_un1_nxt != IPPROTO_TCP || 
+		hdr->ip6_nxt != IPPROTO_TCP || 
 		tcph_plen < sizeof(struct tcphdr)) {
 		return -EINVAL;
 	}
@@ -426,8 +424,8 @@ int tcp_frag(const uint8_t *pkt, uint32_t buflen, uint32_t payload_offset,
 	} else {
 		struct ip6_hdr *s1_hdr = (void *)seg1;
 		struct ip6_hdr *s2_hdr = (void *)seg2;
-		s1_hdr->ip6_ctlun.ip6_un1.ip6_un1_plen = htons(s1_dlen - hdr_len);
-		s2_hdr->ip6_ctlun.ip6_un1.ip6_un1_plen = htons(s2_dlen - hdr_len);
+		s1_hdr->ip6_plen = htons(s1_dlen - hdr_len);
+		s2_hdr->ip6_plen = htons(s2_dlen - hdr_len);
 	}
 
 	struct tcphdr *s1_tcph = (void *)(seg1 + hdr_len);
@@ -440,3 +438,24 @@ int tcp_frag(const uint8_t *pkt, uint32_t buflen, uint32_t payload_offset,
 
 	return 0;
 }
+
+void z_function(const char *str, int *zbuf, size_t len) {
+	zbuf[0] = len;
+
+	ssize_t lh = 0, rh = 1;
+	for (ssize_t i = 1; i < len; i++) {
+		zbuf[i] = 0;
+		if (i < rh) {
+			zbuf[i] = min(zbuf[i - lh], rh - i);
+		}
+
+		while (i + zbuf[i] < len && str[zbuf[i]] == str[i + zbuf[i]])
+			zbuf[i]++;
+
+		if (i + zbuf[i] > rh) {
+			lh = i;
+			rh = i + zbuf[i];
+		}
+	}
+}
+
