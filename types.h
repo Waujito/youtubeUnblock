@@ -32,6 +32,7 @@ typedef __u64 	uint64_t;
 #include <linux/ip.h> // IWYU pragma: export
 #include <linux/ipv6.h> // IWYU pragma: export
 #include <linux/tcp.h> // IWYU pragma: export
+#include <linux/version.h>
 
 #define ip6_hdr ipv6hdr
 

@@ -9,7 +9,6 @@
 #include <linux/mutex.h>
 #include <linux/socket.h>
 #include <linux/net.h>
-#include <linux/version.h>
 
 #include <linux/netfilter.h>
 #include <linux/netfilter_ipv4.h>

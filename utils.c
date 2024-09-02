@@ -7,6 +7,13 @@
 #include <libnetfilter_queue/libnetfilter_queue_ipv4.h>
 #include <libnetfilter_queue/libnetfilter_queue_ipv6.h>
 #include <libnetfilter_queue/libnetfilter_queue_tcp.h>
+#else
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 24))
+	#include <net/ip6_checksum.h>
+	#include <net/checksum.h>
+#else
+	#include <net/checksum.h>
+#endif
 #endif
 
 
