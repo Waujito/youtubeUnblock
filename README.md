@@ -204,9 +204,7 @@ If your browser is using QUIC it may not work properly. Disable it in Chrome in 
 
 Televisions are the biggest headache. 
 
-In [this issue](https://github.com/Waujito/youtubeUnblock/issues/59) the problem has been resolved. 
-
-If you have troubles with televisions try `--faking-strategy=ttl` flag and play around with `--faking-ttl=n`. See [#flags](#flags) for more details. Also you might be have to disable QUIC. To do it you may use `--quic-drop` [flag](#flags) with proper firewall configuration (check description of the flag). Note, that this flag won't disable gQUIC and some TVs may relay on it. To disable gQUIC you will need to block the entire 443 port for udp in firewall configuration:
+In [this issue](https://github.com/Waujito/youtubeUnblock/issues/59) the problem has been resolved. And now youtubeUnblock should work with default flags. If not, play around with faking strategies and other flags. Also you might be have to disable QUIC. To do it you may use `--quic-drop` [flag](#flags) with proper firewall configuration (check description of the flag). Note, that this flag won't disable gQUIC and some TVs may relay on it. To disable gQUIC you will need to block the entire 443 port for udp in firewall configuration:
 
 For **nftables** do
 ```
