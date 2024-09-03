@@ -137,7 +137,9 @@ Put flags to the **BINARY**, not an init script. If you are on OpenWRT you shoul
 
 Available flags:
 
-- `--sni-domains=<comma separated domain list>|all` List of domains you want to be handled by SNI. Use this string if you want to change default domain list. Defaults to `googlevideo.com,ggpht.com,ytimg.com,youtube.com,play.google.com,youtu.be,googleapis.com,googleusercontent.com,gstatic.com,l.google.com`. You can pass **all** if you want for every *ClientHello* to be handled.
+- `--sni-domains=<comma separated domain list>|all` List of domains you want to be handled by SNI. Use this string if you want to change default domain list. Defaults to `googlevideo.com,ggpht.com,ytimg.com,youtube.com,play.google.com,youtu.be,googleapis.com,googleusercontent.com,gstatic.com,l.google.com`. You can pass **all** if you want for every *ClientHello* to be handled. You can exclude some domains from _all_ with `--exclude-domains` flag.
+
+- `--exclude-domains=<comma separated domain list>` List of domains to be excluded from targetting. Useful if you use `--sni-domains=all` and want for some websites to not be targetted by youtubeUnblock. Also the use case is subdomains (for example if you unblock l.google.com, dl.google.com will be also targetted. You can pass it to this flag and it will be ignored).
 
 - `--queue-num=<number of netfilter queue>` The number of netfilter queue **youtubeUnblock** will be linked to. Defaults to **537**.
 
