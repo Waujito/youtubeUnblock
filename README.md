@@ -137,7 +137,9 @@ Put flags to the **BINARY**, not an init script. If you are on OpenWRT you shoul
 
 Available flags:
 
-- `--sni-domains=<comma separated domain list>|all` List of domains you want to be handled by SNI. Use this string if you want to change default domain list. Defaults to `googlevideo.com,ggpht.com,ytimg.com,youtube.com,play.google.com,youtu.be,googleapis.com,googleusercontent.com,gstatic.com,l.google.com`. You can pass **all** if you want for every *ClientHello* to be handled.
+- `--sni-domains=<comma separated domain list>|all` List of domains you want to be handled by SNI. Use this string if you want to change default domain list. Defaults to `googlevideo.com,ggpht.com,ytimg.com,youtube.com,play.google.com,youtu.be,googleapis.com,googleusercontent.com,gstatic.com,l.google.com`. You can pass **all** if you want for every *ClientHello* to be handled. You can exclude some domains from _all_ with `--exclude-domains` flag.
+
+- `--exclude-domains=<comma separated domain list>` List of domains to be excluded from targetting. Useful if you use `--sni-domains=all` and want for some websites to not be targetted by youtubeUnblock. Also the use case is subdomains (for example if you unblock l.google.com, dl.google.com will be also targetted. You can pass it to this flag and it will be ignored).
 
 - `--queue-num=<number of netfilter queue>` The number of netfilter queue **youtubeUnblock** will be linked to. Defaults to **537**.
 
@@ -202,9 +204,7 @@ If your browser is using QUIC it may not work properly. Disable it in Chrome in 
 
 Televisions are the biggest headache. 
 
-In [this issue](https://github.com/Waujito/youtubeUnblock/issues/59) the problem has been resolved. 
-
-If you have troubles with televisions try `--faking-strategy=ttl` flag and play around with `--faking-ttl=n`. See [#flags](#flags) for more details. Also you might be have to disable QUIC. To do it you may use `--quic-drop` [flag](#flags) with proper firewall configuration (check description of the flag). Note, that this flag won't disable gQUIC and some TVs may relay on it. To disable gQUIC you will need to block the entire 443 port for udp in firewall configuration:
+In [this issue](https://github.com/Waujito/youtubeUnblock/issues/59) the problem has been resolved. And now youtubeUnblock should work with default flags. If not, play around with faking strategies and other flags. Also you might be have to disable QUIC. To do it you may use `--quic-drop` [flag](#flags) with proper firewall configuration (check description of the flag). Note, that this flag won't disable gQUIC and some TVs may relay on it. To disable gQUIC you will need to block the entire 443 port for udp in firewall configuration:
 
 For **nftables** do
 ```

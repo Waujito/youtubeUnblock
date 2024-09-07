@@ -766,7 +766,7 @@ struct tls_verdict analyze_tls_data(
 
 			if (config.all_domains) {
 				vrd.target_sni = 1;
-				goto out;
+				goto check_domain;
 			}
 
 
@@ -788,11 +788,45 @@ struct tls_verdict analyze_tls_data(
 						domain_startp, 
 						domain_len)) {
 							vrd.target_sni = 1;
+							goto check_domain;
 					}
 
 					j = i + 1;
 				}
 			}
+
+check_domain:
+			if (vrd.target_sni == 1 && config.exclude_domains_strlen != 0) {
+				unsigned int j = 0;
+				for (unsigned int i = 0; i <= config.exclude_domains_strlen; i++) {
+					if (	i > j &&
+						(i == config.exclude_domains_strlen	||	
+						config.exclude_domains_str[i] == '\0'	||
+						config.exclude_domains_str[i] == ','	|| 
+						config.exclude_domains_str[i] == '\n'	)) {
+
+						unsigned int domain_len = (i - j);
+						const char *sni_startp = sni_name + sni_len - domain_len;
+						const char *domain_startp = config.exclude_domains_str + j;
+
+						if (sni_len >= domain_len &&
+							sni_len < 128 && 
+							!strncmp(sni_startp, 
+							domain_startp, 
+							domain_len)) {
+
+							vrd.target_sni = 0;
+							lgdebugmsg("Excluded SNI: %.*s", 
+								vrd.sni_len, data + vrd.sni_offset);
+							goto out;
+						}
+
+						j = i + 1;
+					}
+				}
+			}
+
+			goto out;
 
 nextExtension:
 			extensionsPtr += 2 + 2 + extensionLen;
@@ -803,6 +837,7 @@ nextMessage:
 
 out:
 	return vrd;
+
 
 brute:
 	if (config.all_domains) {

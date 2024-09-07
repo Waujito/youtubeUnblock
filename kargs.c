@@ -135,12 +135,18 @@ static int exclude_domains_set(const char *val, const struct kernel_param *kp) {
 	ret = param_set_charp(val, kp);
 
 	if (ret < 0) {
-		config.domains_strlen = 0;
+		config.exclude_domains_strlen = 0;
 	} else {
-		config.domains_strlen = len;
+		config.exclude_domains_strlen = len;
 	}
 
 	return ret;
 }
 
+static const struct kernel_param_ops exclude_domains_ops = {
+	.set = exclude_domains_set,
+	.get = param_get_charp,
+};
+
+module_param_cb(exclude_domains, &exclude_domains_ops, &config.exclude_domains_str, 0664);
 

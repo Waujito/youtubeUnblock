@@ -44,6 +44,8 @@ struct config_t {
 	unsigned int seg2_delay;
 	const char *domains_str;
 	unsigned int domains_strlen;
+	const char *exclude_domains_str;
+	unsigned int exclude_domains_strlen;
 	unsigned int all_domains;
 	const char *fake_sni_pkt;
 	unsigned int fake_sni_pkt_sz;
