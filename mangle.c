@@ -733,8 +733,6 @@ struct tls_verdict analyze_tls_data(
 				}
 			}
 
-			continue;
-
 check_domain:
 			if (vrd.target_sni == 1 && config.exclude_domains_strlen != 0) {
 				unsigned int j = 0;
@@ -775,9 +773,6 @@ nextMessage:
 		i += 5 + message_length;
 	}
 
-
-
-	goto out;
 out:
 	return vrd;
 
