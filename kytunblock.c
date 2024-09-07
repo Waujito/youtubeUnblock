@@ -16,61 +16,14 @@
 
 #include "mangle.h"
 #include "config.h"
-#include "raw_replacements.h"
 #include "utils.h"
 #include "logging.h"
 #include "kmod_utils.h"
-
-struct config_t config = {
-	.threads = THREADS_NUM,
-	.frag_sni_reverse = 1,
-	.frag_sni_faked = 0,
-	.fragmentation_strategy = FRAGMENTATION_STRATEGY,
-	.faking_strategy = FAKING_STRATEGY,
-	.faking_ttl = FAKE_TTL,
-	.fake_sni = 1,
-	.fake_sni_seq_len = 1,
-	.frag_middle_sni = 1,
-	.frag_sni_pos = 1,
-	.use_ipv6 = 1,
-	.fakeseq_offset = 10000,
-	.mark = DEFAULT_RAWSOCKET_MARK,
-	.synfake = 0,
-	.synfake_len = 0,
-
-	.sni_detection = SNI_DETECTION_PARSE,
-
-#ifdef SEG2_DELAY
-	.seg2_delay = SEG2_DELAY,
-#else
-	.seg2_delay = 0,
-#endif
-
-#ifdef USE_GSO
-	.use_gso = 1,
-#else
-	.use_gso = false,
-#endif
-
-#ifdef DEBUG
-	.verbose = 2,
-#else
-	.verbose = 1,
-#endif
-
-	.domains_str = defaul_snistr,
-	.domains_strlen = sizeof(defaul_snistr),
-
-	.queue_start_num = DEFAULT_QUEUE_NUM,
-	.fake_sni_pkt = fake_sni_old,
-	.fake_sni_pkt_sz = sizeof(fake_sni_old) - 1, // - 1 for null-terminator
-};
 
 MODULE_LICENSE("GPL");
 MODULE_VERSION("0.3.2");
 MODULE_AUTHOR("Vadim Vetrov <vetrovvd@gmail.com>");
 MODULE_DESCRIPTION("Linux kernel module for youtube unblock");
-
 
 static unsigned int ykb_nf_hook(void *priv, 
 			struct sk_buff *skb, 

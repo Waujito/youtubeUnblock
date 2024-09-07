@@ -111,6 +111,8 @@ extern struct config_t config;
 
 #define MAX_PACKET_SIZE 8192
 
-static const char defaul_snistr[] = "googlevideo.com,ggpht.com,ytimg.com,youtube.com,play.google.com,youtu.be,googleapis.com,googleusercontent.com,gstatic.com,l.google.com";
+#define DEFAULT_SNISTR "googlevideo.com,ggpht.com,ytimg.com,youtube.com,play.google.com,youtu.be,googleapis.com,googleusercontent.com,gstatic.com,l.google.com"
+
+static const char defaul_snistr[] = DEFAULT_SNISTR;
 
 #endif /* YTB_CONFIG_H */

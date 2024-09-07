@@ -42,8 +42,6 @@ void ip4_set_checksum(struct iphdr *iph)
 }
 
 void tcp6_set_checksum(struct tcphdr *tcph, struct ip6_hdr *iph) {
-	uint16_t old_check = ntohs(tcph->check);
-
 #ifdef KERNEL_SPACE
 	tcph->check = 0;
 	tcph->check = csum_ipv6_magic(&iph->saddr, &iph->daddr, 
@@ -252,7 +250,6 @@ int udp4_payload_split(uint8_t *pkt, uint32_t buflen,
 	struct iphdr *hdr;
 	uint32_t hdr_len;
 	struct udphdr *uhdr;
-	uint32_t uhdr_len;
 	
 	uint8_t *ip_ph;
 	uint32_t ip_phlen;
@@ -291,7 +288,6 @@ int udp6_payload_split(uint8_t *pkt, uint32_t buflen,
 	struct ip6_hdr *hdr;
 	uint32_t hdr_len;
 	struct udphdr *uhdr;
-	uint32_t uhdr_len;
 	
 	uint8_t *ip_ph;
 	uint32_t ip_phlen;
