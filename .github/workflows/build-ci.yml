@@ -100,6 +100,66 @@ jobs:
           name: static-${{ matrix.arch }}
           path: ./**/youtubeUnblock*.tar.gz
 
+  build-static-cross:
+    needs: prepare
+    name: build ${{ matrix.arch }}
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - arch: mips64el
+            tool: mips64el-unknown-linux-musl
+          - arch: mips64
+            tool: mips64-unknown-linux-musl
+          - arch: mipsel
+            tool: mipsel-unknown-linux-musl
+          - arch: mipselsf
+            tool: mipsel-unknown-linux-muslsf
+          - arch: mips
+            tool: mips-unknown-linux-musl
+          - arch: mipssf
+            tool: mips-unknown-linux-muslsf
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up build tools
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: 'musl-cross/musl-cross'
+          TOOL: ${{ matrix.tool }}
+        run: |
+          mkdir -p $HOME/tools
+          gh api repos/$REPO/releases/latest --jq '.tag_name' |\
+            xargs -I{} wget -qO- https://github.com/$REPO/releases/download/{}/$TOOL.tgz | tar -C $HOME/tools -xz || exit 1
+          [ -d "$HOME/tools/$TOOL/bin" ] && echo "$HOME/tools/$TOOL/bin" >> $GITHUB_PATH
+
+      - name: Build
+        id: build
+        env:
+          ARCH: ${{ matrix.arch }}
+          TOOL: ${{ matrix.tool }}
+          VERSION: ${{ needs.prepare.outputs.version }}
+          SHA: ${{ needs.prepare.outputs.sha }}
+        run: |
+          make -j$(nproc) \
+            CC="$TOOL-gcc -static-libgcc -static" \
+            LD=$TOOL-ld \
+            AR=$TOOL-ar \
+            NM=$TOOL-nm \
+            STRIP=$TOOL-strip \
+            CROSS_COMPILE_PLATFORM=$TOOL || exit 1
+          $TOOL-strip -s build/youtubeUnblock
+          cp -va build/youtubeUnblock .
+          tar -czvf youtubeUnblock-$VERSION-$SHA-$ARCH-static.tar.gz youtubeUnblock youtubeUnblock.service README.md
+
+      - name: Upload artifacts
+        if: steps.build.outcome == 'success'
+        uses: actions/upload-artifact@v4
+        with:
+          name: static-${{ matrix.arch }}
+          path: ./**/youtubeUnblock*.tar.gz
+
   build-openwrt:
     needs: prepare
     runs-on: ubuntu-latest
@@ -267,7 +327,7 @@ jobs:
 
   pre-release:
     if: github.event_name != 'pull_request' && github.ref_name == 'main'
-    needs: [build-static, build-openwrt, build-entware]
+    needs: [build-static, build-static-cross, build-openwrt, build-entware]
     permissions:
       contents: write
     runs-on: ubuntu-latest
