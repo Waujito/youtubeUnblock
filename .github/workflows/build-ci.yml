@@ -44,7 +44,7 @@ jobs:
     strategy:
       matrix:
         # arch: [x86_64, x86, aarch64, armhf, armv7, ppc64le, s390x]
-        arch: [x86_64, x86, aarch64, armhf]
+        arch: [x86_64, x86, aarch64, armhf, armv7]
         branch: [latest-stable]
     steps:
       - name: Checkout
@@ -77,7 +77,7 @@ jobs:
         shell: alpine.sh {0}
         run: |
           case $ARCH in
-            x86_64)  PLATFORM=x86_64 ;;
+            x86_64)  PLATFORM=x86-64 ;;
             x86)     PLATFORM=x86 ;;
             aarch64) PLATFORM=arm64 ;;
             armhf)   PLATFORM=arm ;;
@@ -85,13 +85,69 @@ jobs:
           esac
           make -j$(nproc) CC="ccache gcc -static-libgcc -static" || exit 1
           strip -s build/youtubeUnblock
-          rm -rf youtubeUnblock || true
-          mkdir youtubeUnblock
-          cp build/youtubeUnblock youtubeUnblock
-          cp youtubeUnblock.service youtubeUnblock
-          cp README.md youtubeUnblock
-          tar -czvf youtubeUnblock-$VERSION-$SHA-$PLATFORM-static.tar.gz youtubeUnblock
+          cp -va build/youtubeUnblock .
+          tar -czvf youtubeUnblock-$VERSION-$SHA-$PLATFORM-static.tar.gz youtubeUnblock youtubeUnblock.service README.md
           ccache --show-stats
+
+      - name: Upload artifacts
+        if: steps.build.outcome == 'success'
+        uses: actions/upload-artifact@v4
+        with:
+          name: static-${{ matrix.arch }}
+          path: ./**/youtubeUnblock*.tar.gz
+
+  build-static-cross:
+    needs: prepare
+    name: build ${{ matrix.arch }}
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - arch: mips64el
+            tool: mips64el-unknown-linux-musl
+          - arch: mips64
+            tool: mips64-unknown-linux-musl
+          - arch: mipsel
+            tool: mipsel-unknown-linux-musl
+          - arch: mipselsf
+            tool: mipsel-unknown-linux-muslsf
+          - arch: mips
+            tool: mips-unknown-linux-musl
+          - arch: mipssf
+            tool: mips-unknown-linux-muslsf
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up build tools
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: 'musl-cross/musl-cross'
+          TOOL: ${{ matrix.tool }}
+        run: |
+          mkdir -p $HOME/tools
+          gh api repos/$REPO/releases/latest --jq '.tag_name' |\
+            xargs -I{} wget -qO- https://github.com/$REPO/releases/download/{}/$TOOL.tgz | tar -C $HOME/tools -xz || exit 1
+          [ -d "$HOME/tools/$TOOL/bin" ] && echo "$HOME/tools/$TOOL/bin" >> $GITHUB_PATH
+
+      - name: Build
+        id: build
+        env:
+          ARCH: ${{ matrix.arch }}
+          TOOL: ${{ matrix.tool }}
+          VERSION: ${{ needs.prepare.outputs.version }}
+          SHA: ${{ needs.prepare.outputs.sha }}
+        run: |
+          make -j$(nproc) \
+            CC="$TOOL-gcc -static-libgcc -static" \
+            LD=$TOOL-ld \
+            AR=$TOOL-ar \
+            NM=$TOOL-nm \
+            STRIP=$TOOL-strip \
+            CROSS_COMPILE_PLATFORM=$TOOL || exit 1
+          $TOOL-strip -s build/youtubeUnblock
+          cp -va build/youtubeUnblock .
+          tar -czvf youtubeUnblock-$VERSION-$SHA-$ARCH-static.tar.gz youtubeUnblock youtubeUnblock.service README.md
 
       - name: Upload artifacts
         if: steps.build.outcome == 'success'
@@ -267,7 +323,7 @@ jobs:
 
   pre-release:
     if: github.event_name != 'pull_request' && github.ref_name == 'main'
-    needs: [build-static, build-openwrt, build-entware]
+    needs: [build-static, build-static-cross, build-openwrt, build-entware]
     permissions:
       contents: write
     runs-on: ubuntu-latest
