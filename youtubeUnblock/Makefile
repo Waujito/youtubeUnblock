@@ -11,13 +11,16 @@ PKG_SOURCE_URL:=https://github.com/Waujito/youtubeUnblock.git
 PKG_SOURCE_PROTO:=git
 PKG_SOURCE_VERSION:=$(PKG_REV)
 
+LUA_LIBRARYDIR = /usr/lib/lua
+LUCI_LIBRARYDIR = $(LUA_LIBRARYDIR)/luci
+
 include $(INCLUDE_DIR)/package.mk
 
 define Package/youtubeUnblock
-	SECTION:=net
+	SECTION:=services
 	CATEGORY:=Networking
 	TITLE:=youtubeUnblock
-	DEPENDS:=+libpthread
+	DEPENDS:=+libpthread +luci-base +luci-compat
 	URL:=https://github.com/Waujito/youtubeUnblock
 	MAINTAINER:=Vadim Vetrov <vetrovvd@gmail.com>
 	VERSION:=$(PKG_VERSION)-$(BOARD)-$(PKG_RELEASE)
@@ -50,6 +53,10 @@ define Package/youtubeUnblock/install
 	$(INSTALL_BIN) ./files/etc/uci-defaults/99-youtubeUnblock $(1)/etc/uci-defaults/99-youtubeUnblock
 	$(INSTALL_DIR) $(1)/usr/share/nftables.d/ruleset-post/
 	$(CP) ./files/537-youtubeUnblock.nft $(1)/usr/share/nftables.d/ruleset-post/537-youtubeUnblock.nft
+	$(INSTALL_DIR) $(1)$(LUCI_LIBRARYDIR)/controller
+	$(INSTALL_DIR) $(1)$(LUCI_LIBRARYDIR)/model/cbi
+	$(INSTALL_BIN) ./files/luasrc/controller/* $(1)$(LUCI_LIBRARYDIR)/controller
+	$(INSTALL_BIN) ./files/luasrc/model/cbi/* $(1)$(LUCI_LIBRARYDIR)/model/cbi
 endef
 
 $(eval $(call BuildPackage,youtubeUnblock))
