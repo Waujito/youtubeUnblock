@@ -45,7 +45,9 @@ define Package/youtubeUnblock/install
 	$(INSTALL_DIR) $(1)/usr/bin
 	$(INSTALL_BIN) $(PKG_BUILD_DIR)/build/youtubeUnblock $(1)/usr/bin
 	$(INSTALL_DIR) $(1)/etc/init.d
-	$(INSTALL_BIN) ./files/youtubeUnblock.owrt $(1)/etc/init.d/youtubeUnblock
+	$(INSTALL_BIN) ./files/etc/init.d/youtubeUnblock $(1)/etc/init.d/youtubeUnblock
+	$(INSTALL_DIR) $(1)/etc/uci-defaults
+	$(INSTALL_BIN) ./files/etc/uci-defaults/99-youtubeUnblock $(1)/etc/uci-defaults/99-youtubeUnblock
 	$(INSTALL_DIR) $(1)/usr/share/nftables.d/ruleset-post/
 	$(CP) ./files/537-youtubeUnblock.nft $(1)/usr/share/nftables.d/ruleset-post/537-youtubeUnblock.nft
 endef
