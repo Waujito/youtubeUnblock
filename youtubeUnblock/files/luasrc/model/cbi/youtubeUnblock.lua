@@ -20,6 +20,7 @@ o:value("pastseq", "pastseq")
 o:value("randseq", "randseq")
 o:value("ttl", "ttl")
 o:value("tcp_check", "tcp_check")
+o:value("md5sum", "md5sum")
 o.widget="radio"
 o:depends("fake_sni", 1)
 

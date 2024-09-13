@@ -52,7 +52,7 @@ define Package/youtubeUnblock/install
 	$(INSTALL_DIR) $(1)/etc/uci-defaults
 	$(INSTALL_BIN) ./files/etc/uci-defaults/99-youtubeUnblock $(1)/etc/uci-defaults/99-youtubeUnblock
 	$(INSTALL_DIR) $(1)/usr/share/nftables.d/ruleset-post/
-	$(CP) ./files/537-youtubeUnblock.nft $(1)/usr/share/nftables.d/ruleset-post/537-youtubeUnblock.nft
+	$(CP) ./files/nftables.d/537-youtubeUnblock.nft $(1)/usr/share/nftables.d/ruleset-post/537-youtubeUnblock.nft
 	$(INSTALL_DIR) $(1)$(LUCI_LIBRARYDIR)/controller
 	$(INSTALL_DIR) $(1)$(LUCI_LIBRARYDIR)/model/cbi
 	$(INSTALL_BIN) ./files/luasrc/controller/* $(1)$(LUCI_LIBRARYDIR)/controller
