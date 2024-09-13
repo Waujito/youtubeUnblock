@@ -6,7 +6,7 @@
 
 START=91
 USE_PROCD=1
-PROCD_DEBUG=1
+# PROCD_DEBUG=1
 PROG=/usr/bin/youtubeUnblock
 
 # You should use uci for configuration
@@ -83,7 +83,10 @@ start_service() {
 	config_load youtubeUnblock
 	config_foreach parse_options youtubeUnblock
 
-	echo "$OPTS"
+	
+	if [[ "$PROCD_DEBUG" == "1" ]]; then
+		echo "$OPTS"
+	fi
 
 	procd_open_instance 'youtubeUnblock'
 	procd_set_param command $PROG $OPTS

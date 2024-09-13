@@ -50,13 +50,13 @@ define Package/youtubeUnblock/install
 	$(INSTALL_DIR) $(1)/etc/init.d
 	$(INSTALL_BIN) ./files/etc/init.d/youtubeUnblock $(1)/etc/init.d/youtubeUnblock
 	$(INSTALL_DIR) $(1)/etc/uci-defaults
-	$(INSTALL_BIN) ./files/etc/uci-defaults/99-youtubeUnblock $(1)/etc/uci-defaults/99-youtubeUnblock
+	$(INSTALL_BIN) ./files/etc/uci-defaults/99-youtubeUnblock.sh $(1)/etc/uci-defaults/99-youtubeUnblock.sh
 	$(INSTALL_DIR) $(1)/usr/share/nftables.d/ruleset-post/
-	$(CP) ./files/nftables.d/537-youtubeUnblock.nft $(1)/usr/share/nftables.d/ruleset-post/537-youtubeUnblock.nft
+	$(INSTALL_DATA) ./files/nftables.d/537-youtubeUnblock.nft $(1)/usr/share/nftables.d/ruleset-post/537-youtubeUnblock.nft
 	$(INSTALL_DIR) $(1)$(LUCI_LIBRARYDIR)/controller
 	$(INSTALL_DIR) $(1)$(LUCI_LIBRARYDIR)/model/cbi
-	$(INSTALL_BIN) ./files/luasrc/controller/* $(1)$(LUCI_LIBRARYDIR)/controller
-	$(INSTALL_BIN) ./files/luasrc/model/cbi/* $(1)$(LUCI_LIBRARYDIR)/model/cbi
+	$(INSTALL_DATA) ./files/luasrc/controller/* $(1)$(LUCI_LIBRARYDIR)/controller
+	$(INSTALL_DATA) ./files/luasrc/model/cbi/* $(1)$(LUCI_LIBRARYDIR)/model/cbi
 endef
 
 $(eval $(call BuildPackage,youtubeUnblock))

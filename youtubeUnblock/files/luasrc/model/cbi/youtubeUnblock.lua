@@ -4,7 +4,6 @@ local m = Map("youtubeUnblock", "youtubeUnblock", "Bypasses Deep Packet Inspecti
 local s = m:section(NamedSection, "youtubeUnblock", "youtubeUnblock", "youtubeUnblock", "Config. Check the README for more details <a href=\"https://github.com/Waujito/youtubeUnblock\">https://github.com/Waujito/youtubeUnblock</a>")
 
 local o
-s:option(Value, "queue_num", "queue num", "The number of netfilter queue youtubeUnblock will be linked to.")
 s:option(Flag, "fake_sni", "fake sni", "This flag enables fake-sni which forces youtubeUnblock to send at least three packets instead of one with TLS ClientHello: Fake ClientHello, 1st part of original ClientHello, 2nd part of original ClientHello. This flag may be related to some Operation not permitted error messages, so before open an issue refer to Troubleshooting for EPERMS.")
 
 o = s:option(ListValue, "faking_strategy", "faking strategy", 
