@@ -91,6 +91,7 @@ extern struct config_t config;
 #define FAKE_STRAT_TTL		2
 #define FAKE_STRAT_PAST_SEQ	3
 #define FAKE_STRAT_TCP_CHECK	4
+#define FAKE_STRAT_TCP_MD5SUM	5
 
 
 #ifndef FAKING_STRATEGY

@@ -152,7 +152,7 @@ void print_usage(const char *argv0) {
 	printf("\t--fake-sni-seq-len=<length>\n");
 	printf("\t--fake-seq-offset=<offset>\n");
 	printf("\t--faking-ttl=<ttl>\n");
-	printf("\t--faking-strategy={randseq|ttl|tcp_check|pastseq}\n");
+	printf("\t--faking-strategy={randseq|ttl|tcp_check|pastseq|md5sum}\n");
 	printf("\t--synfake={1|0}\n");
 	printf("\t--synfake-len=<len>\n");
 	printf("\t--frag={tcp,ip,none}\n");
@@ -282,6 +282,8 @@ int parse_args(int argc, char *argv[]) {
 				config.faking_strategy = FAKE_STRAT_TCP_CHECK;
 			} else if (strcmp(optarg, "pastseq") == 0) {
 				config.faking_strategy = FAKE_STRAT_PAST_SEQ;
+			} else if (strcmp(optarg, "md5sum") == 0) {
+				config.faking_strategy = FAKE_STRAT_TCP_MD5SUM;
 			} else {
 				goto invalid_opt;
 			}
@@ -449,6 +451,9 @@ void print_welcome() {
 			break;
 		case FAKE_STRAT_PAST_SEQ:
 			printf("Past seq faking strategy will be used\n");
+			break;
+		case FAKE_STRAT_TCP_MD5SUM:
+			printf("md5sum faking strategy will be used\n");
 			break;
 	}
 

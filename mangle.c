@@ -424,6 +424,7 @@ int send_tcp_frags(const uint8_t *packet, uint32_t pktlen, const uint32_t *poses
 		uint8_t fake_pad[MAX_PACKET_SIZE];
 		uint32_t f1len = MAX_PACKET_SIZE;
 		uint32_t f2len = MAX_PACKET_SIZE;
+		uint32_t fake_pad_len = MAX_PACKET_SIZE;
 
 		int ret;
 
@@ -459,9 +460,9 @@ send_frag1:
 		}
 
 send_fake:
-		// TODO
 		if (config.frag_sni_faked) {
 			uint32_t iphfl, tcphfl;
+			fake_pad_len = f2len;
 			ret = tcp_payload_split(frag2, f2len, NULL, &iphfl, NULL, &tcphfl, NULL, NULL);
 			if (ret < 0) {
 				lgerror("Invalid frag2", ret);
@@ -475,12 +476,12 @@ send_fake:
 				fakethdr->seq = htonl(ntohl(fakethdr->seq) - dvs);
 				lgtrace_addp("%u, ", ntohl(fakethdr->seq));
 			}
-			ret = fail_packet(fake_pad, f2len);
+			ret = fail_packet(fake_pad, &fake_pad_len, MAX_PACKET_SIZE);
 			if (ret < 0) {
 				lgerror("Failed to fail packet", ret);
 				return ret;
 			}
-			ret = send_tcp_frags(fake_pad, f2len, NULL, 0, 0);
+			ret = send_tcp_frags(fake_pad, fake_pad_len, NULL, 0, 0);
 			if (ret < 0) {
 				return ret;
 			}
@@ -854,7 +855,7 @@ int gen_fake_sni(const void *ipxh, uint32_t iph_len,
 	const char *data = config.fake_sni_pkt;
 	size_t data_len = config.fake_sni_pkt_sz;
 
-	size_t dlen = iph_len + tcph_len + data_len;
+	uint32_t dlen = iph_len + tcph_len + data_len;
 
 	if (*buflen < dlen) 
 		return -ENOMEM;
@@ -872,14 +873,24 @@ int gen_fake_sni(const void *ipxh, uint32_t iph_len,
 		niph->ip6_ctlun.ip6_un1.ip6_un1_plen = htons(dlen - iph_len);
 	}
 
-	fail_packet(buf, *buflen);
-
+	fail_packet(buf, &dlen, *buflen);
 	*buflen = dlen;
 	
 	return 0;
 }
 
-int fail_packet(uint8_t *payload, uint32_t plen) {
+#define TCP_MD5SIG_LEN 16
+#define TCP_MD5SIG_KIND 19
+struct tcp_md5sig_opt {
+	uint8_t kind;
+	uint8_t len;
+	uint8_t sig[TCP_MD5SIG_LEN];
+};
+#define TCP_MD5SIG_OPT_LEN (sizeof(struct tcp_md5sig_opt))
+// Real length of the option, with NOOP fillers
+#define TCP_MD5SIG_OPT_RLEN 20
+
+int fail_packet(uint8_t *payload, uint32_t *plen, uint32_t avail_buflen) {
 	void *iph;
 	uint32_t iph_len;
 	struct tcphdr *tcph;
@@ -888,13 +899,17 @@ int fail_packet(uint8_t *payload, uint32_t plen) {
 	uint32_t dlen;
 	int ret;
 
-	ret = tcp_payload_split(payload, plen, 
+	ret = tcp_payload_split(payload, *plen, 
 			&iph, &iph_len, &tcph, &tcph_len,
 			&data, &dlen);
+
+	uint32_t ipxv = netproto_version(payload, *plen);
 
 	if (ret < 0) {
 		return ret;
 	}
+
+	int sizedelta = 0;
 
 
 	if (config.faking_strategy == FAKE_STRAT_RAND_SEQ) {
@@ -920,7 +935,6 @@ int fail_packet(uint8_t *payload, uint32_t plen) {
 	} else if (config.faking_strategy == FAKE_STRAT_TTL) {
 		lgtrace_addp("set fake ttl to %d", config.faking_ttl);
 
-		uint32_t ipxv = netproto_version(payload, plen);
 		if (ipxv == IP4VERSION) {
 			((struct iphdr *)iph)->ttl = config.faking_ttl;
 		} else if (ipxv == IP6VERSION) {
@@ -928,6 +942,43 @@ int fail_packet(uint8_t *payload, uint32_t plen) {
 		} else {
 			lgerror("fail_packet: IP version is unsupported", -EINVAL);
 			return -EINVAL;
+		}
+	} else if (config.faking_strategy == FAKE_STRAT_TCP_MD5SUM) {
+		int optp_len = tcph_len - sizeof(struct tcphdr);
+		int delta = TCP_MD5SIG_OPT_RLEN - optp_len;
+		lgtrace_addp("Incr delta %d: %d -> %d", delta, optp_len, optp_len + delta);
+		
+		if (delta > 0) {
+			if (avail_buflen - *plen < delta) {
+				return -1;
+			}
+			uint8_t *ndata = data + delta;
+			memcpy(ndata, data, dlen);
+			data = ndata;
+			tcph_len = tcph_len + delta;
+			tcph->doff = tcph_len >> 2;
+			if (ipxv == IP4VERSION) {
+				((struct iphdr *)iph)->tot_len = htons(ntohs(((struct iphdr *)iph)->tot_len) + delta);
+			} else if (ipxv == IP6VERSION) {
+				((struct ip6_hdr *)iph)->ip6_plen = htons(ntohs(((struct ip6_hdr *)iph)->ip6_plen) + delta);
+			} else {
+				lgerror("fail_packet: IP version is unsupported", -EINVAL);
+				return -EINVAL;
+			}
+			optp_len += delta;
+			*plen += delta;
+		}
+
+		uint8_t *optplace = (uint8_t *)tcph + sizeof(struct tcphdr);
+		struct tcp_md5sig_opt *mdopt = (void *)optplace;
+		mdopt->kind = TCP_MD5SIG_KIND;
+		mdopt->len = TCP_MD5SIG_OPT_LEN;
+
+		optplace += sizeof(struct tcp_md5sig_opt);
+		optp_len -= sizeof(struct tcp_md5sig_opt);
+
+		while (optp_len-- > 0) {
+			*optplace++ = 0x01;
 		}
 	}
 

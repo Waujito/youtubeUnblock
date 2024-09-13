@@ -147,11 +147,12 @@ Available flags:
 
 - `--fake-sni-seq-len=<length>` This flag specifies **youtubeUnblock** to build a complicated construction of fake client hello packets. length determines how much fakes will be sent. Defaults to **1**.
 
-- `--faking-strategy={randseq|ttl|tcp_check|pastseq}` This flag determines the strategy of fake packets invalidation. Defaults to `randseq`
+- `--faking-strategy={randseq|ttl|tcp_check|pastseq|md5sum}` This flag determines the strategy of fake packets invalidation. Defaults to `randseq`
   - `randseq` specifies that random sequence/acknowledgemend random will be set. This option may be handled by provider which uses *conntrack* with drop on invalid *conntrack* state firewall rule enabled. 
   - `ttl` specifies that packet will be invalidated after `--faking-ttl=n` hops. `ttl` is better but may cause issues if unconfigured. 
   - `pastseq` is like `randseq` but sequence number is not random but references the packet sent in the past (before current).
   - `tcp_check` will invalidate faking packet with invalid checksum. May be handled and dropped by some providers/TSPUs.
+  - `md5sum` will invalidate faking packet with invalid TCP md5sum. md5sum is a TCP option which is handled by the destination server but may be skipped by TSPU.
 
 - `--faking-ttl=<ttl>` Tunes the time to live (TTL) of fake SNI messages. TTL is specified like that the packet will go through the DPI system and captured by it, but will not reach the destination server. Defaults to **8**.
 
@@ -199,6 +200,8 @@ If you have troubles with some sites being proxied, you can play with flags valu
 If you are on Chromium you may have to disable *kyber* (the feature that makes the TLS *ClientHello* very big). I've got the problem with it on router, so to escape possible errors, so it is better to disable it: in `chrome://flags` search for kyber and switch it to disabled state. Alternatively you may set `--sni-detection=brute` and probably adjust `--sni-domains` flag.
 
 If your browser is using QUIC it may not work properly. Disable it in Chrome in `chrome://flags` and in Firefox `network.http.http{2,3}.enable(d)` in `about:config` option.
+
+It seems like some TSPUs started to block wrongseq packets, so you should play around with faking strategies. I personally recommend to start with `md5sum` faking strategy.
 
 ### TV
 
