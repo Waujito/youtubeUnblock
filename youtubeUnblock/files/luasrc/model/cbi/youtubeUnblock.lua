@@ -155,8 +155,4 @@ o.readonly = true
 o.template = "cbi/tvalue"
 o.width = "100%"
 
-m.on_after_commit = function(self, map)
-	sys.call('/etc/init.d/youtubeUnblock restart &>/dev/null')
-end
-
 return m
