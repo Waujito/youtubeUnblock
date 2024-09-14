@@ -89,15 +89,19 @@ Copy `youtubeUnblock.service` to `/usr/lib/systemd/system` (you should change th
 
 On nftables you should put next nftables rules:
 ```sh
-nft add rule inet fw4 mangle_forward tcp dport 443 ct original "packets < 20" counter queue num 537 bypass
-nft insert rule inet fw4 output mark and 0x8000 == 0x8000 counter accept
+nft add chain inet fw4 youtubeUnblock '{ type filter hook postrouting priority mangle - 1; policy accept; }'
+nft add rule inet fw4 youtubeUnblock 'meta l4proto { tcp, udp } th dport 443 ct original packets < 20 counter queue num 537 bypass'
+nft insert rule inet fw4 output 'mark and 0x8000 == 0x8000 counter accept'
 ```
 
 #### Iptables rules
 
 On iptables you should put next iptables rules:
 ```sh
-iptables -t mangle -A FORWARD -p tcp --dport 443 -m connbytes --connbytes-dir original --connbytes-mode packets --connbytes 0:19 -j NFQUEUE --queue-num 537 --queue-bypass
+iptables -t mangle -N YOUTUBEUNBLOCK
+iptables -t mangle -A YOUTUBEUNBLOCK -p tcp --dport 443 -m connbytes --connbytes-dir original --connbytes-mode packets --connbytes 0:19 -j NFQUEUE --queue-num 537 --queue-bypass
+iptables -t mangle -A YOUTUBEUNBLOCK -p udp --dport 443 -m connbytes --connbytes-dir original --connbytes-mode packets --connbytes 0:19 -j NFQUEUE --queue-num 537 --queue-bypass
+iptables -t mangle -A POSTROUTING -j YOUTUBEUNBLOCK
 iptables -I OUTPUT -m mark --mark 32768/32768 -j ACCEPT
 ```
 
@@ -105,11 +109,12 @@ iptables -I OUTPUT -m mark --mark 32768/32768 -j ACCEPT
 
 For IPv6 on iptables you need to duplicate rules above for ip6tables:
 ```sh
-ip6tables -t mangle -A FORWARD -p tcp --dport 443 -m connbytes --connbytes-dir original --connbytes-mode packets --connbytes 0:19 -j NFQUEUE --queue-num 537 --queue-bypass
+ip6tables -t mangle -N YOUTUBEUNBLOCK
+ip6tables -t mangle -A YOUTUBEUNBLOCK -p tcp --dport 443 -m connbytes --connbytes-dir original --connbytes-mode packets --connbytes 0:19 -j NFQUEUE --queue-num 537 --queue-bypass
+ip6tables -t mangle -A YOUTUBEUNBLOCK -p udp --dport 443 -m connbytes --connbytes-dir original --connbytes-mode packets --connbytes 0:19 -j NFQUEUE --queue-num 537 --queue-bypass
+ip6tables -t mangle -A POSTROUTING -j YOUTUBEUNBLOCK
 ip6tables -I OUTPUT -m mark --mark 32768/32768 -j ACCEPT
 ```
-
-
 
 Note that above rules use *conntrack* to route only first 20 packets from the connection to **youtubeUnblock**. 
 If you got some troubles with it, for example **youtubeUnblock** doesn't detect YouTube, try to delete *connbytes* from the rules. But it is an unlikely behavior and you should probably check your ruleset.
