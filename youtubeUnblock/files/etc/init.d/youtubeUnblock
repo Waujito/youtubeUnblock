@@ -45,8 +45,8 @@ append_commasep_list() {
 append_opts_boolean() {
 	local name value cfg="$1"; shift
 	for name in $*; do
-		config_get_bool value "$cfg" "$name"
-		[ -n "$value" ] && xappend "$name" "$value"
+		config_get_bool value "$cfg" "$name" 0
+		xappend "$name" "$value"
 	done
 }
 
