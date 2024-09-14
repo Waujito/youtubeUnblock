@@ -145,7 +145,7 @@ function fwo.write(self, section)
 	sys.call("/etc/init.d/firewall reload")
 end
 
-local logs = sys.exec("logread -l 800 -p youtubeUnblock | sed '1!G;h;$!d'")
+local logs = sys.exec("logread -l 800 -p youtubeUnblock | grep youtubeUnblock | sed '1!G;h;$!d'")
 local o = bs:option(DummyValue, "_logs", "Logs")
 o.rawhtml = true
 o.value = logs
