@@ -1,5 +1,6 @@
 #!/bin/sh
 [[ ! "$(uci -q get youtubeUnblock.youtubeUnblock)" == "" ]] && exit 0
+touch /etc/config/youtubeUnblock
 uci batch << EOI
 set youtubeUnblock.youtubeUnblock='youtubeUnblock'
 set youtubeUnblock.youtubeUnblock.frag='tcp'
@@ -25,4 +26,4 @@ add_list youtubeUnblock.youtubeUnblock.sni_domains='l.google.com'
 EOI
 uci commit
 /etc/init.d/firewall restart &>/dev/null
-exit 0 # IMPORTANT, IF WE NO PUT THIS, WILL EXECUTED ENDLESSLY
+exit 0
