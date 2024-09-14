@@ -65,8 +65,9 @@ Next step is to add required firewall rules.
 
 For nftables on OpenWRT rules comes out-of-the-box and stored under `/usr/share/nftables.d/ruleset-post/537-youtubeUnblock.nft`. All you need is install requirements and do `/etc/init.d/firewall reload`. If no, go to [Firewall configuration](#firewall-configuration).
 
-Now we go to the configuration. For OpenWRT here is configuration via UCI and LuCI available (CLI and GUI respectively).
-LuCI configuration lives in **Services->youtubeUnblock** section. It is self descriptive, with description for each flag.
+Now we go to the configuration. For OpenWRT here is configuration via [UCI](https://openwrt.org/docs/guide-user/base-system/uci) and [LuCI](https://openwrt.org/docs/guide-user/luci/start) available (CLI and GUI respectively).
+
+LuCI configuration lives in **Services->youtubeUnblock** section. It is self descriptive, with description for each flag. Note, that after you push `Save & Apply` button, the configuration is applied automatically and the service is restarted.
 
 UCI configuration is available in /etc/config/youtubeUnblock file, in section `youtubeUnblock.youtubeUnblock`. The configuration is done with [flags](#flags). Note, that names of flags are not the same: you should replace `-` with `_`, you shouldn't use leading `--` for flag. Also you will enable toggle flags (without parameters) with `1`. 
 
@@ -74,6 +75,8 @@ For example, to enable trace logs you should do
 ```sh
 uci set youtubeUnblock.youtubeUnblock.trace=1
 ```
+
+For uci, to save the configs you should do `uci commit` and then `reload_config` to restart the youtubeUnblock
 
 In CLI mode you will use youtubeUnblock as a normal init.d service:
 for example, you can enable it with `/etc/init.d/youtubeUnblock enable`.
