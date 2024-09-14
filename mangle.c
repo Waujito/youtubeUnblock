@@ -273,14 +273,16 @@ int process_udp4_packet(const uint8_t *pkt, uint32_t pktlen) {
 	const struct udphdr *udph;
 	const uint8_t *data;
 	uint32_t dlen;
+	int ipver = netproto_version(pkt, pktlen);
+	lgtrace_start("Got udp packet");
+	lgtrace_addp("IPv%d", ipver);
 
 	int ret = udp4_payload_split((uint8_t *)pkt, pktlen,
 			      (struct iphdr **)&iph, &iph_len, 
 			      (struct udphdr **)&udph,
 			      (uint8_t **)&data, &dlen);
 
-	lgtrace_start("Got udp packet");
-
+	
 	if (ret < 0) {
 		lgtrace_addp("undefined");
 		goto accept;

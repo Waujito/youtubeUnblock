@@ -65,12 +65,21 @@ Next step is to add required firewall rules.
 
 For nftables on OpenWRT rules comes out-of-the-box and stored under `/usr/share/nftables.d/ruleset-post/537-youtubeUnblock.nft`. All you need is install requirements and do `/etc/init.d/firewall reload`. If no, go to [Firewall configuration](#firewall-configuration).
 
-Now we are ready to demonize the application.
+Now we go to the configuration. For OpenWRT here is configuration via [UCI](https://openwrt.org/docs/guide-user/base-system/uci) and [LuCI](https://openwrt.org/docs/guide-user/luci/start) available (CLI and GUI respectively).
 
-If you installed package from Github Actions or built it yourself with OpenWRT SDK, rc scripts are preinstalled. All you need is to do `/etc/init.d/youtubeUnblock start`.
-Elsewhere copy `owrt/youtubeUnblock.owrt` to `/etc/init.d/youtubeUnblock` and put the program's binary into /usr/bin/. (Don't forget to `chmod +x` both). Now run `/etc/init.d/youtubeUnblock start`. 
+LuCI configuration lives in **Services->youtubeUnblock** section. It is self descriptive, with description for each flag. Note, that after you push `Save & Apply` button, the configuration is applied automatically and the service is restarted.
 
-You can also run `/etc/init.d/youtubeUnblock enable` to force OpenWRT autostart on boot, but I don't recommend this since if the package has bugs you may lose access to the router (I think you will be able to reset it with reset settings tricks documented for your router). 
+UCI configuration is available in /etc/config/youtubeUnblock file, in section `youtubeUnblock.youtubeUnblock`. The configuration is done with [flags](#flags). Note, that names of flags are not the same: you should replace `-` with `_`, you shouldn't use leading `--` for flag. Also you will enable toggle flags (without parameters) with `1`. 
+
+For example, to enable trace logs you should do
+```sh
+uci set youtubeUnblock.youtubeUnblock.trace=1
+```
+
+For uci, to save the configs you should do `uci commit` and then `reload_config` to restart the youtubeUnblock
+
+In CLI mode you will use youtubeUnblock as a normal init.d service:
+for example, you can enable it with `/etc/init.d/youtubeUnblock enable`.
 
 ### Entware
 
@@ -89,15 +98,19 @@ Copy `youtubeUnblock.service` to `/usr/lib/systemd/system` (you should change th
 
 On nftables you should put next nftables rules:
 ```sh
-nft add rule inet fw4 mangle_forward tcp dport 443 ct original "packets < 20" counter queue num 537 bypass
-nft insert rule inet fw4 output mark and 0x8000 == 0x8000 counter accept
+nft add chain inet fw4 youtubeUnblock '{ type filter hook postrouting priority mangle - 1; policy accept; }'
+nft add rule inet fw4 youtubeUnblock 'meta l4proto { tcp, udp } th dport 443 ct original packets < 20 counter queue num 537 bypass'
+nft insert rule inet fw4 output 'mark and 0x8000 == 0x8000 counter accept'
 ```
 
 #### Iptables rules
 
 On iptables you should put next iptables rules:
 ```sh
-iptables -t mangle -A FORWARD -p tcp --dport 443 -m connbytes --connbytes-dir original --connbytes-mode packets --connbytes 0:19 -j NFQUEUE --queue-num 537 --queue-bypass
+iptables -t mangle -N YOUTUBEUNBLOCK
+iptables -t mangle -A YOUTUBEUNBLOCK -p tcp --dport 443 -m connbytes --connbytes-dir original --connbytes-mode packets --connbytes 0:19 -j NFQUEUE --queue-num 537 --queue-bypass
+iptables -t mangle -A YOUTUBEUNBLOCK -p udp --dport 443 -m connbytes --connbytes-dir original --connbytes-mode packets --connbytes 0:19 -j NFQUEUE --queue-num 537 --queue-bypass
+iptables -t mangle -A POSTROUTING -j YOUTUBEUNBLOCK
 iptables -I OUTPUT -m mark --mark 32768/32768 -j ACCEPT
 ```
 
@@ -105,11 +118,12 @@ iptables -I OUTPUT -m mark --mark 32768/32768 -j ACCEPT
 
 For IPv6 on iptables you need to duplicate rules above for ip6tables:
 ```sh
-ip6tables -t mangle -A FORWARD -p tcp --dport 443 -m connbytes --connbytes-dir original --connbytes-mode packets --connbytes 0:19 -j NFQUEUE --queue-num 537 --queue-bypass
+ip6tables -t mangle -N YOUTUBEUNBLOCK
+ip6tables -t mangle -A YOUTUBEUNBLOCK -p tcp --dport 443 -m connbytes --connbytes-dir original --connbytes-mode packets --connbytes 0:19 -j NFQUEUE --queue-num 537 --queue-bypass
+ip6tables -t mangle -A YOUTUBEUNBLOCK -p udp --dport 443 -m connbytes --connbytes-dir original --connbytes-mode packets --connbytes 0:19 -j NFQUEUE --queue-num 537 --queue-bypass
+ip6tables -t mangle -A POSTROUTING -j YOUTUBEUNBLOCK
 ip6tables -I OUTPUT -m mark --mark 32768/32768 -j ACCEPT
 ```
-
-
 
 Note that above rules use *conntrack* to route only first 20 packets from the connection to **youtubeUnblock**. 
 If you got some troubles with it, for example **youtubeUnblock** doesn't detect YouTube, try to delete *connbytes* from the rules. But it is an unlikely behavior and you should probably check your ruleset.

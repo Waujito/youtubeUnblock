@@ -21,7 +21,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          ref: 'openwrt'
+          ref: 'openwrt_luci'
 
       - name: GH
         id: gh
@@ -197,7 +197,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          ref: 'openwrt'
+          ref: 'openwrt_luci'
 
       - name: Prepare build
         env:
