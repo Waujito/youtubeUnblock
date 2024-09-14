@@ -13,7 +13,9 @@ o = s:option(ListValue, "faking_strategy", "faking strategy",
 	<li><code>randseq</code> specifies that random sequence/acknowledgemend random will be set. This option may be handled by provider which uses conntrack with drop on invalid conntrack state firewall rule enabled. </li>
 	<li><code>ttl</code> specifies that packet will be invalidated after --faking-ttl=n hops. ttl is better but may cause issues if unconfigured. </li>
 	<li><code>pastseq</code> is like randseq but sequence number is not random but references the packet sent in the past (before current). </li>
-	<li><code>tcp_check</code> will invalidate faking packet with invalid checksum. May be handled and dropped by some providers/TSPUs.</li></ul>
+	<li><code>tcp_check</code> will invalidate faking packet with invalid checksum. May be handled and dropped by some providers/TSPUs.</li>
+	<li><code>md5sum</code> will invalidate faking packet with invalid TCP md5sum. md5sum is a TCP option which is handled by the destination server but may be skipped by TSPU.</li>
+	</ul>
 	]])
 o:value("pastseq", "pastseq")
 o:value("randseq", "randseq")
