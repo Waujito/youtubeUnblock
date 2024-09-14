@@ -96,6 +96,11 @@ typedef __u64 	uint64_t;
 #define NETBUF_ALLOC(buf, buf_len) __u8* buf = kmalloc(buf_len, GFP_ATOMIC);
 #define NETBUF_CHECK(buf) ((buf) != NULL)
 #define NETBUF_FREE(buf) kfree(buf);
+#elif defined(ALLOC_MALLOC)
+#include <stdlib.h>
+#define NETBUF_ALLOC(buf, buf_len) __u8* buf = malloc(buf_len);
+#define NETBUF_CHECK(buf) ((buf) != NULL)
+#define NETBUF_FREE(buf) free(buf);
 #else
 #define NETBUF_ALLOC(buf, buf_len) __u8 buf[buf_len];
 #define NETBUF_CHECK(buf) (1)
