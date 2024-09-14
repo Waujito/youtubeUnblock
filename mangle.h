@@ -30,7 +30,7 @@ int gen_fake_sni(const void *iph, uint32_t iph_len,
  * Invalidates the raw packet. The function aims to invalid the packet
  * in such way as it will be accepted by DPI, but dropped by target server
  */
-int fail_packet(uint8_t *payload, uint32_t plen);
+int fail_packet(uint8_t *payload, uint32_t *plen, uint32_t avail_buflen);
 
 #define PKT_ACCEPT	0
 #define PKT_DROP	1
