@@ -76,6 +76,8 @@ For example, to enable trace logs you should do
 uci set youtubeUnblock.youtubeUnblock.trace=1
 ```
 
+You can check the logs in CLI mode with `logread -l 200 | grep youtubeUnblock` command. 
+
 For uci, to save the configs you should do `uci commit` and then `reload_config` to restart the youtubeUnblock
 
 In CLI mode you will use youtubeUnblock as a normal init.d service:
