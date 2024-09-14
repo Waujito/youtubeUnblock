@@ -65,12 +65,18 @@ Next step is to add required firewall rules.
 
 For nftables on OpenWRT rules comes out-of-the-box and stored under `/usr/share/nftables.d/ruleset-post/537-youtubeUnblock.nft`. All you need is install requirements and do `/etc/init.d/firewall reload`. If no, go to [Firewall configuration](#firewall-configuration).
 
-Now we are ready to demonize the application.
+Now we go to the configuration. For OpenWRT here is configuration via UCI and LuCI available (CLI and GUI respectively).
+LuCI configuration lives in **Services->youtubeUnblock** section. It is self descriptive, with description for each flag.
 
-If you installed package from Github Actions or built it yourself with OpenWRT SDK, rc scripts are preinstalled. All you need is to do `/etc/init.d/youtubeUnblock start`.
-Elsewhere copy `owrt/youtubeUnblock.owrt` to `/etc/init.d/youtubeUnblock` and put the program's binary into /usr/bin/. (Don't forget to `chmod +x` both). Now run `/etc/init.d/youtubeUnblock start`. 
+UCI configuration is available in /etc/config/youtubeUnblock file, in section `youtubeUnblock.youtubeUnblock`. The configuration is done with [flags](#flags). Note, that names of flags are not the same: you should replace `-` with `_`, you shouldn't use leading `--` for flag. Also you will enable toggle flags (without parameters) with `1`. 
 
-You can also run `/etc/init.d/youtubeUnblock enable` to force OpenWRT autostart on boot, but I don't recommend this since if the package has bugs you may lose access to the router (I think you will be able to reset it with reset settings tricks documented for your router). 
+For example, to enable trace logs you should do
+```sh
+uci set youtubeUnblock.youtubeUnblock.trace=1
+```
+
+In CLI mode you will use youtubeUnblock as a normal init.d service:
+for example, you can enable it with `/etc/init.d/youtubeUnblock enable`.
 
 ### Entware
 
