@@ -18,6 +18,11 @@
   - [OpenWRT case](#openwrt-case)
     - [Building OpenWRT .ipk package](#building-openwrt-ipk-package)
     - [Building with toolchain](#building-with-toolchain)
+  - [Kernel module](#kernel-module)
+    - [Building kernel module](#building-kernel-module)
+      - [Building on host system](#building-on-host-system)
+      - [Building on any kernel](#building-on-any-kernel)
+      - [Building with openwrt SDK](#building-with-openwrt-sdk)
 
 
 # youtubeUnblock
@@ -25,6 +30,10 @@
 Bypasses Deep Packet Inspection (DPI) systems that relies on SNI. The package is for Linux only. It is also fully compatible with routers running [OpenWRT](https://github.com/openwrt). 
 
 The program was primarily developed to bypass YouTube Outage in Russia.
+
+The program is distributed in two version:
+- A userspace application works on top of nfnetlink queue which requires nfnetlink modules in the kernel and firewall rules. This approach is default and normally should be used but it has some limitations on embedded devices which may have no nfnetlink support. Also this solution may break down the internet speed and CPU load on your device because of jumps between userspace and kernelspace for each packet (this behavior may be fixed with connbytes but it also requires conntrack kernel module).
+- A kernel module which integrates deeply within the netfilter stack and does not interact with the userspace firewall. The module requires only netfilter kernel support but it definetly present on every device connected to the Internet. The only difficulity is how to build it. I cannot provide modules within Github Actions for each single one kernel, even if we talk only about OpenWRT versions. If you want to learn more about the module, jump on [its section in the README](#kernel-module)
 
 The program is compatible with routers based on OpenWRT, Entware(Keenetic/ASUS) and host machines. The program offers binaries via Github Actions. The binaries of main branch are published in the [development pre-release](https://github.com/Waujito/youtubeUnblock/releases/tag/continuous). Check out [Github Actions](https://github.com/Waujito/youtubeUnblock/actions/workflows/build-ci.yml) if you want to see all the binaries compiled ever. You should know the arcitecture of your hardware to use binaries. On OpenWRT you can check it with command `grep ARCH /etc/openwrt_release`.
 
@@ -314,5 +323,46 @@ Take a look at `CROSS_COMPILE_PLATFORM` It is required by autotools but I think 
 
 When compilation is done, the binary file will be in build directory. Copy it to your router. Note that a ssh access is likely to be required to proceed. *sshfs* don't work on my model so I injected the application to the router via *Software Upload Package* page. It has given me an error, but also a `/tmp/upload.ipk` file which I copied in root directory, `chmod +x` it and run.
 
+# Kernel module
+
+This section describes the kernel module version of youtubeUnblock. The kernel module operates as a normal module inside the kernel and integrates within the netfilter stack to statelessly mangle the packets sent over the Internet.
+
+You can configure the module with its flags in insmod:
+```
+insmod kyoutubeUnblock.ko fake_sni=1 exclude_domains=.ru quic_drop=1
+```
+
+Note that the flags names are different from ones used for the regular youtubeUnblock(right like in UCI configuration for OpenWRT): replace `-` with `_` and no leading `--`. Also to configure togglers you should set them to `1` (`silent=1 quic_drop=1`)
+
+Also a drop in replacement is supported for all the parameters excluding packet mark. A drop in replacement does not require module restart if you want to change the parameters. You can specify and check the parameters within module's directory inside the sysfs: `/sys/module/kyoutubeUnblock/parameters/`. For example, to set quic_drop to true you may use next command:
+```sh
+echo 1 | sudo tee /sys/module/kyoutubeUnblock/parameters/quic_drop
+```
+and 
+```sh
+cat /sys/module/kyoutubeUnblock/parameters/quic_drop
+```
+to check the parameter.
+
+## Building kernel module
+
+### Building on host system
+
+To build the kernel module on your host system you should install `linux-headers` which will provide build essential tools and `gcc` compiler suite. On host system you may build the module with 
+```sh
+make kmake
+```
+
+### Building on any kernel
+
+To build the module for external kernel you should build that kernel locally and point make to it. Use `KERNEL_BUILDER_MAKEDIR=~/linux` flag for make, for example:
+```
+make kmake KERNEL_BUILDER_MAKEDIR=~/linux
+```
+Note, that the kernel should be already configured and built. See linux kernel building manuals for more information about your specific case.
+
+### Building with openwrt SDK
+
+This parts needs in further maintance.
 
  >If you have any questions/suggestions/problems feel free to open an [issue](https://github.com/Waujito/youtubeUnblock/issues).

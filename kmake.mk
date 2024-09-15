@@ -7,11 +7,13 @@ LD	:= ld
 CFLAGS	:=
 LDFLAGS	:=
 
+KERNEL_BUILDER_MAKEDIR:=/lib/modules/$(shell uname -r)/build
+
 .PHONY: kmake kload kunload kreload kclean kmclean xclean
 kmake: kmod
 
 kmod:
-	$(MAKE) -C /lib/modules/$(shell uname -r)/build M=$(PWD) modules
+	$(MAKE) -C $(KERNEL_BUILDER_MAKEDIR) M=$(PWD) modules
 
 kload:
 	insmod kyoutubeUnblock.ko
@@ -24,4 +26,4 @@ kreload: kunload kload
 kclean: kmclean
 
 kmclean:
-	-$(MAKE) -C /lib/modules/$(shell uname -r)/build M=$(PWD) clean
+	-$(MAKE) -C $(KERNEL_BUILDER_MAKEDIR) M=$(PWD) clean
