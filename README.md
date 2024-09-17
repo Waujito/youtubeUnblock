@@ -12,8 +12,6 @@
   - [Troubleshooting](#troubleshooting)
     - [TV](#tv)
     - [Troubleshooting EPERMS (Operation not permitted)](#troubleshooting-eperms-operation-not-permitted)
-  - [How it works:](#how-it-works)
-  - [How it processes packets](#how-it-processes-packets)
   - [Compilation](#compilation)
   - [OpenWRT case](#openwrt-case)
     - [Building OpenWRT .ipk package](#building-openwrt-ipk-package)
@@ -30,6 +28,17 @@
 Bypasses Deep Packet Inspection (DPI) systems that relies on SNI. The package is for Linux only. It is also fully compatible with routers running [OpenWRT](https://github.com/openwrt). 
 
 The program was primarily developed to bypass YouTube Outage in Russia.
+
+```
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+```
 
 The program is distributed in two version:
 - A userspace application works on top of nfnetlink queue which requires nfnetlink modules in the kernel and firewall rules. This approach is default and normally should be used but it has some limitations on embedded devices which may have no nfnetlink support. Also this solution may break down the internet speed and CPU load on your device because of jumps between userspace and kernelspace for each packet (this behavior may be fixed with connbytes but it also requires conntrack kernel module).
@@ -76,7 +85,7 @@ For nftables on OpenWRT rules comes out-of-the-box and stored under `/usr/share/
 
 Now we go to the configuration. For OpenWRT here is configuration via [UCI](https://openwrt.org/docs/guide-user/base-system/uci) and [LuCI](https://openwrt.org/docs/guide-user/luci/start) available (CLI and GUI respectively).
 
-LuCI configuration lives in **Services->youtubeUnblock** section. It is self descriptive, with description for each flag. Note, that after you push `Save & Apply` button, the configuration is applied automatically and the service is restarted.
+Luci is a configuration interface for your router (which you connect when enter 192.168.1.1 in browser). LuCI configuration lives in **Services->youtubeUnblock** section. It is self descriptive, with description for each flag. Note, that after you push `Save & Apply` button, the configuration is applied automatically and the service is restarted.
 
 UCI configuration is available in /etc/config/youtubeUnblock file, in section `youtubeUnblock.youtubeUnblock`. The configuration is done with [flags](#flags). Note, that names of flags are not the same: you should replace `-` with `_`, you shouldn't use leading `--` for flag. Also you will enable toggle flags (without parameters) with `1`. 
 
@@ -162,9 +171,9 @@ Put flags to the **BINARY**, not an init script. If you are on OpenWRT you shoul
 
 Available flags:
 
-- `--sni-domains=<comma separated domain list>|all` List of domains you want to be handled by SNI. Use this string if you want to change default domain list. Defaults to `googlevideo.com,ggpht.com,ytimg.com,youtube.com,play.google.com,youtu.be,googleapis.com,googleusercontent.com,gstatic.com,l.google.com`. You can pass **all** if you want for every *ClientHello* to be handled. You can exclude some domains from _all_ with `--exclude-domains` flag.
+- `--sni-domains=<comma separated domain list>|all` List of domains you want to be handled by SNI. Use this string if you want to change default domain list. Defaults to `googlevideo.com,ggpht.com,ytimg.com,youtube.com,play.google.com,youtu.be,googleapis.com,googleusercontent.com,gstatic.com,l.google.com`. You can pass **all** if you want for every *ClientHello* to be handled. You can exclude some domains with `--exclude-domains` flag.
 
-- `--exclude-domains=<comma separated domain list>` List of domains to be excluded from targetting. Useful if you use `--sni-domains=all` and want for some websites to not be targetted by youtubeUnblock. Also the use case is subdomains (for example if you unblock l.google.com, dl.google.com will be also targetted. You can pass it to this flag and it will be ignored).
+- `--exclude-domains=<comma separated domain list>` List of domains to be excluded from targetting.
 
 - `--queue-num=<number of netfilter queue>` The number of netfilter queue **youtubeUnblock** will be linked to. Defaults to **537**.
 
@@ -256,28 +265,6 @@ Where you have to replace 192.168.. with ip of your television.
     * raw_frags_send EPERM: just make sure outgoing traffic is allowed (RELATED,ESTABLISHED should work, if not, go to step 3)
     * send fake sni EPERM: Fake SNI is out-of-state thing and will likely corrupt the connection (the behavior is expected). conntrack considers it as an invalid packet. By default OpenWRT set up to drop outgoing packets like this one. You may delete nftables/iptables rule that drops packets with invalid conntrack state, but I don't recommend to do this. The step 3 is better solution.
     * Step 3, ultimate solution. Use mark (don't confuse with connmark). The youtubeUnblock uses mark internally to avoid infinity packet loops (when the packet is sent by youtubeUnblock but on next step handled by itself). Currently it uses mark (1 << 15) = 32768. You should put iptables/nftables that ultimately accepts such marks at the very start of the filter OUTPUT chain: `iptables -I OUTPUT -m mark --mark 32768/32768 -j ACCEPT` or `nft insert rule inet fw4 output mark and 0x8000 == 0x8000 counter accept`.
-
-## How it works:
-
-Let's look from the DPI systems side of view: All of they have an ip and tcp information, higher-level data is encrypted. So from the IP header only IP address might be helpful for them to limit user traffic. In TCP here is basically nothing. So they may handle IP addresses and process it. 
-
-What's wrong? Google servers are on the way: It is very hard to handle all that infrastructure. One server may host multiple websites and it is very bad if them blocks, for example, Google Search while trying to block YouTube (googlevideo). But even if YouTube servers have their own IP for only googlevideo purposes, here is a problem about how large is Google infrastracture and how much servers in it. The DPI systems can't even parse normally all the servers, because each video may live on its cache server [GGC](https://support.google.com/interconnect/answer/9058809?hl=en).
-
-So what's else? Let's take a look at a TLS level. All information here is encrypted. All... Except *ClientHello* messages! They are used to initialize handshake connections and hold tons of helpful information. If we talk about TLS version 1.3, it is optimized to transfer as less information as possible unencrypted. But here is only one thing that may point us which domain the user wants to connect, the SNI extension. It transfers all domain names unencrypted in plain text. Exactly what we need! And DPI systems may use this text to detect YouTube connections and slow down or reject them (In fact they are corrupting a TCP connection with bad packets).
-
-So we aim to somehow hide the SNI from them. How?
-
-- We can alter the SNI name in the tls packet to something else. But what's wrong with this? The server also uses SNI name for certificates (CN=). And if we change it, the server will return an invalid certificate which browser can't normally process, which may turn out to the MITM problem.
-
-- We can encrypt it. Here are a lot of investigations about SNI, but the server should support this technique. Also ISPs may block [encrypted SNI](https://en.wikipedia.org/wiki/Server_Name_Indication).
-
-- So what else can we do with the SNI info? If we can't hide it, let's rely on DPI systems weak spots. The DPI is an extremely high loaded infrastructure that analyzes every single packet sent to the Internet. And every performance-impacted feature should be avoided for them. One of this features is IP packet fragmentation. We can split the packet in the middle of SNI message and post it. For DPI fragmentation involves too much overhead: they should store a very big mapping table which maps IP id, Source ip and Destination ip. Also note that some packets may be lost and DPI should support auto-clean of that table. So just imagine how much memory and CPU time will this cost for DPI. But fragments are ok for clients and hosts. And that's the base idea behind this package. I have to mention here that the idea isn't mine, I get in here after some research for this side. Here already was a solution for Windows, GoodbyeDPI. I just made an alternative for Linux.
-
-You may read further in an [yt-dlp issue page](https://github.com/yt-dlp/yt-dlp/issues/10443) and in [ntc party forum](https://ntc.party/t/%D0%BE%D0%B1%D1%81%D1%83%D0%B6%D0%B4%D0%B5%D0%BD%D0%B8%D0%B5-%D0%B7%D0%B0%D0%BC%D0%B5%D0%B4%D0%BB%D0%B5%D0%BD%D0%B8%D0%B5-youtube-%D0%B2-%D1%80%D0%BE%D1%81%D1%81%D0%B8%D0%B8/8074).
-
-## How it processes packets
-
-When the packet is joining the queue, the application checks SNI payload to be YouTube(googlevideo) (right how the DPI systems do), segmentate/fragmentates (both TCP and IP fragmentation techniques are supported) and posts the packet. Note that it is impossible to post two fragmented packets from one netfilter queue verdict. Instead, the application drops an original packet and makes another linux raw socket to post the packets in the network. To escape infinity loops the socket marks outgoing packets and the application automatically accepts it.
 
 ## Compilation
 
