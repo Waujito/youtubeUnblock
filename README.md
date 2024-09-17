@@ -310,7 +310,7 @@ Take a look at `CROSS_COMPILE_PLATFORM` It is required by autotools but I think 
 
 When compilation is done, the binary file will be in build directory. Copy it to your router. Note that a ssh access is likely to be required to proceed. *sshfs* don't work on my model so I injected the application to the router via *Software Upload Package* page. It has given me an error, but also a `/tmp/upload.ipk` file which I copied in root directory, `chmod +x` it and run.
 
-# Kernel module
+## Kernel module
 
 This section describes the kernel module version of youtubeUnblock. The kernel module operates as a normal module inside the kernel and integrates within the netfilter stack to statelessly mangle the packets sent over the Internet.
 
@@ -331,16 +331,16 @@ cat /sys/module/kyoutubeUnblock/parameters/quic_drop
 ```
 to check the parameter.
 
-## Building kernel module
+### Building kernel module
 
-### Building on host system
+#### Building on host system
 
 To build the kernel module on your host system you should install `linux-headers` which will provide build essential tools and `gcc` compiler suite. On host system you may build the module with 
 ```sh
 make kmake
 ```
 
-### Building on any kernel
+#### Building on any kernel
 
 To build the module for external kernel you should build that kernel locally and point make to it. Use `KERNEL_BUILDER_MAKEDIR=~/linux` flag for make, for example:
 ```
@@ -348,8 +348,26 @@ make kmake KERNEL_BUILDER_MAKEDIR=~/linux
 ```
 Note, that the kernel should be already configured and built. See linux kernel building manuals for more information about your specific case.
 
-### Building with openwrt SDK
+#### Building with openwrt SDK
 
-This parts needs in further maintance.
+Building with openwrt SDK is not such a hard thing. The only thing you should do is to obtain the sdk. You can find it by looking to your architecture and version of the openwrt currently used. You should use the exactly your version of openwrt since kernels there change often. You can find the sdk in two ways: by downloading it from their site or by using the openwrt sdk docker container (recommended).
+
+If you decide to download the tar archive, follow next steps:
+For me the archive lives in https://downloads.openwrt.org/releases/23.05.3/targets/ramips/mt76x8/ and called `openwrt-sdk-23.05.3-ramips-mt76x8_gcc-12.3.0_musl.Linux-x86_64`. You will need to [install sdk requirements on your system](https://openwrt.org/docs/guide-developer/toolchain/install-buildsystem) If you have any problems, use docker ubuntu:24.04 image. Make sure to be a non-root user since some makesystem fails with it. Next, untar the SDK and cd into it. 
+
+Or you can obtain the docker image with sdk built-in: [https://hub.docker.com/u/openwrt/sdk](https://hub.docker.com/u/openwrt/sdk). In my case the image has tag `ramips-mt76x8-23.05.3`. A good thing here is that you don't need to install any dependencies inside the docker container. Also docker hub has a perfect search around tags if you don't sure which one corresponds to your device.
+
+When you unpacked/installed the sdk, you is ready to start with building the kernel module.
+
+Do
+```sh
+echo "src-git youtubeUnblock https://github.com/Waujito/youtubeUnblock.git;openwrt" >> feeds.conf
+./scripts/feeds update youtubeUnblock
+./scripts/feeds install -a -p youtubeUnblock
+make defconfig
+make package/kyoutubeUnblock/compile V=s
+```
+
+When the commands finish, the module is ready. Find it with `find bin -name "kmod-youtubeUnblock*.ipk"`, copy to your host and install to the router via gui software interface. The module should start immediately. If not, do `modprobe kyoutubeUnblock`.
 
  >If you have any questions/suggestions/problems feel free to open an [issue](https://github.com/Waujito/youtubeUnblock/issues).
