@@ -1037,7 +1037,12 @@ int fail_packet(uint8_t *payload, uint32_t *plen, uint32_t avail_buflen) {
 				return -1;
 			}
 			uint8_t *ndata = data + delta;
-			memcpy(ndata, data, dlen);
+			uint8_t *ndptr = ndata + dlen;
+			uint8_t *dptr = data + dlen;
+			for (size_t i = dlen + 1; i > 0; i--) {
+				*ndptr = *dptr;
+				--ndptr, --dptr;
+			}
 			data = ndata;
 			tcph_len = tcph_len + delta;
 			tcph->doff = tcph_len >> 2;

@@ -93,7 +93,7 @@ typedef __u64 	uint64_t;
  */
 #ifdef KERNEL_SPACE
 #include <linux/gfp.h>
-#define NETBUF_ALLOC(buf, buf_len) __u8* buf = kmalloc(buf_len, GFP_ATOMIC);
+#define NETBUF_ALLOC(buf, buf_len) __u8* buf = kmalloc(buf_len, GFP_KERNEL);
 #define NETBUF_CHECK(buf) ((buf) != NULL)
 #define NETBUF_FREE(buf) kfree(buf);
 #elif defined(ALLOC_MALLOC)
