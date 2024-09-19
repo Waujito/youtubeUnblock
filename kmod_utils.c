@@ -6,7 +6,6 @@
 #include <linux/module.h>
 #include <linux/init.h>
 #include <linux/printk.h>
-#include <linux/mutex.h>
 #include <linux/socket.h>
 #include <linux/net.h>
 
@@ -15,10 +14,8 @@
 #include "logging.h"
 
 static struct socket *rawsocket;
-DEFINE_MUTEX(rslock);
 
 static struct socket *raw6socket;
-DEFINE_MUTEX(rs6lock);
 
 
 int open_raw_socket(void) {
@@ -76,9 +73,7 @@ static int send_raw_ipv4(const uint8_t *pkt, uint32_t pktlen) {
 	msg.msg_control = NULL;
 	msg.msg_controllen = 0;
 
-	mutex_lock(&rslock);
 	ret = kernel_sendmsg(rawsocket, &msg, &iov, 1, pktlen);
-	mutex_unlock(&rslock);
 
 	return ret;
 }
@@ -137,9 +132,7 @@ int send_raw_ipv6(const uint8_t *pkt, uint32_t pktlen) {
 	msg.msg_control = NULL;
 	msg.msg_controllen = 0;
 
-	mutex_lock(&rs6lock);
 	ret = kernel_sendmsg(raw6socket, &msg, &iov, 1, pktlen);
-	mutex_unlock(&rs6lock);
 
 	return ret;
 }
