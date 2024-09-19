@@ -506,8 +506,8 @@ int tcp_frag(const uint8_t *pkt, uint32_t buflen, uint32_t payload_offset,
 void z_function(const char *str, int *zbuf, size_t len) {
 	zbuf[0] = len;
 
-	ssize_t lh = 0, rh = 1;
-	for (ssize_t i = 1; i < len; i++) {
+	int lh = 0, rh = 1;
+	for (int i = 1; i < (int)len; i++) {
 		zbuf[i] = 0;
 		if (i < rh) {
 			zbuf[i] = min(zbuf[i - lh], rh - i);

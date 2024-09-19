@@ -89,7 +89,7 @@ static int inverse_boolean_get(char *buffer, const struct kernel_param *kp) {
 		buffer[0] = '0';
 	}
 	buffer[1] = '\0';
-	return 0;
+	return strlen(buffer);
 }
 
 static const struct kernel_param_ops unumeric_parameter_ops = {
@@ -212,4 +212,163 @@ static const struct kernel_param_ops verbose_trace_ops = {
 	.set = verbose_trace_set,
 	.get = param_get_int,
 };
+
 module_param_cb(trace, &verbose_trace_ops, &config.verbose, 0664);
+
+static int frag_strat_set(const char *val, const struct kernel_param *kp) {
+	size_t len;
+
+	len = strnlen(val, STR_MAXLEN + 1);
+	if (len == STR_MAXLEN + 1) {
+		pr_err("%s: string parameter too long\n", kp->name);
+		return -ENOSPC;
+	}
+
+	if (len >= 1 && val[len - 1] == '\n') {
+		len--;
+	}
+
+	if (strncmp(val, "tcp", len) == 0) {
+		*(int *)kp->arg = FRAG_STRAT_TCP;
+	} else if (strncmp(val, "ip", len) == 0) {
+		*(int *)kp->arg = FRAG_STRAT_IP;
+	} else if (strncmp(val, "none", len) == 0) {
+		*(int *)kp->arg = FRAG_STRAT_NONE;
+	} else {
+		return -EINVAL;
+	}
+
+	return 0;
+}
+
+static int frag_strat_get(char *buffer, const struct kernel_param *kp) {
+	switch (*(int *)kp->arg) {
+		case FRAG_STRAT_TCP:
+			strcpy(buffer, "tcp\n");
+			break;
+		case FRAG_STRAT_IP:
+			strcpy(buffer, "ip\n");
+			break;
+		case FRAG_STRAT_NONE:
+			strcpy(buffer, "none\n");
+			break;
+		default:
+			strcpy(buffer, "unknown\n");
+	}
+
+	return strlen(buffer);
+}
+
+static const struct kernel_param_ops frag_strat_ops = {
+	.set = frag_strat_set,
+	.get = frag_strat_get,
+};
+
+module_param_cb(fragmentation_strategy, &frag_strat_ops, &config.fragmentation_strategy, 0664);
+
+static int fake_strat_set(const char *val, const struct kernel_param *kp) {
+	size_t len;
+
+	len = strnlen(val, STR_MAXLEN + 1);
+	if (len == STR_MAXLEN + 1) {
+		pr_err("%s: string parameter too long\n", kp->name);
+		return -ENOSPC;
+	}
+
+	if (len >= 1 && val[len - 1] == '\n') {
+		len--;
+	}
+
+	if (strncmp(val, "randseq", len) == 0) {
+		*(int *)kp->arg = FAKE_STRAT_RAND_SEQ;
+	} else if (strncmp(val, "ttl", len) == 0) {
+		*(int *)kp->arg = FAKE_STRAT_TTL;
+	} else if (strncmp(val, "tcp_check", len) == 0) {
+		*(int *)kp->arg = FAKE_STRAT_TCP_CHECK;
+	} else if (strncmp(val, "pastseq", len) == 0) {
+		*(int *)kp->arg = FAKE_STRAT_PAST_SEQ;
+	} else if (strncmp(val, "md5sum", len) == 0) {
+		*(int *)kp->arg = FAKE_STRAT_TCP_MD5SUM;
+	} else {
+		return -EINVAL;
+	}
+
+	return 0;
+}
+
+static int fake_strat_get(char *buffer, const struct kernel_param *kp) {
+	switch (*(int *)kp->arg) {
+		case FAKE_STRAT_RAND_SEQ:
+			strcpy(buffer, "randseq\n");
+			break;
+		case FAKE_STRAT_TTL:
+			strcpy(buffer, "ttl\n");
+			break;
+		case FAKE_STRAT_TCP_CHECK:
+			strcpy(buffer, "tcp_check\n");
+			break;
+		case FAKE_STRAT_PAST_SEQ:
+			strcpy(buffer, "pastseq\n");
+			break;
+		case FAKE_STRAT_TCP_MD5SUM:
+			strcpy(buffer, "md5sum\n");
+			break;
+		default:
+			strcpy(buffer, "unknown\n");
+	}
+
+	return strlen(buffer);
+}
+
+static const struct kernel_param_ops fake_strat_ops = {
+	.set = fake_strat_set,
+	.get = fake_strat_get,
+};
+
+module_param_cb(faking_strategy, &fake_strat_ops, &config.faking_strategy, 0664);
+
+static int sni_detection_set(const char *val, const struct kernel_param *kp) {
+	size_t len;
+
+	len = strnlen(val, STR_MAXLEN + 1);
+	if (len == STR_MAXLEN + 1) {
+		pr_err("%s: string parameter too long\n", kp->name);
+		return -ENOSPC;
+	}
+
+	if (len >= 1 && val[len - 1] == '\n') {
+		len--;
+	}
+
+	if (strncmp(val, "parse", len) == 0) {
+		*(int *)kp->arg = SNI_DETECTION_PARSE;
+	} else if (strncmp(val, "brute", len) == 0) {
+		*(int *)kp->arg = SNI_DETECTION_BRUTE;
+	} else {
+		return -EINVAL;
+	}
+
+	return 0;
+}
+
+static int sni_detection_get(char *buffer, const struct kernel_param *kp) {
+	switch (*(int *)kp->arg) {
+		case SNI_DETECTION_PARSE:
+			strcpy(buffer, "parse\n");
+			break;
+		case SNI_DETECTION_BRUTE:
+			strcpy(buffer, "brute\n");
+			break;
+		default:
+			strcpy(buffer, "unknown\n");
+	}
+
+	return strlen(buffer);
+}
+
+static const struct kernel_param_ops sni_detection_ops = {
+	.set = sni_detection_set,
+	.get = sni_detection_get,
+};
+
+module_param_cb(sni_detection, &sni_detection_ops, &config.sni_detection, 0664);

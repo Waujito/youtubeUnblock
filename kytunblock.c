@@ -1,3 +1,4 @@
+#include "nf_wrapper.h"
 #ifndef KERNEL_SPACE
 #error "You are trying to compile the kernel module not in the kernel space"
 #endif
@@ -25,9 +26,7 @@ MODULE_VERSION("0.3.2");
 MODULE_AUTHOR("Vadim Vetrov <vetrovvd@gmail.com>");
 MODULE_DESCRIPTION("Linux kernel module for youtube unblock");
 
-static unsigned int ykb_nf_hook(void *priv, 
-			struct sk_buff *skb, 
-			const struct nf_hook_state *state) {
+static NF_CALLBACK(ykb_nf_hook, skb) {
 	int ret;
 
 	if ((skb->mark & config.mark) == config.mark) 

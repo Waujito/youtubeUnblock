@@ -32,8 +32,7 @@ int open_raw_socket(void) {
 	rawsocket->sk->sk_mark=config.mark;
 
 	return 0;
-sr_err:
-	sock_release(rawsocket);
+
 err:
 	return ret;
 }
@@ -63,15 +62,26 @@ static int send_raw_ipv4(const uint8_t *pkt, uint32_t pktlen) {
 
 	struct msghdr msg;
 	struct kvec iov;
+
+	memset(&msg, 0, sizeof(msg));
+
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 19, 0)
 	iov.iov_base = (__u8 *)pkt;
 	iov.iov_len = pktlen;
 	iov_iter_kvec(&msg.msg_iter, READ, &iov, 1, 1);
+#else
+	iov.iov_base = (__u8 *)pkt;
+	iov.iov_len = pktlen;
+	// msg.msg_iov = (struct iovec *)&iov;
+	// msg.msg_iovlen = iov.iov_len;
+#endif
 
 	msg.msg_flags = 0;
 	msg.msg_name = &daddr;
 	msg.msg_namelen = sizeof(struct sockaddr_in);
 	msg.msg_control = NULL;
 	msg.msg_controllen = 0;
+
 
 	ret = kernel_sendmsg(rawsocket, &msg, &iov, 1, pktlen);
 
@@ -92,8 +102,7 @@ int open_raw6_socket(void) {
 	raw6socket->sk->sk_mark=config.mark;
 
 	return 0;
-sr_err:
-	sock_release(raw6socket);
+
 err:
 	return ret;
 }
@@ -120,11 +129,20 @@ int send_raw_ipv6(const uint8_t *pkt, uint32_t pktlen) {
 		.sin6_addr = iph->ip6_dst
 	};
 
-	struct msghdr msg;
 	struct kvec iov;
+	struct msghdr msg;
+	memset(&msg, 0, sizeof(msg));
+
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 19, 0)
 	iov.iov_base = (__u8 *)pkt;
 	iov.iov_len = pktlen;
 	iov_iter_kvec(&msg.msg_iter, READ, &iov, 1, 1);
+#else
+	iov.iov_base = (__u8 *)pkt;
+	iov.iov_len = pktlen;
+	// msg.msg_iov = (struct iovec *)&iov;
+	// msg.msg_iovlen = iov.iov_len;
+#endif
 
 	msg.msg_flags = 0;
 	msg.msg_name = &daddr;
