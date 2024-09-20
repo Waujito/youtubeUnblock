@@ -63,8 +63,6 @@ int process_packet(const uint8_t *raw_payload, uint32_t raw_payload_len) {
 	
 accept:
 	return PKT_ACCEPT;
-drop:
-	return PKT_DROP;
 }
 
 int process_tcp_packet(const uint8_t *raw_payload, uint32_t raw_payload_len) {
@@ -221,7 +219,7 @@ int process_tcp_packet(const uint8_t *raw_payload, uint32_t raw_payload_len) {
 			}
 			break;
 			case FRAG_STRAT_IP: 
-			if (ipxv != IP4VERSION) {
+			if (ipxv == IP4VERSION) {
 				ipd_offset = ((char *)data - (char *)tcph) + vrd.sni_offset;
 				mid_offset = ipd_offset + vrd.sni_len / 2;
 				mid_offset += 8 - mid_offset % 8;
@@ -254,8 +252,10 @@ int process_tcp_packet(const uint8_t *raw_payload, uint32_t raw_payload_len) {
 				goto drop_lc;
 			} else {
 				printf("WARNING: IP fragmentation is supported only for IPv4\n");	
+				goto default_send;
 			}
 			default:
+			default_send:
 				ret = instance_config.send_raw_packet(payload, payload_len);
 				if (ret < 0) {
 					lgerror("raw pack send", ret);
@@ -611,6 +611,7 @@ int post_fake_sni(const void *iph, unsigned int iph_len,
 		}
 
 		lgtrace_addp("post fake sni #%d", i + 1);
+		lgtrace_addp("post with %d", fsn_len);
 		ret = instance_config.send_raw_packet(fake_sni, fsn_len);
 		if (ret < 0) {
 			lgerror("send fake sni", ret);
@@ -632,7 +633,7 @@ int post_fake_sni(const void *iph, unsigned int iph_len,
 		memcpy(rfstcph, fstcph, tcph_len);
 		fsiph = (void *)rfsiph;
 		fstcph = (void *)rfstcph;
-out_lc:
+
 		NETBUF_FREE(fake_sni);
 		continue;
 erret_lc:
@@ -647,10 +648,6 @@ erret_lc:
 #define TLS_HANDSHAKE_TYPE_CLIENT_HELLO 0x01
 #define TLS_EXTENSION_SNI 0x0000
 #define TLS_EXTENSION_CLIENT_HELLO_ENCRYPTED 0xfe0d
-
-typedef uint8_t uint8_t;
-typedef uint32_t uint32_t;
-typedef uint16_t uint16_t;
 
 /**
  * Processes tls payload of the tcp request.
@@ -672,9 +669,7 @@ struct tls_verdict analyze_tls_data(
 
 		uint8_t tls_content_type = *msgData;
 		uint8_t tls_vmajor = *(msgData + 1);
-		uint8_t tls_vminor = *(msgData + 2);
 		uint16_t message_length = ntohs(*(uint16_t *)(msgData + 3));
-		const uint8_t *message_length_ptr = msgData + 3;
 
 		if (tls_vmajor != 0x03) goto nextMessage;
 
@@ -698,7 +693,6 @@ struct tls_verdict analyze_tls_data(
 
 		const uint8_t *msgPtr = handshakeProto;
 		msgPtr += 1; 
-		const uint8_t *handshakeProto_length_ptr = msgPtr + 1;
 		msgPtr += 3 + 2 + 32;
 
 		if (msgPtr + 1 >= data_end) break;
@@ -718,7 +712,6 @@ struct tls_verdict analyze_tls_data(
 
 		if (msgPtr + 2 >= data_end) break;
 		uint16_t extensionsLen = ntohs(*(uint16_t *)msgPtr);
-		const uint8_t *extensionsLen_ptr = msgPtr;
 		msgPtr += 2;
 
 		const uint8_t *extensionsPtr = msgPtr;
@@ -735,7 +728,6 @@ struct tls_verdict analyze_tls_data(
 
 			uint16_t extensionLen = 
 				ntohs(*(uint16_t *)extensionPtr);
-			const uint8_t *extensionLen_ptr = extensionPtr;
 			extensionPtr += 2;
 
 
@@ -750,14 +742,13 @@ struct tls_verdict analyze_tls_data(
 			if (sni_ext_ptr + 2 >= extensions_end) break;
 			uint16_t sni_ext_dlen = ntohs(*(uint16_t *)sni_ext_ptr);
 
-			const uint8_t *sni_ext_dlen_ptr = sni_ext_ptr;
 			sni_ext_ptr += 2;
 
 			const uint8_t *sni_ext_end = sni_ext_ptr + sni_ext_dlen;
 			if (sni_ext_end >= extensions_end) break;
 			
 			if (sni_ext_ptr + 3 >= sni_ext_end) break;
-			uint8_t sni_type = *sni_ext_ptr++;
+			sni_ext_ptr++;
 			uint16_t sni_len = ntohs(*(uint16_t *)sni_ext_ptr);
 			sni_ext_ptr += 2;
 
@@ -947,7 +938,6 @@ int gen_fake_sni(const void *ipxh, uint32_t iph_len,
 	memcpy(buf + iph_len, tcph, tcph_len);
 	memcpy(buf + iph_len + tcph_len, data, data_len);
 
-	struct tcphdr *ntcph = (struct tcphdr *)(buf + iph_len);
 
 	if (ipxv == IP4VERSION) {
 		struct iphdr *niph = (struct iphdr *)buf;
@@ -992,8 +982,6 @@ int fail_packet(uint8_t *payload, uint32_t *plen, uint32_t avail_buflen) {
 	if (ret < 0) {
 		return ret;
 	}
-
-	int sizedelta = 0;
 
 
 	if (config.faking_strategy == FAKE_STRAT_RAND_SEQ) {

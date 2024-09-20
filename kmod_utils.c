@@ -3,9 +3,9 @@
 #endif
 #include "kmod_utils.h"
 
+#include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/init.h>
-#include <linux/printk.h>
 #include <linux/socket.h>
 #include <linux/net.h>
 
@@ -143,7 +143,7 @@ int send_raw_socket(const uint8_t *pkt, uint32_t pktlen) {
 	int ret;
 
 	if (pktlen > AVAILABLE_MTU) {
-		pr_warn("The packet is too big and may cause issues!");
+		lgdebug("The packet is too big and may cause issues!");
 
 		NETBUF_ALLOC(buff1, MAX_PACKET_SIZE);
 		if (!NETBUF_CHECK(buff1)) {
@@ -175,7 +175,7 @@ int send_raw_socket(const uint8_t *pkt, uint32_t pktlen) {
 				}
 				break;
 			default:
-				pr_warn("send_raw_socket: Packet is too big but fragmentation is disabled!");
+				pr_info("send_raw_socket: Packet is too big but fragmentation is disabled!");
 				ret = -EINVAL;
 				goto erret_lc;
 		}
@@ -216,7 +216,7 @@ erret_lc:
 }
 
 void delay_packet_send(const unsigned char *data, unsigned int data_len, unsigned int delay_ms) {
-	pr_warn("delay_packet_send won't work on current youtubeUnblock version");
+	pr_info("delay_packet_send won't work on current youtubeUnblock version");
 	send_raw_socket(data, data_len);
 }
 

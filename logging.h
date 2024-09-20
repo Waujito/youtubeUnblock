@@ -5,7 +5,8 @@
 #define LOG_LEVEL (config.verbose)
 
 #ifdef KERNEL_SPACE
-#include <linux/printk.h>
+#include <linux/kernel.h>
+#include <linux/module.h>
 #define printf pr_info
 #define perror pr_err
 #define lgerror(msg, ret, ...) __extension__ ({		\

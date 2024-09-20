@@ -6,7 +6,6 @@
 // Make with make kmake && sudo iptables -t mangle -D OUTPUT 1 && sudo make kreload && sudo iptables -t mangle -I OUTPUT -p tcp -j YTUNBLOCK
 #include <linux/module.h>
 #include <linux/init.h>
-#include <linux/printk.h>
 #include <linux/mutex.h>
 #include <linux/socket.h>
 #include <linux/net.h>

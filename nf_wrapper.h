@@ -38,14 +38,6 @@
 
 #else
 
-/*
- * Sorry, I don't have headers for RHEL 6 and below because I'm in a bit of a
- * deadline right now.
- * If this is causing you trouble, find `nf_hookfn` in your kernel headers
- * (typically in include/linux/netfilter.h) and add your version of the
- * NF_CALLBACK macro here.
- * Also, kernel headers per version can be found here: http://vault.centos.org/
- */
 #error "Sorry; this version of RHEL is not supported because it's kind of old."
 
 #endif /* RHEL_RELEASE_CODE >= x */
