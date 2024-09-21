@@ -1,3 +1,3 @@
-obj-m := ipt_YTUNBLOCK.o
-ipt_YTUNBLOCK-objs := iptk_YTUNBLOCK.o mangle.o
-ccflags-y := -std=gnu11 -Wno-unused-variable -DKERNEL_SPACE -DDEBUG
+obj-m := kyoutubeUnblock.o
+kyoutubeUnblock-objs := kytunblock.o mangle.o quic.o utils.o kmod_utils.o kargs.o
+ccflags-y := -std=gnu99 -DKERNEL_SPACE -Wno-error -Wno-declaration-after-statement

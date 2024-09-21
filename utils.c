@@ -1,14 +1,19 @@
 #include "utils.h"
 #include "logging.h"
-#include <netinet/in.h>
+#include "types.h"
 
-#ifdef KERNEL_SPACE
-#include <linux/ip.h>
-#else 
+#ifndef KERNEL_SPACE 
 #include <stdlib.h>
 #include <libnetfilter_queue/libnetfilter_queue_ipv4.h>
 #include <libnetfilter_queue/libnetfilter_queue_ipv6.h>
 #include <libnetfilter_queue/libnetfilter_queue_tcp.h>
+#else
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 24))
+	#include <net/ip6_checksum.h>
+	#include <net/checksum.h>
+#else
+	#include <net/checksum.h>
+#endif
 #endif
 
 
@@ -37,9 +42,14 @@ void ip4_set_checksum(struct iphdr *iph)
 }
 
 void tcp6_set_checksum(struct tcphdr *tcph, struct ip6_hdr *iph) {
-	uint16_t old_check = ntohs(tcph->check);
-
+#ifdef KERNEL_SPACE
+	tcph->check = 0;
+	tcph->check = csum_ipv6_magic(&iph->saddr, &iph->daddr, 
+		 ntohs(iph->ip6_plen), IPPROTO_TCP, 
+		 csum_partial(tcph, ntohs(iph->ip6_plen), 0));
+#else
 	nfq_tcp_compute_checksum_ipv6(tcph, iph);
+#endif
 }
 
 int set_ip_checksum(void *iph, uint32_t iphb_len) {
@@ -157,7 +167,7 @@ int ip6_payload_split(uint8_t *pkt, uint32_t buflen,
 	}
 
 	uint32_t hdr_len = sizeof(struct ip6_hdr);
-	uint32_t pktlen = ntohs(hdr->ip6_ctlun.ip6_un1.ip6_un1_plen);
+	uint32_t pktlen = ntohs(hdr->ip6_plen);
 	if (buflen < pktlen) {
 		lgerror("ip6_payload_split: buflen cmp pktlen: %d %d", -EINVAL, buflen, pktlen);
 		return -EINVAL;
@@ -194,7 +204,7 @@ int tcp6_payload_split(uint8_t *pkt, uint32_t buflen,
 
 
 	if (
-		hdr->ip6_ctlun.ip6_un1.ip6_un1_nxt != IPPROTO_TCP || 
+		hdr->ip6_nxt != IPPROTO_TCP || 
 		tcph_plen < sizeof(struct tcphdr)) {
 		return -EINVAL;
 	}
@@ -240,7 +250,6 @@ int udp4_payload_split(uint8_t *pkt, uint32_t buflen,
 	struct iphdr *hdr;
 	uint32_t hdr_len;
 	struct udphdr *uhdr;
-	uint32_t uhdr_len;
 	
 	uint8_t *ip_ph;
 	uint32_t ip_phlen;
@@ -270,6 +279,59 @@ int udp4_payload_split(uint8_t *pkt, uint32_t buflen,
 	if (plen) *plen = ip_phlen - sizeof(struct udphdr);
 
 	return 0;
+}
+
+int udp6_payload_split(uint8_t *pkt, uint32_t buflen,
+		       struct ip6_hdr **iph, uint32_t *iph_len,
+		       struct udphdr **udph,
+		       uint8_t **payload, uint32_t *plen) {
+	struct ip6_hdr *hdr;
+	uint32_t hdr_len;
+	struct udphdr *uhdr;
+	
+	uint8_t *ip_ph;
+	uint32_t ip_phlen;
+
+	if (ip6_payload_split(pkt, buflen, &hdr, &hdr_len, 
+			&ip_ph, &ip_phlen)){
+		return -EINVAL;
+	}
+
+
+	if (
+		hdr->ip6_nxt != IPPROTO_UDP || 
+		ip_phlen < sizeof(struct udphdr)) {
+		return -EINVAL;
+	}
+
+
+	uhdr = (struct udphdr *)(ip_ph);
+	if (uhdr->len != 0 && ntohs(uhdr->len) != ip_phlen) {
+		return -EINVAL;
+	}
+
+	if (iph) *iph = hdr;
+	if (iph_len) *iph_len = hdr_len;
+	if (udph) *udph = uhdr;
+	if (payload) *payload = ip_ph + sizeof(struct udphdr);
+	if (plen) *plen = ip_phlen - sizeof(struct udphdr);
+
+	return 0;
+}
+
+int udp_payload_split(uint8_t *pkt, uint32_t buflen,
+		      void **iph, uint32_t *iph_len,
+		      struct udphdr **udph,
+		      uint8_t **payload, uint32_t *plen) {
+	int netvers = netproto_version(pkt, buflen);
+	if (netvers == IP4VERSION) {
+		return udp4_payload_split(pkt, buflen, (struct iphdr **)iph, iph_len, udph, payload, plen);
+	} else if (netvers == IP6VERSION) {
+		return udp6_payload_split(pkt, buflen, (struct ip6_hdr **)iph, iph_len, udph, payload, plen);
+	} else {
+		lgerror("Internet Protocol version is unsupported", -EINVAL);
+		return -EINVAL;
+	}
 }
 
 // split packet to two ipv4 fragments.
@@ -426,8 +488,8 @@ int tcp_frag(const uint8_t *pkt, uint32_t buflen, uint32_t payload_offset,
 	} else {
 		struct ip6_hdr *s1_hdr = (void *)seg1;
 		struct ip6_hdr *s2_hdr = (void *)seg2;
-		s1_hdr->ip6_ctlun.ip6_un1.ip6_un1_plen = htons(s1_dlen - hdr_len);
-		s2_hdr->ip6_ctlun.ip6_un1.ip6_un1_plen = htons(s2_dlen - hdr_len);
+		s1_hdr->ip6_plen = htons(s1_dlen - hdr_len);
+		s2_hdr->ip6_plen = htons(s2_dlen - hdr_len);
 	}
 
 	struct tcphdr *s1_tcph = (void *)(seg1 + hdr_len);
@@ -440,3 +502,24 @@ int tcp_frag(const uint8_t *pkt, uint32_t buflen, uint32_t payload_offset,
 
 	return 0;
 }
+
+void z_function(const char *str, int *zbuf, size_t len) {
+	zbuf[0] = len;
+
+	int lh = 0, rh = 1;
+	for (int i = 1; i < (int)len; i++) {
+		zbuf[i] = 0;
+		if (i < rh) {
+			zbuf[i] = min(zbuf[i - lh], rh - i);
+		}
+
+		while (i + zbuf[i] < len && str[zbuf[i]] == str[i + zbuf[i]])
+			zbuf[i]++;
+
+		if (i + zbuf[i] > rh) {
+			lh = i;
+			rh = i + zbuf[i];
+		}
+	}
+}
+

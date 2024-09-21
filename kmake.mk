@@ -7,36 +7,23 @@ LD	:= ld
 CFLAGS	:=
 LDFLAGS	:=
 
-IPT_CFLAGS := -Wall -Wpedantic -O2
+KERNEL_BUILDER_MAKEDIR:=/lib/modules/$(shell uname -r)/build
 
 .PHONY: kmake kload kunload kreload kclean kmclean xclean
-kmake: kmod xmod
+kmake: kmod
 
 kmod:
-	$(MAKE) -C /lib/modules/$(shell uname -r)/build M=$(PWD) modules
-
-xmod: libipt_YTUNBLOCK.so
-
-libipt_YTUNBLOCK.so: libipt_YTUNBLOCK.o
-	$(CCLD) -shared -fPIC ${IPT_CFLAGS} -o $@ $^;
-
-libipt_YTUNBLOCK.o: libipt_YTUNBLOCK.c
-	$(CC) ${IPT_CFLAGS} -D_INIT=lib$*_init -fPIC -c -o $@ $<;
+	$(MAKE) -C $(KERNEL_BUILDER_MAKEDIR) M=$(PWD) modules
 
 kload:
-	insmod ipt_YTUNBLOCK.ko
-	cp ./libipt_YTUNBLOCK.so /usr/lib/xtables/
+	insmod kyoutubeUnblock.ko
 
 kunload:
-	-rmmod ipt_YTUNBLOCK
-	-/bin/rm /usr/lib/xtables/libipt_YTUNBLOCK.so
+	-rmmod kyoutubeUnblock
 
 kreload: kunload kload
 
-kclean: xtclean kmclean
+kclean: kmclean
 
 kmclean:
-	-$(MAKE) -C /lib/modules/$(shell uname -r)/build M=$(PWD) clean
-
-xtclean:
-	-/bin/rm -f libipt_YTUNBLOCK.so libipt_YTUNBLOCK.o
+	-$(MAKE) -C $(KERNEL_BUILDER_MAKEDIR) M=$(PWD) clean

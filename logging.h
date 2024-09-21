@@ -5,11 +5,12 @@
 #define LOG_LEVEL (config.verbose)
 
 #ifdef KERNEL_SPACE
-#include <linux/printk.h>
+#include <linux/kernel.h>
+#include <linux/module.h>
 #define printf pr_info
 #define perror pr_err
 #define lgerror(msg, ret, ...) __extension__ ({		\
-	printf(msg ": %d\n", ##__VA_ARGS__, ret);	\
+	pr_err(msg ": %d\n", ##__VA_ARGS__, ret);	\
 })
 #else
 #include <stdio.h> // IWYU pragma: export
