@@ -46,6 +46,8 @@ define Package/youtubeUnblock/install
 	$(INSTALL_BIN) $(PKG_BUILD_DIR)/build/youtubeUnblock $(1)/opt/bin
 	$(INSTALL_DIR) $(1)/opt/etc/init.d
 	$(INSTALL_BIN) ./files/S51youtubeUnblock $(1)/opt/etc/init.d/S91youtubeUnblock
+	$(INSTALL_DIR) $(1)/opt/etc/ndm/netfilter.d/
+	$(INSTALL_BIN) ./files/ndm_youtubeUnblock.sh $(1)/opt/etc/ndm/netfilter.d/000-youtubeUnblock.sh
 endef
 
 $(eval $(call BuildPackage,youtubeUnblock))

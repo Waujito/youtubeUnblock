@@ -91,13 +91,19 @@ _iptables()
 }
 
 firewall_start_v4() {
-	_iptables iptables -A FORWARD -t mangle -p tcp --dport 443 -m connbytes --connbytes-dir original --connbytes-mode packets --connbytes 0:19 -j NFQUEUE --queue-num 537 --queue-bypass	
+	iptables -t mangle -N YOUTUBEUNBLOCK &>/dev/null
+	_iptables iptables -A YOUTUBEUNBLOCK -t mangle -p tcp --dport 443 -m connbytes --connbytes-dir original --connbytes-mode packets --connbytes 0:19 -j NFQUEUE --queue-num 537 --queue-bypass
+	_iptables iptables -A YOUTUBEUNBLOCK -t mangle -p udp --dport 443 -m connbytes --connbytes-dir original --connbytes-mode packets --connbytes 0:19 -j NFQUEUE --queue-num 537 --queue-bypass
+	_iptables iptables -A POSTROUTING -t mangle -j YOUTUBEUNBLOCK
 	_iptables iptables -I OUTPUT -m mark --mark 32768/32768 -j ACCEPT
 }
 
 firewall_stop_v4() {
-	_iptables iptables -D FORWARD -t mangle -p tcp --dport 443 -m connbytes --connbytes-dir original --connbytes-mode packets --connbytes 0:19 -j NFQUEUE --queue-num 537 --queue-bypass	
-	_iptables iptables -D OUTPUT -t filter -m mark --mark 32768/32768 -j ACCEPT
+	_iptables iptables -D YOUTUBEUNBLOCK -t mangle -p tcp --dport 443 -m connbytes --connbytes-dir original --connbytes-mode packets --connbytes 0:19 -j NFQUEUE --queue-num 537 --queue-bypass
+	_iptables iptables -D YOUTUBEUNBLOCK -t mangle -p udp --dport 443 -m connbytes --connbytes-dir original --connbytes-mode packets --connbytes 0:19 -j NFQUEUE --queue-num 537 --queue-bypass
+	_iptables iptables -D POSTROUTING -t mangle -j YOUTUBEUNBLOCK
+	_iptables iptables -D OUTPUT -m mark --mark 32768/32768 -j ACCEPT
+	iptables -t mangle -X YOUTUBEUNBLOCK &>/dev/null
 }
 
 firewall_start_v6() {
@@ -105,7 +111,10 @@ firewall_start_v6() {
 		return 0
 	fi
 
-	_iptables ip6tables -A FORWARD -t mangle -p tcp --dport 443 -m connbytes --connbytes-dir original --connbytes-mode packets --connbytes 0:19 -j NFQUEUE --queue-num 537 --queue-bypass	
+	ip6tables -t mangle -N YOUTUBEUNBLOCK &>/dev/null
+	_iptables ip6tables -A YOUTUBEUNBLOCK -t mangle -p tcp --dport 443 -m connbytes --connbytes-dir original --connbytes-mode packets --connbytes 0:19 -j NFQUEUE --queue-num 537 --queue-bypass
+	_iptables ip6tables -A YOUTUBEUNBLOCK -t mangle -p udp --dport 443 -m connbytes --connbytes-dir original --connbytes-mode packets --connbytes 0:19 -j NFQUEUE --queue-num 537 --queue-bypass
+	_iptables ip6tables -A POSTROUTING -t mangle -j YOUTUBEUNBLOCK
 	_iptables ip6tables -I OUTPUT -m mark --mark 32768/32768 -j ACCEPT
 }
 
@@ -114,20 +123,33 @@ firewall_stop_v6() {
 		return 0
 	fi
 
-	_iptables ip6tables -D FORWARD -t mangle -p tcp --dport 443 -m connbytes --connbytes-dir original --connbytes-mode packets --connbytes 0:19 -j NFQUEUE --queue-num 537 --queue-bypass	
-	_iptables ip6tables -D OUTPUT -t filter -m mark --mark 32768/32768 -j ACCEPT
+	_iptables ip6tables -D YOUTUBEUNBLOCK -t mangle -p tcp --dport 443 -m connbytes --connbytes-dir original --connbytes-mode packets --connbytes 0:19 -j NFQUEUE --queue-num 537 --queue-bypass
+	_iptables ip6tables -D YOUTUBEUNBLOCK -t mangle -p udp --dport 443 -m connbytes --connbytes-dir original --connbytes-mode packets --connbytes 0:19 -j NFQUEUE --queue-num 537 --queue-bypass
+	_iptables ip6tables -D POSTROUTING -t mangle -j YOUTUBEUNBLOCK
+	_iptables ip6tables -D OUTPUT -m mark --mark 32768/32768 -j ACCEPT
+	ip6tables -t mangle -X YOUTUBEUNBLOCK &>/dev/null
 }
 
 kernel_modules_load() {
 	KERNEL=$(uname -r)
+
+	connbytes_mod_path=$(find /lib/modules/$(uname -r) -name "xt_connbytes.ko*")
+	if [ ! -z "$connbytes_mod_path" ]; then
+		insmod "$connbytes_mod_path" &>/dev/null && echo "xt_connbytes.ko loaded"
+	fi
+
+	nfqueue_mod_path=$(find /lib/modules/$(uname -r) -name "xt_NFQUEUE.ko*")
+	if [ ! -z "$nfqueue_mod_path" ]; then
+		insmod "$nfqueue_mod_path" &>/dev/null && echo "xt_NFQUEUE.ko loaded"
+	fi
 
 	(modprobe xt_connbytes --first-time &>/dev/null && echo "xt_connbytes loaded") || true
 	(modprobe xt_NFQUEUE --first-time &>/dev/null && echo "xt_NFQUEUE loaded") || true
 }
 
 system_config() {
-	sysctl -w net.netfilter.nf_conntrack_checksum=0 &> /dev/null || true
-	sysctl -w net.netfilter.nf_conntrack_tcp_be_liberal=1 &> /dev/null || true
+	sysctl -w net.netfilter.nf_conntrack_checksum=0 &> /dev/null
+	sysctl -w net.netfilter.nf_conntrack_tcp_be_liberal=1 &> /dev/null
 }
 
 status() {
@@ -159,6 +181,18 @@ case $ACTION in
 	firewall-stop)
 		firewall_stop_v4
 		firewall_stop_v6
+		;;
+	firewall_stop_v4)
+		firewall_stop_v4
+		;;
+	firewall_start_v4)
+		firewall_start_v4
+		;;
+	firewall_stop_v6)
+		firewall_stop_v6
+		;;
+	firewall_start_v6)
+		firewall_start_v6
 		;;
 	init-system)
 		kernel_modules_load
