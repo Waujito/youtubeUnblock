@@ -1,0 +1,7 @@
+#include "os_port.h"
+
+#define HKDF_SUPPORT ENABLED
+#define SHA256_SUPPORT ENABLED
+#define AES_SUPPORT ENABLED
+#define ECB_SUPPORT ENABLED
+#define GCM_SUPPORT ENABLED

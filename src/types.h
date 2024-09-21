@@ -8,6 +8,18 @@
 #include <linux/string.h> // IWYU pragma: export
 
 #include <linux/types.h>
+
+typedef __u8	uint8_t;
+typedef __u16	uint16_t;
+typedef __u32 	uint32_t;
+typedef __u64 	uint64_t;
+typedef __s8	int8_t;
+typedef __s16	int16_t;
+typedef __s32	int32_t;
+typedef __s64	int64_t;
+
+typedef __s32 int_least32_t;	/* integer of >= 32 bits */
+typedef __s16 int_least16_t;	/* integer of >= 16 bits */
 #else /* USER_SPACE */
 
 #include <errno.h>  // IWYU pragma: export

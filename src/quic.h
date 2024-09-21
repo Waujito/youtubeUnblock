@@ -49,13 +49,42 @@ static const uint32_t supported_versions[] = {
 	QUIC_V2,
 };
 
+// In bytes
+#define QUIC_SAMPLE_OFFSET		4
+
+#define QUIC_SAMPLE_SIZE		16
+#define QUIC_INITIAL_SECRET_SIZE	32
+#define QUIC_CLIENT_IN_SIZE		32
+#define QUIC_KEY_SIZE			16
+#define QUIC_IV_SIZE			12
+#define QUIC_HP_SIZE			16
+// Altough tag is not defined, it present in the end of message
+#define QUIC_TAG_SIZE			16
+
+
+/**
+ * Describes type-specific bytes for Initial message
+ */
+struct quici_lhdr_typespec {
+#if __BYTE_ORDER == __LITTLE_ENDIAN
+	uint8_t number_length:2;//protected
+	uint8_t reserved:2;	//protected
+	uint8_t discard:4;
+#elif __BYTE_ORDER == __BIG_ENDIAN
+	uint8_t discard:4;
+	uint8_t reserved:2;	//protected
+	uint8_t number_length:2;//protected
+#else
+#error "Undefined endian"
+#endif
+}__attribute__((packed));
+
 /**
  * Quic Large Header
  */
 struct quic_lhdr {
 #if __BYTE_ORDER == __LITTLE_ENDIAN
-	uint8_t number_length:2;
-	uint8_t reserved:2;
+	uint8_t type_specific:4;// protected
 	uint8_t type:2;
 	uint8_t fixed:1;
 	uint8_t form:1;
@@ -63,8 +92,7 @@ struct quic_lhdr {
 	uint8_t form:1;
 	uint8_t fixed:1;
 	uint8_t type:2;
-	uint8_t reserved:2;
-	uint8_t number_length:2;
+	uint8_t type_specific:4;// protected
 #else
 #error "Undefined endian"
 #endif
@@ -77,9 +105,9 @@ struct quic_lhdr {
  */
 struct quic_cids {
 	uint8_t dst_len;
-	uint8_t *dst_id;
+	const uint8_t *dst_id;
 	uint8_t src_len;
-	uint8_t *src_id;
+	const uint8_t *src_id;
 };
 
 /**
@@ -89,10 +117,10 @@ struct quic_cids {
  * \qch_len is sizeof(qch) + qci->dst_len + qci->src_id
  * \payload is Type-Specific payload (#17.2).
  */
-int quic_parse_data(uint8_t *raw_payload, uint32_t raw_payload_len,
-		struct quic_lhdr **qch, uint32_t *qch_len,
+int quic_parse_data(const uint8_t *raw_payload, uint32_t raw_payload_len,
+		const struct quic_lhdr **qch, uint32_t *qch_len,
 		struct quic_cids *qci,
-		uint8_t **payload, uint32_t *plen);
+		const uint8_t **payload, uint32_t *plen);
 		
 
 /**
@@ -103,7 +131,7 @@ int quic_parse_data(uint8_t *raw_payload, uint32_t raw_payload_len,
  * \mlen Used to signal about variable length and validate left length
  * in the buffer.
  */
-uint64_t quic_parse_varlength(uint8_t *variable, uint64_t *mlen);
+uint64_t quic_parse_varlength(const uint8_t *variable, uint64_t *mlen);
 
 // quici stands for QUIC Initial
 
@@ -112,19 +140,48 @@ uint64_t quic_parse_varlength(uint8_t *variable, uint64_t *mlen);
  */
 struct quici_hdr {
 	uint64_t token_len;
-	uint8_t *token;
+	const uint8_t *token;
 	uint64_t length;
-	uint32_t packet_number;
+
+	const uint8_t *protected_payload; //  with packet number
+
+	// RFC 9001 5.4.2
+	uint64_t sample_length;
+	const uint8_t *sample;
 };
 
 /**
- * Parses QUIC initial payload.
- * \inpayload is a raw QUIC payload (payload after quic large header)
+ * Checks for quic version and checks if it is supported
  */
-int quic_parse_initial_message(uint8_t *inpayload, uint32_t inplen,
-			const struct quic_lhdr *qch,
-			struct quici_hdr *qhdr,
-			uint8_t **payload, uint32_t *plen);
+int64_t quic_get_version(const struct quic_lhdr *qch);
+
+/**
+* Checks quic message to be initial according to version. 
+* 0 on false, 1 on true
+*/
+int quic_check_is_initial(const struct quic_lhdr *qch);
+
+
+/**
+ * Parses QUIC initial message header.
+ * \inpayload is a QUIC Initial message payload (payload after quic large header)
+ */
+int quic_parse_initial_header(const uint8_t *inpayload, uint32_t inplen,
+			struct quici_hdr *qhdr);
+
+/**
+ * Parses and decrypts QUIC Initial Message. 
+ *
+ * \quic_header QUIC payload, the start of UDP payload
+ * \udecrypted_payload QUIC decrypted payload. Contains all the QUIC packet, with all headers
+ * \udecrypted_message QUIC decrypted message, typically TLS Client Hello
+ *
+ */
+int quic_parse_initial_message(
+	const uint8_t *quic_payload, uint32_t quic_plen,
+	uint8_t **udecrypted_payload, uint32_t *udecrypted_payload_len,
+	const uint8_t **udecrypted_message, uint32_t *udecrypted_message_len
+);
 
 // Like fail_packet for TCP
 int udp_fail_packet(struct udp_failing_strategy strategy, uint8_t *payload, uint32_t *plen, uint32_t avail_buflen);

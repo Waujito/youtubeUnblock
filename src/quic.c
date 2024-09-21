@@ -12,7 +12,7 @@ struct quic_pnumber {
 	uint8_t d4;
 };
 
-uint64_t quic_parse_varlength(uint8_t *variable, uint64_t *mlen) {
+uint64_t quic_parse_varlength(const uint8_t *variable, uint64_t *mlen) {
 	if (mlen && *mlen == 0) return 0;
 	uint64_t vr = (*variable & 0x3F);
 	uint8_t len = 1 << (*variable >> 6);
@@ -31,35 +31,66 @@ uint64_t quic_parse_varlength(uint8_t *variable, uint64_t *mlen) {
 	return vr;
 }
 
-int quic_parse_data(uint8_t *raw_payload, uint32_t raw_payload_len,
-		struct quic_lhdr **qch, uint32_t *qch_len,
+int64_t quic_get_version(const struct quic_lhdr *qch) {
+	int64_t qversion = ntohl(qch->version);
+
+	switch (qversion) {
+		case QUIC_V1:
+		case QUIC_V2:
+			return qversion;
+		default:
+			return -qversion;
+	}
+}
+
+int quic_check_is_initial(const struct quic_lhdr *qch) {
+	int64_t qversion = quic_get_version(qch);
+	if (qversion < 0) return 0;
+
+	uint8_t qtype = qch->type;
+
+	switch (qversion) {
+		case QUIC_V1:
+			qtype = quic_convtype_v1(qtype);
+			break;
+		case QUIC_V2:
+			qtype = quic_convtype_v2(qtype);
+			break;
+		default:
+			return 0;
+	}
+
+	if (qtype != QUIC_INITIAL_TYPE) {
+		return 0;
+	}
+
+	return 1;
+}
+
+int quic_parse_data(const uint8_t *raw_payload, uint32_t raw_payload_len,
+		const struct quic_lhdr **qch, uint32_t *qch_len,
 		struct quic_cids *qci,
-		uint8_t **payload, uint32_t *plen) {
+		const uint8_t **payload, uint32_t *plen) {
 	if (	raw_payload == NULL || 
 		raw_payload_len < sizeof(struct quic_lhdr)) 
 		goto invalid_packet;
 
-	struct quic_lhdr *nqch = (struct quic_lhdr *)raw_payload;
+	const struct quic_lhdr *nqch = (const struct quic_lhdr *)raw_payload;
 	uint32_t left_len = raw_payload_len - sizeof(struct quic_lhdr);
-	uint8_t *cur_rawptr = raw_payload + sizeof(struct quic_lhdr);
+	const uint8_t *cur_rawptr = raw_payload + sizeof(struct quic_lhdr);
 	if (!nqch->fixed) {
 		lgtrace_addp("quic fixed unset");
 		return -EPROTO;
 	}
 
-	uint8_t found = 0;
-	for (uint8_t i = 0; i < 2; i++) {
-		if (ntohl(nqch->version) == supported_versions[i]) {
-			found = 1;
-		}
-	}
+	int64_t qversion = quic_get_version(nqch);
 
-	if (!found) {
-		lgtrace_addp("quic version undefined %d", ntohl(nqch->version));
+	if (qversion < 0) {
+		lgtrace_addp("quic version undefined %ld", -qversion);
 		return -EPROTO;
 	}
 
-	lgtrace_addp("quic version valid %d", ntohl(nqch->version));
+	lgtrace_addp("quic version valid %ld", qversion);
 
 	if (left_len < 2) goto invalid_packet;
 	struct quic_cids nqci = {0};
@@ -93,14 +124,12 @@ invalid_packet:
 	return -EINVAL;
 }
 
-int quic_parse_initial_message(uint8_t *inpayload, uint32_t inplen,
-			const struct quic_lhdr *qch, 
-			struct quici_hdr *qhdr,
-			uint8_t **payload, uint32_t *plen) {
+int quic_parse_initial_header(const uint8_t *inpayload, uint32_t inplen,
+			struct quici_hdr *qhdr) {
 	if (inplen < 3) goto invalid_packet;
 	struct quici_hdr nqhdr;
 
-	uint8_t *cur_ptr = inpayload;
+	const uint8_t *cur_ptr = inpayload;
 	uint32_t left_len = inplen;
 	uint64_t tlen = left_len;
 
@@ -115,22 +144,18 @@ int quic_parse_initial_message(uint8_t *inpayload, uint32_t inplen,
 	tlen = left_len;
 	nqhdr.length = quic_parse_varlength(cur_ptr, &tlen);
 
-	if (left_len != nqhdr.length + tlen && 
-		left_len <= qch->number_length + 1)
+	if (left_len < nqhdr.length + tlen ||
+		nqhdr.length < QUIC_SAMPLE_SIZE + 
+				QUIC_SAMPLE_OFFSET
+	)
 		goto invalid_packet;
+	cur_ptr += tlen;
 
-	uint32_t packet_number = 0;
-
-	for (uint8_t i = 0; i <= qch->number_length; i++) {
-		packet_number = (packet_number << 8) + *cur_ptr++;
-		left_len--;
-	}
-
-	nqhdr.packet_number = packet_number;
+	nqhdr.protected_payload = cur_ptr;
+	nqhdr.sample = cur_ptr + QUIC_SAMPLE_OFFSET;
+	nqhdr.sample_length = QUIC_SAMPLE_SIZE;
 
 	if (qhdr) *qhdr = nqhdr;
-	if (payload) *payload = cur_ptr;
-	if (plen) *plen = left_len;
 
 	return 0;
 
@@ -272,13 +297,13 @@ int detect_udp_filtered(const struct section_config_t *section,
 		const struct quic_lhdr *qch;
 		uint32_t qch_len;
 		struct quic_cids qci;
-		uint8_t *quic_raw_payload;
+		const uint8_t *quic_raw_payload;
 		uint32_t quic_raw_plen;
 
 		lgtrace_addp("QUIC probe");
 
 		ret = quic_parse_data((uint8_t *)data, dlen, 
-			 (struct quic_lhdr **)&qch, &qch_len, &qci, 
+			 &qch, &qch_len, &qci, 
 			 &quic_raw_payload, &quic_raw_plen);
 
 		if (ret < 0) {
