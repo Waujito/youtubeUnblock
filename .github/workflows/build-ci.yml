@@ -43,7 +43,6 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        # arch: [x86_64, x86, aarch64, armhf, armv7, ppc64le, s390x]
         arch: [x86_64, x86, aarch64, armhf, armv7]
         branch: [latest-stable]
     steps:
@@ -341,5 +340,4 @@ jobs:
           title: 'Development build'
           files: |
             ./**/youtubeUnblock*.ipk
-            ./**/kmod-youtubeUnblock*.ipk
             ./**/youtubeUnblock*.tar.gz
