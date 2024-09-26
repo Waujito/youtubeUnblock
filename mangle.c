@@ -5,6 +5,7 @@
 #include "utils.h"
 #include "quic.h"
 #include "logging.h"
+#include "tls.h"
 
 #ifndef KERNEL_SPACE
 #include <stdlib.h>
@@ -527,31 +528,33 @@ send_frag1:
 
 send_fake:
 		if (config.frag_sni_faked) {
-			uint32_t iphfl, tcphfl;
-			fake_pad_len = f2len;
-			ret = tcp_payload_split(frag2, f2len, NULL, &iphfl, NULL, &tcphfl, NULL, NULL);
-			if (ret < 0) {
-				lgerror("Invalid frag2", ret);
-				goto erret_lc;
+			ITER_FAKE_STRAT(config.faking_strategy, strategy) {
+				uint32_t iphfl, tcphfl;
+				fake_pad_len = f2len;
+				ret = tcp_payload_split(frag2, f2len, NULL, &iphfl, NULL, &tcphfl, NULL, NULL);
+				if (ret < 0) {
+					lgerror("Invalid frag2", ret);
+					goto erret_lc;
+				}
+				memcpy(fake_pad, frag2, iphfl + tcphfl);
+				memset(fake_pad + iphfl + tcphfl, 0, f2len - iphfl - tcphfl);
+				struct tcphdr *fakethdr = (void *)(fake_pad + iphfl);
+				if (config.faking_strategy == FAKE_STRAT_PAST_SEQ) {
+					lgtrace("frag fake sent with %u -> ", ntohl(fakethdr->seq));
+					fakethdr->seq = htonl(ntohl(fakethdr->seq) - dvs);
+					lgtrace_addp("%u, ", ntohl(fakethdr->seq));
+				}
+				ret = fail_packet(strategy, 
+					fake_pad, &fake_pad_len, MAX_PACKET_SIZE);
+				if (ret < 0) {
+					lgerror("Failed to fail packet", ret);
+					goto erret_lc;
+				}
+				ret = send_tcp_frags(fake_pad, fake_pad_len, NULL, 0, 0);
+				if (ret < 0) {
+					goto erret_lc;
+				}
 			}
-			memcpy(fake_pad, frag2, iphfl + tcphfl);
-			memset(fake_pad + iphfl + tcphfl, 0, f2len - iphfl - tcphfl);
-			struct tcphdr *fakethdr = (void *)(fake_pad + iphfl);
-			if (config.faking_strategy == FAKE_STRAT_PAST_SEQ) {
-				lgtrace("frag fake sent with %u -> ", ntohl(fakethdr->seq));
-				fakethdr->seq = htonl(ntohl(fakethdr->seq) - dvs);
-				lgtrace_addp("%u, ", ntohl(fakethdr->seq));
-			}
-			ret = fail_packet(fake_pad, &fake_pad_len, MAX_PACKET_SIZE);
-			if (ret < 0) {
-				lgerror("Failed to fail packet", ret);
-				goto erret_lc;
-			}
-			ret = send_tcp_frags(fake_pad, fake_pad_len, NULL, 0, 0);
-			if (ret < 0) {
-				goto erret_lc;
-			}
-
 		}
 
 		if (config.frag_sni_reverse)
@@ -596,476 +599,131 @@ int post_fake_sni(const void *iph, unsigned int iph_len,
 	void *fsiph = (void *)rfsiph;
 	struct tcphdr *fstcph = (void *)rfstcph;
 
-	for (int i = 0; i < sequence_len; i++) {
+	ITER_FAKE_STRAT(config.faking_strategy, strategy) {
+		struct fake_type fake_seq_type = {
+			.type = FAKE_PAYLOAD_DEFAULT,
+			.strategy = strategy,
+		};
+
+		switch (config.fake_sni_seq_type) {
+			case FAKE_PAYLOAD_RANDOM:
+				fake_seq_type.type = FAKE_PAYLOAD_RANDOM;
+				break;
+			case FAKE_PAYLOAD_CUSTOM:
+				fake_seq_type.type = FAKE_PAYLOAD_CUSTOM;
+				fake_seq_type.fake_data = config.fake_custom_pkt;
+				fake_seq_type.fake_len = config.fake_custom_pkt_sz;
+				break;
+			default:
+				fake_seq_type.type = FAKE_PAYLOAD_DEFAULT;
+		}
+
+		for (int i = 0; i < sequence_len; i++) {
+			NETBUF_ALLOC(fake_sni, MAX_PACKET_SIZE);
+			if (!NETBUF_CHECK(fake_sni)) {
+				lgerror("Allocation error", -ENOMEM);
+				return -ENOMEM;
+			}
+			uint32_t fsn_len = MAX_PACKET_SIZE;
+			
+			ret = gen_fake_sni(
+				fake_seq_type,
+				fsiph, iph_len, fstcph, tcph_len, 
+				fake_sni, &fsn_len);
+			if (ret < 0) {
+				lgerror("gen_fake_sni", ret);
+				goto erret_lc;
+			}
+
+			lgtrace_addp("post fake sni #%d", i + 1);
+			lgtrace_addp("post with %d bytes", fsn_len);
+			ret = instance_config.send_raw_packet(fake_sni, fsn_len);
+			if (ret < 0) {
+				lgerror("send fake sni", ret);
+				goto erret_lc;
+			}
+
+			if (!(config.faking_strategy == FAKE_STRAT_PAST_SEQ ||
+				config.faking_strategy == FAKE_STRAT_RAND_SEQ)) {
+
+				uint32_t iph_len;
+				uint32_t tcph_len;
+				uint32_t plen;
+				ret = tcp_payload_split(
+					fake_sni, fsn_len, 
+					&fsiph, &iph_len,
+					&fstcph, &tcph_len,
+					NULL, &plen);
+
+				if (ret < 0) {
+					lgtrace_addp("continue fake seq");
+					goto erret_lc;
+				}
+
+				fstcph->seq = htonl(ntohl(fstcph->seq) + plen);
+				memcpy(rfsiph, fsiph, iph_len);
+				memcpy(rfstcph, fstcph, tcph_len);
+				fsiph = (void *)rfsiph;
+				fstcph = (void *)rfstcph;
+			}
+			
+			NETBUF_FREE(fake_sni);
+			continue;
+erret_lc:
+			NETBUF_FREE(fake_sni);
+			return ret;
+		}
+
+		struct fake_type ftype = {
+			.type = FAKE_PAYLOAD_DEFAULT,
+			.strategy = strategy
+		};
+
+		switch (config.fake_sni_type) {
+			case FAKE_PAYLOAD_RANDOM:
+				ftype.type = FAKE_PAYLOAD_RANDOM;
+				break;
+			case FAKE_PAYLOAD_CUSTOM:
+				ftype.type = FAKE_PAYLOAD_CUSTOM;
+				ftype.fake_data = config.fake_custom_pkt;
+				ftype.fake_len = config.fake_custom_pkt_sz;
+				break;
+			default:
+				ftype.type = FAKE_PAYLOAD_DEFAULT;
+		}
+
 		NETBUF_ALLOC(fake_sni, MAX_PACKET_SIZE);
 		if (!NETBUF_CHECK(fake_sni)) {
 			lgerror("Allocation error", -ENOMEM);
 			return -ENOMEM;
 		}
 		uint32_t fsn_len = MAX_PACKET_SIZE;
-		ret = gen_fake_sni(fsiph, iph_len, fstcph, tcph_len, 
-		     fake_sni, &fsn_len);
+		ret = gen_fake_sni(
+			ftype,
+			iph, iph_len, tcph, tcph_len, 
+			fake_sni, &fsn_len);
 		if (ret < 0) {
 			lgerror("gen_fake_sni", ret);
-			goto erret_lc;
+			goto erret_lc_cst;
 		}
 
-		lgtrace_addp("post fake sni #%d", i + 1);
-		lgtrace_addp("post with %d", fsn_len);
+		lgtrace_addp("post normal fake sni");
+		lgtrace_addp("post with %d bytes", fsn_len);
 		ret = instance_config.send_raw_packet(fake_sni, fsn_len);
 		if (ret < 0) {
 			lgerror("send fake sni", ret);
-			goto erret_lc;
+			goto erret_lc_cst;
 		}
 
-		uint32_t iph_len;
-		uint32_t tcph_len;
-		uint32_t plen;
-		tcp_payload_split(
-			fake_sni, fsn_len, 
-			&fsiph, &iph_len,
-			&fstcph, &tcph_len,
-			NULL, &plen);
+		goto after_cus2;
 
-
-		fstcph->seq = htonl(ntohl(fstcph->seq) + plen);
-		memcpy(rfsiph, fsiph, iph_len);
-		memcpy(rfstcph, fstcph, tcph_len);
-		fsiph = (void *)rfsiph;
-		fstcph = (void *)rfstcph;
-
-		NETBUF_FREE(fake_sni);
-		continue;
-erret_lc:
+erret_lc_cst:
 		NETBUF_FREE(fake_sni);
 		return ret;
+after_cus2:
+		;
 	}
 
 	return 0;
 }
 
-#define TLS_CONTENT_TYPE_HANDSHAKE 0x16
-#define TLS_HANDSHAKE_TYPE_CLIENT_HELLO 0x01
-#define TLS_EXTENSION_SNI 0x0000
-#define TLS_EXTENSION_CLIENT_HELLO_ENCRYPTED 0xfe0d
-
-/**
- * Processes tls payload of the tcp request.
- * 
- * data Payload data of TCP.
- * dlen Length of `data`.
- */
-struct tls_verdict analyze_tls_data(
-	const uint8_t *data, 
-	uint32_t dlen) 
-{
-	struct tls_verdict vrd = {0};
-
-	size_t i = 0;
-	const uint8_t *data_end = data + dlen;
-
-	while (i + 4 < dlen) {
-		const uint8_t *msgData = data + i;
-
-		uint8_t tls_content_type = *msgData;
-		uint8_t tls_vmajor = *(msgData + 1);
-		uint16_t message_length = ntohs(*(uint16_t *)(msgData + 3));
-
-		if (tls_vmajor != 0x03) goto nextMessage;
-
-		if (i + 5 > dlen) break;
-
-		if (tls_content_type != TLS_CONTENT_TYPE_HANDSHAKE) 
-			goto nextMessage;
-
-		if (config.sni_detection == SNI_DETECTION_BRUTE) {
-			goto brute;
-		}
-
-		const uint8_t *handshakeProto = msgData + 5;
-
-		if (handshakeProto + 1 >= data_end) break;
-
-		uint8_t handshakeType = *handshakeProto;
-
-		if (handshakeType != TLS_HANDSHAKE_TYPE_CLIENT_HELLO)
-			goto nextMessage;
-
-		const uint8_t *msgPtr = handshakeProto;
-		msgPtr += 1; 
-		msgPtr += 3 + 2 + 32;
-
-		if (msgPtr + 1 >= data_end) break;
-		uint8_t sessionIdLength = *msgPtr;
-		msgPtr++;
-		msgPtr += sessionIdLength;
-
-		if (msgPtr + 2 >= data_end) break;
-		uint16_t ciphersLength = ntohs(*(uint16_t *)msgPtr);
-		msgPtr += 2;
-		msgPtr += ciphersLength;
-
-		if (msgPtr + 1 >= data_end) break;
-		uint8_t compMethodsLen = *msgPtr;
-		msgPtr++;
-		msgPtr += compMethodsLen;
-
-		if (msgPtr + 2 >= data_end) break;
-		uint16_t extensionsLen = ntohs(*(uint16_t *)msgPtr);
-		msgPtr += 2;
-
-		const uint8_t *extensionsPtr = msgPtr;
-		const uint8_t *extensions_end = extensionsPtr + extensionsLen;
-		if (extensions_end > data_end) extensions_end = data_end;
-
-		while (extensionsPtr < extensions_end) {
-			const uint8_t *extensionPtr = extensionsPtr;
-			if (extensionPtr + 4 >= extensions_end) break;
-
-			uint16_t extensionType = 
-				ntohs(*(uint16_t *)extensionPtr);
-			extensionPtr += 2;
-
-			uint16_t extensionLen = 
-				ntohs(*(uint16_t *)extensionPtr);
-			extensionPtr += 2;
-
-
-			if (extensionPtr + extensionLen > extensions_end) 
-				break;
-
-			if (extensionType != TLS_EXTENSION_SNI) 
-				goto nextExtension;
-
-			const uint8_t *sni_ext_ptr = extensionPtr;
-
-			if (sni_ext_ptr + 2 >= extensions_end) break;
-			uint16_t sni_ext_dlen = ntohs(*(uint16_t *)sni_ext_ptr);
-
-			sni_ext_ptr += 2;
-
-			const uint8_t *sni_ext_end = sni_ext_ptr + sni_ext_dlen;
-			if (sni_ext_end >= extensions_end) break;
-			
-			if (sni_ext_ptr + 3 >= sni_ext_end) break;
-			sni_ext_ptr++;
-			uint16_t sni_len = ntohs(*(uint16_t *)sni_ext_ptr);
-			sni_ext_ptr += 2;
-
-			if (sni_ext_ptr + sni_len > sni_ext_end) break;
-
-			char *sni_name = (char *)sni_ext_ptr;
-
-			vrd.sni_offset = (uint8_t *)sni_name - data;
-			vrd.sni_len = sni_len;
-
-			if (config.all_domains) {
-				vrd.target_sni = 1;
-				goto check_domain;
-			}
-
-
-			unsigned int j = 0;
-			for (unsigned int i = 0; i <= config.domains_strlen; i++) {
-				if (	i > j &&
-					(i == config.domains_strlen	||	
-					config.domains_str[i] == '\0'	||
-					config.domains_str[i] == ','	|| 
-					config.domains_str[i] == '\n'	)) {
-
-					unsigned int domain_len = (i - j);
-					const char *sni_startp = sni_name + sni_len - domain_len;
-					const char *domain_startp = config.domains_str + j;
-
-					if (sni_len >= domain_len &&
-						sni_len < 128 && 
-						!strncmp(sni_startp, 
-						domain_startp, 
-						domain_len)) {
-							vrd.target_sni = 1;
-							goto check_domain;
-					}
-
-					j = i + 1;
-				}
-			}
-
-check_domain:
-			if (vrd.target_sni == 1 && config.exclude_domains_strlen != 0) {
-				unsigned int j = 0;
-				for (unsigned int i = 0; i <= config.exclude_domains_strlen; i++) {
-					if (	i > j &&
-						(i == config.exclude_domains_strlen	||	
-						config.exclude_domains_str[i] == '\0'	||
-						config.exclude_domains_str[i] == ','	|| 
-						config.exclude_domains_str[i] == '\n'	)) {
-
-						unsigned int domain_len = (i - j);
-						const char *sni_startp = sni_name + sni_len - domain_len;
-						const char *domain_startp = config.exclude_domains_str + j;
-
-						if (sni_len >= domain_len &&
-							sni_len < 128 && 
-							!strncmp(sni_startp, 
-							domain_startp, 
-							domain_len)) {
-
-							vrd.target_sni = 0;
-							lgdebugmsg("Excluded SNI: %.*s", 
-								vrd.sni_len, data + vrd.sni_offset);
-							goto out;
-						}
-
-						j = i + 1;
-					}
-				}
-			}
-
-			goto out;
-
-nextExtension:
-			extensionsPtr += 2 + 2 + extensionLen;
-		}
-nextMessage:
-		i += 5 + message_length;
-	}
-
-out:
-	return vrd;
-
-
-brute:
-	if (config.all_domains) {
-		vrd.target_sni = 1;
-		vrd.sni_len = 0;
-		vrd.sni_offset = dlen / 2;
-		goto out;
-	}
-
-	unsigned int j = 0;
-	for (unsigned int i = 0; i <= config.domains_strlen; i++) {
-		if (	i > j &&
-			(i == config.domains_strlen	||	
-			config.domains_str[i] == '\0'	||
-			config.domains_str[i] == ','	|| 
-			config.domains_str[i] == '\n'	)) {
-
-			unsigned int domain_len = (i - j);
-			const char *domain_startp = config.domains_str + j;
-
-			if (domain_len + dlen + 1> MAX_PACKET_SIZE) { 
-				continue;
-			}
-
-			NETBUF_ALLOC(buf, MAX_PACKET_SIZE);
-			if (!NETBUF_CHECK(buf)) {
-				lgerror("Allocation error", -ENOMEM);
-				goto out;
-			}
-			NETBUF_ALLOC(nzbuf, MAX_PACKET_SIZE * sizeof(int));
-			if (!NETBUF_CHECK(nzbuf)) {
-				lgerror("Allocation error", -ENOMEM);
-				NETBUF_FREE(buf);
-				goto out;
-			}
-
-			int *zbuf = (void *)nzbuf;
-
-			memcpy(buf, domain_startp, domain_len);
-			memcpy(buf + domain_len, "#", 1);
-			memcpy(buf + domain_len + 1, data, dlen);
-
-			z_function((char *)buf, zbuf, domain_len + 1 + dlen);
-
-			for (unsigned int k = 0; k < dlen; k++) {
-				if (zbuf[k] == domain_len) {
-					vrd.target_sni = 1;
-					vrd.sni_len = domain_len;
-					vrd.sni_offset = (k - domain_len - 1);
-					NETBUF_FREE(buf);
-					NETBUF_FREE(nzbuf);
-					goto out;
-				}
-			}
-
-
-			j = i + 1;
-
-			NETBUF_FREE(buf);
-			NETBUF_FREE(nzbuf);
-		}
-	}
-
-	goto out;
-}
-
-int gen_fake_sni(const void *ipxh, uint32_t iph_len, 
-		 const struct tcphdr *tcph, uint32_t tcph_len,
-		 uint8_t *buf, uint32_t *buflen) {
-
-	if (!ipxh || !tcph || !buf || !buflen)
-		return -EINVAL;
-
-	int ipxv = netproto_version(ipxh, iph_len);
-
-	if (ipxv == IP4VERSION) {
-		const struct iphdr *iph = ipxh;
-
-		memcpy(buf, iph, iph_len);
-		struct iphdr *niph = (struct iphdr *)buf;
-
-		niph->protocol = IPPROTO_TCP;
-	} else if (ipxv == IP6VERSION) {
-		const struct ip6_hdr *iph = ipxh;
-
-		iph_len = sizeof(struct ip6_hdr);
-		memcpy(buf, iph, iph_len);
-		struct ip6_hdr *niph = (struct ip6_hdr *)buf;
-
-		niph->ip6_nxt = IPPROTO_TCP;
-	} else {
-		return -EINVAL;
-	}
-
-	const char *data = config.fake_sni_pkt;
-	size_t data_len = config.fake_sni_pkt_sz;
-
-	uint32_t dlen = iph_len + tcph_len + data_len;
-
-	if (*buflen < dlen) 
-		return -ENOMEM;
-
-	memcpy(buf + iph_len, tcph, tcph_len);
-	memcpy(buf + iph_len + tcph_len, data, data_len);
-
-
-	if (ipxv == IP4VERSION) {
-		struct iphdr *niph = (struct iphdr *)buf;
-		niph->tot_len = htons(dlen);
-	} else if (ipxv == IP6VERSION) {
-		struct ip6_hdr *niph = (struct ip6_hdr *)buf;
-		niph->ip6_plen = htons(dlen - iph_len);
-	}
-
-	fail_packet(buf, &dlen, *buflen);
-	*buflen = dlen;
-	
-	return 0;
-}
-
-#define TCP_MD5SIG_LEN 16
-#define TCP_MD5SIG_KIND 19
-struct tcp_md5sig_opt {
-	uint8_t kind;
-	uint8_t len;
-	uint8_t sig[TCP_MD5SIG_LEN];
-};
-#define TCP_MD5SIG_OPT_LEN (sizeof(struct tcp_md5sig_opt))
-// Real length of the option, with NOOP fillers
-#define TCP_MD5SIG_OPT_RLEN 20
-
-int fail_packet(uint8_t *payload, uint32_t *plen, uint32_t avail_buflen) {
-	void *iph;
-	uint32_t iph_len;
-	struct tcphdr *tcph;
-	uint32_t tcph_len;
-	uint8_t *data;
-	uint32_t dlen;
-	int ret;
-
-	ret = tcp_payload_split(payload, *plen, 
-			&iph, &iph_len, &tcph, &tcph_len,
-			&data, &dlen);
-
-	uint32_t ipxv = netproto_version(payload, *plen);
-
-	if (ret < 0) {
-		return ret;
-	}
-
-
-	if (config.faking_strategy == FAKE_STRAT_RAND_SEQ) {
-		lgtrace("fake seq: %u -> ", ntohl(tcph->seq));
-
-		if (config.fakeseq_offset) {
-			tcph->seq = htonl(ntohl(tcph->seq) - config.fakeseq_offset);
-		} else {
-#ifdef KERNEL_SPACE
-			tcph->seq = 124;
-#else
-			tcph->seq = random();
-#endif
-
-		}
-
-		lgtrace_addp("%u", ntohl(tcph->seq));
-	} else if (config.faking_strategy == FAKE_STRAT_PAST_SEQ) {
-		lgtrace("fake seq: %u -> ", ntohl(tcph->seq));
-		tcph->seq = htonl(ntohl(tcph->seq) - dlen);
-		lgtrace_addp("%u", ntohl(tcph->seq));
-
-	} else if (config.faking_strategy == FAKE_STRAT_TTL) {
-		lgtrace_addp("set fake ttl to %d", config.faking_ttl);
-
-		if (ipxv == IP4VERSION) {
-			((struct iphdr *)iph)->ttl = config.faking_ttl;
-		} else if (ipxv == IP6VERSION) {
-			((struct ip6_hdr *)iph)->ip6_hops = config.faking_ttl;
-		} else {
-			lgerror("fail_packet: IP version is unsupported", -EINVAL);
-			return -EINVAL;
-		}
-	} else if (config.faking_strategy == FAKE_STRAT_TCP_MD5SUM) {
-		int optp_len = tcph_len - sizeof(struct tcphdr);
-		int delta = TCP_MD5SIG_OPT_RLEN - optp_len;
-		lgtrace_addp("Incr delta %d: %d -> %d", delta, optp_len, optp_len + delta);
-		
-		if (delta > 0) {
-			if (avail_buflen - *plen < delta) {
-				return -1;
-			}
-			uint8_t *ndata = data + delta;
-			uint8_t *ndptr = ndata + dlen;
-			uint8_t *dptr = data + dlen;
-			for (size_t i = dlen + 1; i > 0; i--) {
-				*ndptr = *dptr;
-				--ndptr, --dptr;
-			}
-			data = ndata;
-			tcph_len = tcph_len + delta;
-			tcph->doff = tcph_len >> 2;
-			if (ipxv == IP4VERSION) {
-				((struct iphdr *)iph)->tot_len = htons(ntohs(((struct iphdr *)iph)->tot_len) + delta);
-			} else if (ipxv == IP6VERSION) {
-				((struct ip6_hdr *)iph)->ip6_plen = htons(ntohs(((struct ip6_hdr *)iph)->ip6_plen) + delta);
-			} else {
-				lgerror("fail_packet: IP version is unsupported", -EINVAL);
-				return -EINVAL;
-			}
-			optp_len += delta;
-			*plen += delta;
-		}
-
-		uint8_t *optplace = (uint8_t *)tcph + sizeof(struct tcphdr);
-		struct tcp_md5sig_opt *mdopt = (void *)optplace;
-		mdopt->kind = TCP_MD5SIG_KIND;
-		mdopt->len = TCP_MD5SIG_OPT_LEN;
-
-		optplace += sizeof(struct tcp_md5sig_opt);
-		optp_len -= sizeof(struct tcp_md5sig_opt);
-
-		while (optp_len-- > 0) {
-			*optplace++ = 0x01;
-		}
-	}
-
-	set_ip_checksum(iph, iph_len);
-	set_tcp_checksum(tcph, iph, iph_len);
-
-	if (config.faking_strategy == FAKE_STRAT_TCP_CHECK) {
-		lgtrace_addp("break fake tcp checksum");
-		tcph->check += 1;
-	}
-
-	return 0;
-}

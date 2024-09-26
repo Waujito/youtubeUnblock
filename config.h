@@ -32,6 +32,14 @@ struct config_t {
 	unsigned char faking_ttl;
 	int fake_sni;
 	unsigned int fake_sni_seq_len;
+
+#define FAKE_PAYLOAD_RANDOM	0
+#define FAKE_PAYLOAD_CUSTOM	1
+// In default mode all other options will be skipped.
+#define FAKE_PAYLOAD_DEFAULT	2
+	int fake_sni_seq_type;
+	int fake_sni_type;
+
 #define VERBOSE_INFO	0
 #define VERBOSE_DEBUG	1
 #define VERBOSE_TRACE	2
@@ -47,10 +55,16 @@ struct config_t {
 	const char *exclude_domains_str;
 	unsigned int exclude_domains_strlen;
 	unsigned int all_domains;
+
 	const char *fake_sni_pkt;
 	unsigned int fake_sni_pkt_sz;
+
+	const char *fake_custom_pkt;
+	unsigned int fake_custom_pkt_sz;
+
+
 	unsigned int fk_winsize;
-	unsigned int fakeseq_offset;
+	int fakeseq_offset;
 	unsigned int mark;
 	int synfake;
 	unsigned int synfake_len;
@@ -89,18 +103,29 @@ extern struct config_t config;
 #define FAKE_TTL 8
 
 // Will invalidate fake packets by out-of-ack_seq out-of-seq request
-#define FAKE_STRAT_RAND_SEQ	1
+#define FAKE_STRAT_RAND_SEQ	(1 << 0)
 // Will assume that GGC server is located further than FAKE_TTL
 // Thus, Fake packet will be eliminated automatically.
-#define FAKE_STRAT_TTL		2
-#define FAKE_STRAT_PAST_SEQ	3
-#define FAKE_STRAT_TCP_CHECK	4
-#define FAKE_STRAT_TCP_MD5SUM	5
+#define FAKE_STRAT_TTL		(1 << 1)
+#define FAKE_STRAT_PAST_SEQ	(1 << 2)
+#define FAKE_STRAT_TCP_CHECK	(1 << 3)
+#define FAKE_STRAT_TCP_MD5SUM	(1 << 4)
 
+#define FAKE_STRAT_COUNT	5
+
+/**
+ * This macros iterates through all faking strategies and executes code under it.
+ * destination strategy will be available under name of `strategy` variable.
+ */
+#define ITER_FAKE_STRAT(fake_bitmask, strategy) \
+for (int strategy = 1; strategy <= (1 << FAKE_STRAT_COUNT); strategy <<= 1) \
+if ((fake_bitmask) & strategy) 
 
 #ifndef FAKING_STRATEGY
 #define FAKING_STRATEGY FAKE_STRAT_PAST_SEQ
 #endif
+
+#define MAX_FAKE_SIZE 1300
 
 #if !defined(SILENT) && !defined(KERNEL_SPACE)
 #define DEBUG

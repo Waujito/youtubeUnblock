@@ -7,7 +7,9 @@
 #include <getopt.h>
 #include <stdlib.h>
 #include <string.h>
+#include "types.h"
 
+static char custom_fake_buf[MAX_FAKE_SIZE];
 
 struct config_t config = {
 	.threads = THREADS_NUM,
@@ -18,6 +20,8 @@ struct config_t config = {
 	.faking_ttl = FAKE_TTL,
 	.fake_sni = 1,
 	.fake_sni_seq_len = 1,
+	.fake_sni_seq_type = FAKE_PAYLOAD_DEFAULT,
+	.fake_sni_type = FAKE_PAYLOAD_DEFAULT,
 	.frag_middle_sni = 1,
 	.frag_sni_pos = 1,
 	.use_ipv6 = 1,
@@ -55,6 +59,8 @@ struct config_t config = {
 	.queue_start_num = DEFAULT_QUEUE_NUM,
 	.fake_sni_pkt = fake_sni_old,
 	.fake_sni_pkt_sz = sizeof(fake_sni_old) - 1, // - 1 for null-terminator
+	.fake_custom_pkt = custom_fake_buf,
+	.fake_custom_pkt_sz = 0
 };
 
 #define OPT_SNI_DOMAINS		1
@@ -63,6 +69,9 @@ struct config_t config = {
 #define OPT_FAKING_TTL		3
 #define OPT_FAKING_STRATEGY	10
 #define OPT_FAKE_SNI_SEQ_LEN	11
+#define OPT_FAKE_SNI_SEQ_TYPE	26
+#define OPT_FAKE_SNI_TYPE	27
+#define OPT_FAKE_CUSTOM_PAYLOAD	28
 #define OPT_FRAG    		4
 #define OPT_FRAG_SNI_REVERSE	12
 #define OPT_FRAG_SNI_FAKED	13
@@ -83,7 +92,7 @@ struct config_t config = {
 #define OPT_NO_GSO 		8
 #define OPT_QUEUE_NUM		9
 
-#define OPT_MAX OPT_SNI_DOMAINS
+#define OPT_MAX OPT_FAKE_CUSTOM_PAYLOAD
 
 static struct option long_opt[] = {
 	{"help",		0, 0, 'h'},
@@ -94,6 +103,9 @@ static struct option long_opt[] = {
 	{"synfake",		1, 0, OPT_SYNFAKE},
 	{"synfake-len",		1, 0, OPT_SYNFAKE_LEN},
 	{"fake-sni-seq-len",	1, 0, OPT_FAKE_SNI_SEQ_LEN},
+	{"fake-sni-seq-type",	1, 0, OPT_FAKE_SNI_SEQ_TYPE},
+	{"fake-sni-type",	1, 0, OPT_FAKE_SNI_TYPE},
+	{"fake-custom-payload", 1, 0, OPT_FAKE_CUSTOM_PAYLOAD},
 	{"faking-strategy",	1, 0, OPT_FAKING_STRATEGY},
 	{"fake-seq-offset",	1, 0, OPT_FAKE_SEQ_OFFSET},
 	{"faking-ttl",		1, 0, OPT_FAKING_TTL},
@@ -150,6 +162,9 @@ void print_usage(const char *argv0) {
 	printf("\t--exclude-domains=<comma separated domain list>\n");
 	printf("\t--fake-sni={1|0}\n");
 	printf("\t--fake-sni-seq-len=<length>\n");
+	printf("\t--fake-sni-seq-type={default|random|custom}\n");
+	printf("\t--fake-sni-type={default|random|custom}\n");
+	printf("\t--fake-custom-payload=<hex payload>\n");
 	printf("\t--fake-seq-offset=<offset>\n");
 	printf("\t--faking-ttl=<ttl>\n");
 	printf("\t--faking-strategy={randseq|ttl|tcp_check|pastseq|md5sum}\n");
@@ -299,7 +314,7 @@ int parse_args(int argc, char *argv[]) {
 			break;
 		case OPT_FAKE_SEQ_OFFSET:
 			num = parse_numeric_option(optarg);
-			if (errno != 0 || num < 0) {
+			if (errno != 0) {
 				goto invalid_opt;
 			}
 
@@ -322,6 +337,66 @@ int parse_args(int argc, char *argv[]) {
 			}
 
 			config.fake_sni_seq_len = num;
+			break;
+		case OPT_FAKE_SNI_SEQ_TYPE:
+			if (strcmp(optarg, "default") == 0) {
+				config.fake_sni_seq_type = FAKE_PAYLOAD_DEFAULT;
+			} else if (strcmp(optarg, "random") == 0) {
+				config.fake_sni_seq_type = FAKE_PAYLOAD_RANDOM;
+			} else if (strcmp(optarg, "custom") == 0) {
+				config.fake_sni_seq_type = FAKE_PAYLOAD_CUSTOM;
+			} else {
+				goto invalid_opt;
+			}
+
+			break;
+		case OPT_FAKE_SNI_TYPE:
+			if (strcmp(optarg, "default") == 0) {
+				config.fake_sni_type = FAKE_PAYLOAD_DEFAULT;
+			} else if (strcmp(optarg, "random") == 0) {
+				config.fake_sni_type = FAKE_PAYLOAD_RANDOM;
+			} else if (strcmp(optarg, "custom") == 0) {
+				config.fake_sni_type = FAKE_PAYLOAD_CUSTOM;
+			} else {
+				goto invalid_opt;
+			}
+
+			break;
+		case OPT_FAKE_CUSTOM_PAYLOAD: {
+				uint8_t *const custom_buf = (uint8_t *)custom_fake_buf;
+
+				const char *custom_hex_fake = optarg;
+				size_t custom_hlen = strlen(custom_hex_fake);
+				if ((custom_hlen & 1) == 1) {
+					printf("Custom fake hex should be divisible by two\n");
+					goto invalid_opt;
+				}
+
+
+				size_t custom_len = custom_hlen >> 1;
+				if (custom_len > MAX_FAKE_SIZE) {
+					printf("Custom fake is too large\n");
+					goto invalid_opt;
+				}
+
+				for (int i = 0; i < custom_len; i++) {
+					sscanf(custom_hex_fake + (i << 1), "%2hhx", custom_buf + i);
+				}
+
+				config.fake_custom_pkt_sz = custom_len;
+				config.fake_custom_pkt = (char *)custom_buf;
+
+			// if (strcmp(optarg, "default") == 0) {
+			// 	config.fake_sni_type = FAKE_PAYLOAD_DEFAULT;
+			// } else if (strcmp(optarg, "random") == 0) {
+			// 	config.fake_sni_type = FAKE_PAYLOAD_RANDOM;
+			// } else if (strcmp(optarg, "custom") == 0) {
+			// 	config.fake_sni_type = FAKE_PAYLOAD_CUSTOM;
+			// } else {
+			// 	goto invalid_opt;
+			// }
+			//
+		}
 			break;
 		case OPT_FK_WINSIZE:
 			num = parse_numeric_option(optarg);
