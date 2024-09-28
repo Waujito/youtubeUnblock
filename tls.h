@@ -10,6 +10,7 @@
 struct tls_verdict {
 	int target_sni; /* google video hello packet */
 	int sni_offset; /* offset from start of tcp _payload_ */
+	int sni_target_offset; /* offset of target domain instead of entire sni */
 	int sni_len;
 };
 

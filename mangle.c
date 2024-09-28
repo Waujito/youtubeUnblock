@@ -190,7 +190,7 @@ int process_tcp_packet(const uint8_t *raw_payload, uint32_t raw_payload_len) {
 
 		switch (config.fragmentation_strategy) {
 			case FRAG_STRAT_TCP: {
-				ipd_offset = vrd.sni_offset;
+				ipd_offset = vrd.sni_target_offset;
 				mid_offset = ipd_offset + vrd.sni_len / 2;
 
 				uint32_t poses[2];
@@ -221,7 +221,7 @@ int process_tcp_packet(const uint8_t *raw_payload, uint32_t raw_payload_len) {
 			break;
 			case FRAG_STRAT_IP: 
 			if (ipxv == IP4VERSION) {
-				ipd_offset = ((char *)data - (char *)tcph) + vrd.sni_offset;
+				ipd_offset = ((char *)data - (char *)tcph) + vrd.sni_target_offset;
 				mid_offset = ipd_offset + vrd.sni_len / 2;
 				mid_offset += 8 - mid_offset % 8;
 
@@ -618,7 +618,8 @@ int post_fake_sni(const void *iph, unsigned int iph_len,
 				fake_seq_type.type = FAKE_PAYLOAD_DEFAULT;
 		}
 
-		for (int i = 0; i < sequence_len; i++) {
+		// one goes for default fake
+		for (int i = 1; i < sequence_len; i++) {
 			NETBUF_ALLOC(fake_sni, MAX_PACKET_SIZE);
 			if (!NETBUF_CHECK(fake_sni)) {
 				lgerror("Allocation error", -ENOMEM);

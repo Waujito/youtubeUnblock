@@ -122,13 +122,13 @@ struct tls_verdict analyze_tls_data(
 			char *sni_name = (char *)sni_ext_ptr;
 
 			vrd.sni_offset = (uint8_t *)sni_name - data;
+			vrd.sni_target_offset = vrd.sni_offset;
 			vrd.sni_len = sni_len;
 
 			if (config.all_domains) {
 				vrd.target_sni = 1;
 				goto check_domain;
 			}
-
 
 			unsigned int j = 0;
 			for (unsigned int i = 0; i <= config.domains_strlen; i++) {
@@ -148,6 +148,7 @@ struct tls_verdict analyze_tls_data(
 						domain_startp, 
 						domain_len)) {
 							vrd.target_sni = 1;
+							vrd.sni_target_offset = (const uint8_t *)sni_startp - data;
 							goto check_domain;
 					}
 
@@ -247,6 +248,7 @@ brute:
 					vrd.target_sni = 1;
 					vrd.sni_len = domain_len;
 					vrd.sni_offset = (k - domain_len - 1);
+					vrd.sni_target_offset = vrd.sni_offset
 					NETBUF_FREE(buf);
 					NETBUF_FREE(nzbuf);
 					goto out;
