@@ -248,7 +248,7 @@ brute:
 					vrd.target_sni = 1;
 					vrd.sni_len = domain_len;
 					vrd.sni_offset = (k - domain_len - 1);
-					vrd.sni_target_offset = vrd.sni_offset
+					vrd.sni_target_offset = vrd.sni_offset;
 					NETBUF_FREE(buf);
 					NETBUF_FREE(nzbuf);
 					goto out;
@@ -273,7 +273,13 @@ int gen_fake_sni(struct fake_type type,
 
 	uint32_t data_len = type.fake_len;
 	if (type.type == FAKE_PAYLOAD_RANDOM && data_len == 0) {
+#ifdef KERNEL_SPACE
+		
+		// get_random_bytes(&data_len, sizeof(data_len));
+		data_len = get_random_u32() % 1200;
+#else
 		data_len = random() % 1200;
+#endif
 	} else if (type.type == FAKE_PAYLOAD_DEFAULT) {
 		data_len = config.fake_sni_pkt_sz;
 	}
@@ -318,7 +324,11 @@ int gen_fake_sni(struct fake_type type,
 			memcpy(bfdptr, type.fake_data, data_len);
 			break;
 		default: // FAKE_PAYLOAD_RANDOM
+#ifdef KERNEL_SPACE
+		get_random_bytes(bfdptr, data_len);
+#else
 			getrandom(bfdptr, data_len, 0);
+#endif
 	}
 
 	if (ipxv == IP4VERSION) {

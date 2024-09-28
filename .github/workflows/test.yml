@@ -1,0 +1,171 @@
+# Tests whether the youtubeUnblock builds properly
+
+name: "youtubeUnblock build test"
+
+on:
+  push:
+    branches: [ "main" ]
+    paths-ignore:
+      - '.editorconfig'
+      - '.gitignore'
+      - 'LICENSE'
+      - 'README.md'
+
+  pull_request:
+    branches: [ "main" ]
+    paths-ignore:
+      - '.editorconfig'
+      - '.gitignore'
+      - 'LICENSE'
+      - 'README.md'
+
+  workflow_dispatch:
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.gh.outputs.version }}
+      sha: ${{ steps.gh.outputs.sha }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: 'openwrt'
+
+      - name: GH
+        id: gh
+        env:
+          REPO: ${{ github.repository }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          echo "version=$(cat youtubeUnblock/Makefile | grep PKG_VERSION | sed 's/PKG_VERSION:=//')" >> $GITHUB_OUTPUT
+          if [[ "${{ github.event_name }}" != "pull_request" ]]; then
+            echo "sha=$(echo ${GITHUB_SHA::7})" >> $GITHUB_OUTPUT
+          else
+            echo "sha=$(gh api repos/$REPO/commits/main --jq '.sha[:7]')" >> $GITHUB_OUTPUT
+          fi
+
+  build-static:
+    needs: prepare
+    name: build-static ${{ matrix.arch }}
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        arch: [x86_64]
+        branch: [latest-stable]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build 
+        id: build
+        env:
+          ARCH: ${{ matrix.arch }}
+          VERSION: ${{ needs.prepare.outputs.version }}
+          SHA: ${{ needs.prepare.outputs.sha }}
+        shell: bash
+        run: |
+          make -j$(nproc)
+          strip -s build/youtubeUnblock
+          cp -va build/youtubeUnblock .
+          tar -czvf static-youtubeUnblock-$VERSION-$SHA-$PLATFORM.tar.gz youtubeUnblock youtubeUnblock.service README.md
+
+      - name: Upload artifacts
+        if: steps.build.outcome == 'success'
+        uses: actions/upload-artifact@v4
+        with:
+          name: static-youtubeUnblock-${{ matrix.arch }}
+          path: ./**/youtubeUnblock*.tar.gz
+
+  build-kmod:
+    needs: prepare
+    name: build-kmod ${{ matrix.arch }}
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        arch: [x86_64]
+        branch: [latest-stable]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build 
+        id: build
+        env:
+          ARCH: ${{ matrix.arch }}
+          VERSION: ${{ needs.prepare.outputs.version }}
+          SHA: ${{ needs.prepare.outputs.sha }}
+        shell: bash
+        run: |
+          make kmake
+          tar -czvf kmod-youtubeUnblock-$VERSION-$SHA-$PLATFORM-$(uname -r).tar.gz kyoutubeUnblock.ko
+
+      - name: Upload artifacts
+        if: steps.build.outcome == 'success'
+        uses: actions/upload-artifact@v4
+        with:
+          name: kmod-youtubeUnblock-${{ matrix.arch }}
+          path: ./**/kmod-youtubeUnblock*.tar.gz
+
+  build-kmod-20.04:
+    needs: prepare
+    name: build-kmod ${{ matrix.arch }}
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        arch: [x86_64]
+        branch: [latest-stable]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: prepare runner
+        shell: bash
+        run: |
+          apt install -y \
+              bridge-utils \
+              qemu-kvm \
+              libvirt-daemon-system \
+              libvirt-clients \
+              virtinst \
+              libguestfs-tools \
+              wait-for-it \
+              whois \
+              sshpass
+
+      - name: build virtual machine
+        shell: bash
+        run: |
+          virt-builder ubuntu-20.04 \
+          --network \
+          --format qcow2 -o "vm_ubuntu.qcow2" \
+          --update \
+          --install build-essential \
+          --run-command "useradd -p '' -s /bin/bash -m -G sudo ubuntu" \
+          --edit '/etc/sudoers:s/^%sudo.*/%sudo   ALL=(ALL) NOPASSWD:ALL/' \
+          --edit '/etc/default/grub:s/^GRUB_CMDLINE_LINUX_DEFAULT=.*/GRUB_CMDLINE_LINUX_DEFAULT="console=tty0 console=ttyS0,115200n8"/' \
+          --run-command update-grub
+          
+
+        
+
+      - name: Build 
+        id: build
+        env:
+          ARCH: ${{ matrix.arch }}
+          VERSION: ${{ needs.prepare.outputs.version }}
+          SHA: ${{ needs.prepare.outputs.sha }}
+        shell: bash
+        run: |
+          make kmake
+          tar -czvf kmod-youtubeUnblock-$VERSION-$SHA-$PLATFORM-$(uname -r).tar.gz kyoutubeUnblock.ko
+
+      - name: Upload artifacts
+        if: steps.build.outcome == 'success'
+        uses: actions/upload-artifact@v4
+        with:
+          name: kmod-youtubeUnblock-${{ matrix.arch }}
+          path: ./**/kmod-youtubeUnblock*.tar.gz
+
