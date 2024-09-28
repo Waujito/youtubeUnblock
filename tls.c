@@ -124,6 +124,7 @@ struct tls_verdict analyze_tls_data(
 			vrd.sni_offset = (uint8_t *)sni_name - data;
 			vrd.sni_target_offset = vrd.sni_offset;
 			vrd.sni_len = sni_len;
+			vrd.sni_target_len = vrd.sni_len;
 
 			if (config.all_domains) {
 				vrd.target_sni = 1;
@@ -149,6 +150,7 @@ struct tls_verdict analyze_tls_data(
 						domain_len)) {
 							vrd.target_sni = 1;
 							vrd.sni_target_offset = (const uint8_t *)sni_startp - data;
+							vrd.sni_target_len = domain_len;
 							goto check_domain;
 					}
 
@@ -249,6 +251,7 @@ brute:
 					vrd.sni_len = domain_len;
 					vrd.sni_offset = (k - domain_len - 1);
 					vrd.sni_target_offset = vrd.sni_offset;
+					vrd.sni_target_len = vrd.sni_len;
 					NETBUF_FREE(buf);
 					NETBUF_FREE(nzbuf);
 					goto out;
@@ -277,7 +280,6 @@ int gen_fake_sni(struct fake_type type,
 		
 		get_random_bytes(&data_len, sizeof(data_len));
 		data_len = data_len % 1200;
-		// data_len = get_random_u32() % 1200;
 #else
 		data_len = random() % 1200;
 #endif
@@ -326,7 +328,7 @@ int gen_fake_sni(struct fake_type type,
 			break;
 		default: // FAKE_PAYLOAD_RANDOM
 #ifdef KERNEL_SPACE
-		get_random_bytes(bfdptr, data_len);
+			get_random_bytes(bfdptr, data_len);
 #else
 			getrandom(bfdptr, data_len, 0);
 #endif

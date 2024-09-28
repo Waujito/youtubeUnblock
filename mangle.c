@@ -139,7 +139,11 @@ int process_tcp_packet(const uint8_t *raw_payload, uint32_t raw_payload_len) {
 	if (tcph->syn) goto accept;
 
 	struct tls_verdict vrd = analyze_tls_data(data, dlen);
-	lgtrace_addp("Analyzed, %d", vrd.target_sni);
+	lgtrace_addp("Analyzed");
+
+	if (vrd.sni_len != 0) {
+		lgtrace_addp("SNI detected: %.*s", vrd.sni_len, data + vrd.sni_offset);
+	}
 
 	if (vrd.target_sni) {
 		lgdebugmsg("Target SNI detected: %.*s", vrd.sni_len, data + vrd.sni_offset);
@@ -191,7 +195,7 @@ int process_tcp_packet(const uint8_t *raw_payload, uint32_t raw_payload_len) {
 		switch (config.fragmentation_strategy) {
 			case FRAG_STRAT_TCP: {
 				ipd_offset = vrd.sni_target_offset;
-				mid_offset = ipd_offset + vrd.sni_len / 2;
+				mid_offset = ipd_offset + vrd.sni_target_len / 2;
 
 				uint32_t poses[2];
 				int cnt = 0;
@@ -222,7 +226,7 @@ int process_tcp_packet(const uint8_t *raw_payload, uint32_t raw_payload_len) {
 			case FRAG_STRAT_IP: 
 			if (ipxv == IP4VERSION) {
 				ipd_offset = ((char *)data - (char *)tcph) + vrd.sni_target_offset;
-				mid_offset = ipd_offset + vrd.sni_len / 2;
+				mid_offset = ipd_offset + vrd.sni_target_len / 2;
 				mid_offset += 8 - mid_offset % 8;
 
 				uint32_t poses[2];

@@ -385,18 +385,7 @@ int parse_args(int argc, char *argv[]) {
 
 				config.fake_custom_pkt_sz = custom_len;
 				config.fake_custom_pkt = (char *)custom_buf;
-
-			// if (strcmp(optarg, "default") == 0) {
-			// 	config.fake_sni_type = FAKE_PAYLOAD_DEFAULT;
-			// } else if (strcmp(optarg, "random") == 0) {
-			// 	config.fake_sni_type = FAKE_PAYLOAD_RANDOM;
-			// } else if (strcmp(optarg, "custom") == 0) {
-			// 	config.fake_sni_type = FAKE_PAYLOAD_CUSTOM;
-			// } else {
-			// 	goto invalid_opt;
-			// }
-			//
-		}
+			}
 			break;
 		case OPT_FK_WINSIZE:
 			num = parse_numeric_option(optarg);
