@@ -275,8 +275,9 @@ int gen_fake_sni(struct fake_type type,
 	if (type.type == FAKE_PAYLOAD_RANDOM && data_len == 0) {
 #ifdef KERNEL_SPACE
 		
-		// get_random_bytes(&data_len, sizeof(data_len));
-		data_len = get_random_u32() % 1200;
+		get_random_bytes(&data_len, sizeof(data_len));
+		data_len = data_len % 1200;
+		// data_len = get_random_u32() % 1200;
 #else
 		data_len = random() % 1200;
 #endif

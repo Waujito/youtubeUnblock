@@ -77,95 +77,126 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: static-youtubeUnblock-${{ matrix.arch }}
-          path: ./**/youtubeUnblock*.tar.gz
+          path: ./**/static-youtubeUnblock*.tar.gz
 
   build-kmod:
     needs: prepare
-    name: build-kmod ${{ matrix.arch }}
+    name: build-kmod ${{ matrix.kernel_version }}
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        arch: [x86_64]
-        branch: [latest-stable]
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+        include:
+          - kernel_version: "6.6.52"
+            source: "https://cdn.kernel.org/pub/linux/kernel/v6.x/linux-6.6.52.tar.xz"
+            container_version: "24.04"
 
-      - name: Build 
-        id: build
-        env:
-          ARCH: ${{ matrix.arch }}
-          VERSION: ${{ needs.prepare.outputs.version }}
-          SHA: ${{ needs.prepare.outputs.sha }}
-        shell: bash
-        run: |
-          make kmake
-          tar -czvf kmod-youtubeUnblock-$VERSION-$SHA-$PLATFORM-$(uname -r).tar.gz kyoutubeUnblock.ko
+          - kernel_version: "5.15.167"
+            source: "https://cdn.kernel.org/pub/linux/kernel/v5.x/linux-5.15.167.tar.xz"
+            container_version: "24.04"
 
-      - name: Upload artifacts
-        if: steps.build.outcome == 'success'
-        uses: actions/upload-artifact@v4
-        with:
-          name: kmod-youtubeUnblock-${{ matrix.arch }}
-          path: ./**/kmod-youtubeUnblock*.tar.gz
+          - kernel_version: "5.4.284"
+            source: "https://cdn.kernel.org/pub/linux/kernel/v5.x/linux-5.4.284.tar.xz"
+            container_version: "24.04"
 
-  build-kmod-20.04:
-    needs: prepare
-    name: build-kmod ${{ matrix.arch }}
-    runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        arch: [x86_64]
-        branch: [latest-stable]
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+          - kernel_version: "4.19.322"
+            source: "https://cdn.kernel.org/pub/linux/kernel/v4.x/linux-4.19.322.tar.xz"
+            container_version: "24.04"
 
-      - name: prepare runner
-        shell: bash
-        run: |
-          apt install -y \
-              bridge-utils \
-              qemu-kvm \
-              libvirt-daemon-system \
-              libvirt-clients \
-              virtinst \
-              libguestfs-tools \
-              wait-for-it \
-              whois \
-              sshpass
+          - kernel_version: "4.4.302"
+            source: "https://cdn.kernel.org/pub/linux/kernel/v4.x/linux-4.4.302.tar.xz"
+            container_version: "24.04"
 
-      - name: build virtual machine
-        shell: bash
-        run: |
-          virt-builder ubuntu-20.04 \
-          --network \
-          --format qcow2 -o "vm_ubuntu.qcow2" \
-          --update \
-          --install build-essential \
-          --run-command "useradd -p '' -s /bin/bash -m -G sudo ubuntu" \
-          --edit '/etc/sudoers:s/^%sudo.*/%sudo   ALL=(ALL) NOPASSWD:ALL/' \
-          --edit '/etc/default/grub:s/^GRUB_CMDLINE_LINUX_DEFAULT=.*/GRUB_CMDLINE_LINUX_DEFAULT="console=tty0 console=ttyS0,115200n8"/' \
-          --run-command update-grub
+          - kernel_version: "3.10.108"
+            source: "https://cdn.kernel.org/pub/linux/kernel/v3.x/linux-3.10.108.tar.xz"
+            container_version: "16.04"
           
+          - kernel_version: "3.0.101"
+            source: "https://cdn.kernel.org/pub/linux/kernel/v3.x/linux-3.0.101.tar.xz"
+            container_version: "14.04"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
 
-        
+      - name: Restore builder from cache
+        id: cache-restore
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/builder.tar
+          key: builder-${{ matrix.kernel_version }}
 
-      - name: Build 
+      - name: Load builder from cache
+        if: steps.cache-restore.outputs.cache-hit == 'true'
+        run: |
+          docker import - builder < ~/builder.tar
+
+      - name: Prepare build env
+        if: steps.cache-restore.outputs.cache-hit != 'true'
+        run: |
+          mkdir ~/linux
+          pwd
+          ls /
+          ls ~
+
+      - name: Obtain kernel
+        if: steps.cache-restore.outputs.cache-hit != 'true'
+        run: |
+          cd ~/linux
+          wget ${{ matrix.source }} -O kernel.tar.xz -q
+          tar -xf kernel.tar.xz
+          rm -f kernel.tar.xz
+          /bin/bash -c "mv linux-* linux"
+          ls
+          ls linux
+
+      - name: Install docker
+        if: steps.cache-restore.outputs.cache-hit != 'true'
+        run: |
+          cd ~/linux
+          docker pull ubuntu:${{ matrix.container_version }}
+          docker container create --name ubu_builder -w / ubuntu:${{ matrix.container_version }} tail -f /dev/null
+          docker container start ubu_builder
+          docker container exec ubu_builder bash -c "apt update && apt install -y build-essential flex bc bison libelf-dev elfutils libssl-dev"
+          docker cp ./linux ubu_builder:/linux
+
+      - name: Build kernel
+        if: steps.cache-restore.outputs.cache-hit != 'true'
+        run: |
+          cd ~/linux
+          docker container exec -w /linux ubu_builder bash -c 'make defconfig'
+          docker container exec -w /linux ubu_builder bash -c 'make -j $(nproc)'
+
+      - name: Export container
+        if: steps.cache-restore.outputs.cache-hit != 'true'
+        run: |
+          cd ~/linux
+          docker container kill ubu_builder
+          docker container export ubu_builder > ubu_builder.tar
+          docker container rm ubu_builder
+          mv ./ubu_builder.tar ~/builder.tar
+          docker import - builder < ~/builder.tar
+
+      - name: Save kernel image to cache
+        if: steps.cache-restore.outputs.cache-hit != 'true'
+        id: cache-save
+        uses: actions/cache/save@v4
+        with:
+          path: ~/builder.tar
+          key: builder-${{ matrix.kernel_version }}
+
+      - name: Build kernel module
         id: build
         env:
-          ARCH: ${{ matrix.arch }}
           VERSION: ${{ needs.prepare.outputs.version }}
           SHA: ${{ needs.prepare.outputs.sha }}
         shell: bash
         run: |
-          make kmake
-          tar -czvf kmod-youtubeUnblock-$VERSION-$SHA-$PLATFORM-$(uname -r).tar.gz kyoutubeUnblock.ko
+          docker run --rm -v ./:/youtubeUnblock -w /youtubeUnblock builder make kmake KERNEL_BUILDER_MAKEDIR:=/linux
+          tar -czvf kmod-youtubeUnblock-$VERSION-$SHA-linux-${{ matrix.kernel_version }}.tar.gz kyoutubeUnblock.ko
 
       - name: Upload artifacts
         if: steps.build.outcome == 'success'
         uses: actions/upload-artifact@v4
         with:
-          name: kmod-youtubeUnblock-${{ matrix.arch }}
+          name: kmod-youtubeUnblock-linux-${{ matrix.kernel_version }}
           path: ./**/kmod-youtubeUnblock*.tar.gz
 
