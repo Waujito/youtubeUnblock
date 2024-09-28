@@ -2,6 +2,9 @@
 #include "raw_replacements.h"
 #include "types.h"
 #include <linux/moduleparam.h>
+#include "types.h"
+
+static char custom_fake_buf[MAX_FAKE_SIZE];
 
 #define STR_MAXLEN 2048
 
@@ -20,6 +23,8 @@ struct config_t config = {
 	.mark = DEFAULT_RAWSOCKET_MARK,
 	.synfake = 0,
 	.synfake_len = 0,
+	.fake_sni_seq_type = FAKE_PAYLOAD_DEFAULT,
+	.fake_sni_type = FAKE_PAYLOAD_DEFAULT,
 
 	.sni_detection = SNI_DETECTION_PARSE,
 
@@ -47,6 +52,8 @@ struct config_t config = {
 	.queue_start_num = DEFAULT_QUEUE_NUM,
 	.fake_sni_pkt = fake_sni_old,
 	.fake_sni_pkt_sz = sizeof(fake_sni_old) - 1, // - 1 for null-terminator
+	.fake_custom_pkt = custom_fake_buf,
+	.fake_custom_pkt_sz = 0
 };
 
 static int unumeric_set(const char *val, const struct kernel_param *kp) {
@@ -187,33 +194,59 @@ static const struct kernel_param_ops exclude_domains_ops = {
 module_param_cb(exclude_domains, &exclude_domains_ops, &config.exclude_domains_str, 0664);
 
 module_param_cb(no_ipv6, &inverse_boolean_ops, &config.use_ipv6, 0664);
-module_param_cb(silent, &inverse_boolean_ops, &config.verbose, 0664);
 module_param_cb(quic_drop, &boolean_parameter_ops, &config.quic_drop, 0664);
 
-static int verbose_trace_set(const char *val, const struct kernel_param *kp) {
-	int n = 0, ret;
-	ret = kstrtoint(val, 10, &n);
-	if (ret != 0 || (n != 0 && n != 1))
-		return -EINVAL;
+static int verbosity_set(const char *val, const struct kernel_param *kp) {
+	size_t len;
 
-	if (n) {
-		n = VERBOSE_TRACE;
-	} else {
-		n = VERBOSE_DEBUG;
+	len = strnlen(val, STR_MAXLEN + 1);
+	if (len == STR_MAXLEN + 1) {
+		pr_err("%s: string parameter too long\n", kp->name);
+		return -ENOSPC;
 	}
-	if (kp->arg == NULL) 
-		return -EINVAL;
 
-	*(int *)kp->arg = n;
+	if (len >= 1 && val[len - 1] == '\n') {
+		len--;
+	}
+
+	if (strncmp(val, "trace", len) == 0) {
+		*(int *)kp->arg = VERBOSE_TRACE;
+	} else if (strncmp(val, "debug", len) == 0) {
+		*(int *)kp->arg = VERBOSE_DEBUG;
+	} else if (strncmp(val, "silent", len) == 0) {
+		*(int *)kp->arg = VERBOSE_INFO;
+	} else {
+		return -EINVAL;
+	}
+
 	return 0;
 }
 
-static const struct kernel_param_ops verbose_trace_ops = {
-	.set = verbose_trace_set,
-	.get = param_get_int,
+
+static int verbosity_get(char *buffer, const struct kernel_param *kp) {
+	switch (*(int *)kp->arg) {
+		case VERBOSE_TRACE:
+			strcpy(buffer, "trace\n");
+			break;
+		case VERBOSE_DEBUG:
+			strcpy(buffer, "debug\n");
+			break;
+		case VERBOSE_INFO:
+			strcpy(buffer, "silent\n");
+			break;
+		default:
+			strcpy(buffer, "unknown\n");
+	}
+
+	return strlen(buffer);
+}
+
+static const struct kernel_param_ops verbosity_ops = {
+	.set = verbosity_set,
+	.get = verbosity_get,
 };
 
-module_param_cb(trace, &verbose_trace_ops, &config.verbose, 0664);
+module_param_cb(verbosity, &verbosity_ops, &config.verbose, 0664);
 
 static int frag_strat_set(const char *val, const struct kernel_param *kp) {
 	size_t len;
