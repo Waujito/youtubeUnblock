@@ -101,4 +101,14 @@ int  set_tcp_checksum(struct tcphdr *tcph, void *iph, uint32_t iphb_len);
 
 void z_function(const char *str, int *zbuf, size_t len);
 
+
+/**
+ * Invalidates the raw packet. The function aims to invalid the packet
+ * in such way as it will be accepted by DPI, but dropped by target server
+ *
+ * Does not support bitmask, pass standalone strategy.
+ */
+int fail_packet(unsigned int strategy, uint8_t *payload, uint32_t *plen, uint32_t avail_buflen);
+
+
 #endif /* UTILS_H */

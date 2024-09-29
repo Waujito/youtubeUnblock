@@ -523,3 +523,119 @@ void z_function(const char *str, int *zbuf, size_t len) {
 	}
 }
 
+#define TCP_MD5SIG_LEN 16
+#define TCP_MD5SIG_KIND 19
+struct tcp_md5sig_opt {
+	uint8_t kind;
+	uint8_t len;
+	uint8_t sig[TCP_MD5SIG_LEN];
+};
+#define TCP_MD5SIG_OPT_LEN (sizeof(struct tcp_md5sig_opt))
+// Real length of the option, with NOOP fillers
+#define TCP_MD5SIG_OPT_RLEN 20
+
+int fail_packet(unsigned int strategy, uint8_t *payload, uint32_t *plen, uint32_t avail_buflen) {
+	void *iph;
+	uint32_t iph_len;
+	struct tcphdr *tcph;
+	uint32_t tcph_len;
+	uint8_t *data;
+	uint32_t dlen;
+	int ret;
+
+	ret = tcp_payload_split(payload, *plen, 
+			&iph, &iph_len, &tcph, &tcph_len,
+			&data, &dlen);
+
+	uint32_t ipxv = netproto_version(payload, *plen);
+
+	if (ret < 0) {
+		return ret;
+	}
+
+
+	if (strategy == FAKE_STRAT_RAND_SEQ) {
+		lgtrace("fake seq: %u -> ", ntohl(tcph->seq));
+
+		if (config.fakeseq_offset) {
+			tcph->seq = htonl(ntohl(tcph->seq) - config.fakeseq_offset);
+		} else {
+#ifdef KERNEL_SPACE
+			tcph->seq = 124;
+#else
+			tcph->seq = random();
+#endif
+
+		}
+
+		lgtrace_addp("%u", ntohl(tcph->seq));
+	} else if (strategy == FAKE_STRAT_PAST_SEQ) {
+		lgtrace("fake seq: %u -> ", ntohl(tcph->seq));
+		tcph->seq = htonl(ntohl(tcph->seq) - dlen);
+		lgtrace_addp("%u", ntohl(tcph->seq));
+
+	} else if (strategy == FAKE_STRAT_TTL) {
+		lgtrace_addp("set fake ttl to %d", config.faking_ttl);
+
+		if (ipxv == IP4VERSION) {
+			((struct iphdr *)iph)->ttl = config.faking_ttl;
+		} else if (ipxv == IP6VERSION) {
+			((struct ip6_hdr *)iph)->ip6_hops = config.faking_ttl;
+		} else {
+			lgerror("fail_packet: IP version is unsupported", -EINVAL);
+			return -EINVAL;
+		}
+	} else if (strategy == FAKE_STRAT_TCP_MD5SUM) {
+		int optp_len = tcph_len - sizeof(struct tcphdr);
+		int delta = TCP_MD5SIG_OPT_RLEN - optp_len;
+		lgtrace_addp("Incr delta %d: %d -> %d", delta, optp_len, optp_len + delta);
+		
+		if (delta > 0) {
+			if (avail_buflen - *plen < delta) {
+				return -1;
+			}
+			uint8_t *ndata = data + delta;
+			uint8_t *ndptr = ndata + dlen;
+			uint8_t *dptr = data + dlen;
+			for (size_t i = dlen + 1; i > 0; i--) {
+				*ndptr = *dptr;
+				--ndptr, --dptr;
+			}
+			data = ndata;
+			tcph_len = tcph_len + delta;
+			tcph->doff = tcph_len >> 2;
+			if (ipxv == IP4VERSION) {
+				((struct iphdr *)iph)->tot_len = htons(ntohs(((struct iphdr *)iph)->tot_len) + delta);
+			} else if (ipxv == IP6VERSION) {
+				((struct ip6_hdr *)iph)->ip6_plen = htons(ntohs(((struct ip6_hdr *)iph)->ip6_plen) + delta);
+			} else {
+				lgerror("fail_packet: IP version is unsupported", -EINVAL);
+				return -EINVAL;
+			}
+			optp_len += delta;
+			*plen += delta;
+		}
+
+		uint8_t *optplace = (uint8_t *)tcph + sizeof(struct tcphdr);
+		struct tcp_md5sig_opt *mdopt = (void *)optplace;
+		mdopt->kind = TCP_MD5SIG_KIND;
+		mdopt->len = TCP_MD5SIG_OPT_LEN;
+
+		optplace += sizeof(struct tcp_md5sig_opt);
+		optp_len -= sizeof(struct tcp_md5sig_opt);
+
+		while (optp_len-- > 0) {
+			*optplace++ = 0x01;
+		}
+	}
+
+	set_ip_checksum(iph, iph_len);
+	set_tcp_checksum(tcph, iph, iph_len);
+
+	if (strategy == FAKE_STRAT_TCP_CHECK) {
+		lgtrace_addp("break fake tcp checksum");
+		tcph->check += 1;
+	}
+
+	return 0;
+}
