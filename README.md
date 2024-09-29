@@ -54,9 +54,9 @@ For Windows use [GoodbyeDPI by ValdikSS](https://github.com/ValdikSS/GoodbyeDPI)
 
 ### OpenWRT pre configuration
 
-When you got the release package, you should install it. Go to your router interface and put it in via *System-Software-install_package* menu. Go to *System-Startup* menu, restart firewall and start **youtubeUnblock**. 
+When you got the release package, you should install it. Go to your router interface, to *System->Software*, do *Update lists* and install youtubeUnblock via *install_package* button. Then, you should go to *System-Startup* menu and reload the firewall (You may also do it within *Services->youtubeUnblock* menu). 
 
-To make it work you should register an iptables rule and install required kernel modules. The list of modules depends on the version of OpenWRT and which firewall do you use (iptables or nftables). 
+To make it work you should register an iptables rule and install required kernel modules. The list of modules depends on the version of OpenWRT and which firewall do you use (iptables or nftables). For most modern versions of OpenWRT (v23.x, v22.x) you should use nftables rules, for older ones it depends, but typically iptables.
 
 The common dependency is
  ```text
