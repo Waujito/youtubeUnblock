@@ -50,7 +50,7 @@ start() {
 		ARGS+=" --no-ipv6"
 	fi
 	
-	$PROCS $ARGS &>/dev/null &
+	$PROCS $ARGS >/dev/null 2>&1 &
 	
 	firewall_start_v4
 	firewall_start_v6
@@ -73,7 +73,8 @@ _iptables()
 	ARG="$@"	
 	CMD=$1 # iptables or ip6tables
 	ACTION=$2 # -I, -A, -D
-	RULE=${@:3}  
+	shift; shift;
+	RULE="$@"
 
 	$CMD -C $RULE 2>/dev/null
 	exists=$(( ! $? ))
@@ -91,7 +92,7 @@ _iptables()
 }
 
 firewall_start_v4() {
-	iptables -t mangle -N YOUTUBEUNBLOCK &>/dev/null
+	iptables -t mangle -N YOUTUBEUNBLOCK >/dev/null 2>&1
 	_iptables iptables -A YOUTUBEUNBLOCK -t mangle -p tcp --dport 443 -m connbytes --connbytes-dir original --connbytes-mode packets --connbytes 0:19 -j NFQUEUE --queue-num 537 --queue-bypass
 	_iptables iptables -A YOUTUBEUNBLOCK -t mangle -p udp --dport 443 -m connbytes --connbytes-dir original --connbytes-mode packets --connbytes 0:19 -j NFQUEUE --queue-num 537 --queue-bypass
 	_iptables iptables -A POSTROUTING -t mangle -j YOUTUBEUNBLOCK
@@ -103,7 +104,7 @@ firewall_stop_v4() {
 	_iptables iptables -D YOUTUBEUNBLOCK -t mangle -p udp --dport 443 -m connbytes --connbytes-dir original --connbytes-mode packets --connbytes 0:19 -j NFQUEUE --queue-num 537 --queue-bypass
 	_iptables iptables -D POSTROUTING -t mangle -j YOUTUBEUNBLOCK
 	_iptables iptables -D OUTPUT -m mark --mark 32768/32768 -j ACCEPT
-	iptables -t mangle -X YOUTUBEUNBLOCK &>/dev/null
+	iptables -t mangle -X YOUTUBEUNBLOCK >/dev/null 2>&1
 }
 
 firewall_start_v6() {
@@ -111,7 +112,7 @@ firewall_start_v6() {
 		return 0
 	fi
 
-	ip6tables -t mangle -N YOUTUBEUNBLOCK &>/dev/null
+	ip6tables -t mangle -N YOUTUBEUNBLOCK >/dev/null 2>&1
 	_iptables ip6tables -A YOUTUBEUNBLOCK -t mangle -p tcp --dport 443 -m connbytes --connbytes-dir original --connbytes-mode packets --connbytes 0:19 -j NFQUEUE --queue-num 537 --queue-bypass
 	_iptables ip6tables -A YOUTUBEUNBLOCK -t mangle -p udp --dport 443 -m connbytes --connbytes-dir original --connbytes-mode packets --connbytes 0:19 -j NFQUEUE --queue-num 537 --queue-bypass
 	_iptables ip6tables -A POSTROUTING -t mangle -j YOUTUBEUNBLOCK
@@ -127,7 +128,7 @@ firewall_stop_v6() {
 	_iptables ip6tables -D YOUTUBEUNBLOCK -t mangle -p udp --dport 443 -m connbytes --connbytes-dir original --connbytes-mode packets --connbytes 0:19 -j NFQUEUE --queue-num 537 --queue-bypass
 	_iptables ip6tables -D POSTROUTING -t mangle -j YOUTUBEUNBLOCK
 	_iptables ip6tables -D OUTPUT -m mark --mark 32768/32768 -j ACCEPT
-	ip6tables -t mangle -X YOUTUBEUNBLOCK &>/dev/null
+	ip6tables -t mangle -X YOUTUBEUNBLOCK >/dev/null 2>&1
 }
 
 kernel_modules_load() {
@@ -135,21 +136,21 @@ kernel_modules_load() {
 
 	connbytes_mod_path=$(find /lib/modules/$(uname -r) -name "xt_connbytes.ko*")
 	if [ ! -z "$connbytes_mod_path" ]; then
-		insmod "$connbytes_mod_path" &>/dev/null && echo "xt_connbytes.ko loaded"
+		insmod "$connbytes_mod_path" >/dev/null 2>&1 && echo "xt_connbytes.ko loaded"
 	fi
 
 	nfqueue_mod_path=$(find /lib/modules/$(uname -r) -name "xt_NFQUEUE.ko*")
 	if [ ! -z "$nfqueue_mod_path" ]; then
-		insmod "$nfqueue_mod_path" &>/dev/null && echo "xt_NFQUEUE.ko loaded"
+		insmod "$nfqueue_mod_path" >/dev/null 2>&1 && echo "xt_NFQUEUE.ko loaded"
 	fi
 
-	(modprobe xt_connbytes --first-time &>/dev/null && echo "xt_connbytes loaded") || true
-	(modprobe xt_NFQUEUE --first-time &>/dev/null && echo "xt_NFQUEUE loaded") || true
+	(modprobe xt_connbytes --first-time >/dev/null 2>&1 && echo "xt_connbytes loaded") || true
+	(modprobe xt_NFQUEUE --first-time >/dev/null 2>&1 && echo "xt_NFQUEUE loaded") || true
 }
 
 system_config() {
-	sysctl -w net.netfilter.nf_conntrack_checksum=0 &> /dev/null
-	sysctl -w net.netfilter.nf_conntrack_tcp_be_liberal=1 &> /dev/null
+	sysctl -w net.netfilter.nf_conntrack_checksum=0 >/dev/null 2>&1
+	sysctl -w net.netfilter.nf_conntrack_tcp_be_liberal=1 >/dev/null 2>&1
 }
 
 status() {

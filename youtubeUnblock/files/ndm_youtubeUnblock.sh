@@ -1,10 +1,6 @@
 #!/bin/sh
-[ "$table" != "mangle" ] && exit 0
+[ "$type" == "ip6tables" ] && exit 0 >/dev/null 2>&1
+[ "$table" != "mangle" ] && exit 0 >/dev/null 2>&1
+/opt/etc/init.d/S91youtubeUnblock firewall-stop >/dev/null 2>&1
+/opt/etc/init.d/S91youtubeUnblock firewall-load >/dev/null 2>&1
 
-if [[ "$type" == "ip6tables" ]]; then
-/opt/etc/init.d/youtubeUnblock firewall_stop_v6 &>/dev/null || true
-/opt/etc/init.d/youtubeUnblock firewall_start_v6 &>/dev/null || true
-else
-/opt/etc/init.d/youtubeUnblock firewall_stop_v4 &>/dev/null || true
-/opt/etc/init.d/youtubeUnblock firewall_start_v4 &>/dev/null ||true
-fi
