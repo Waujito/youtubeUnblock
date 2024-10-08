@@ -163,6 +163,7 @@ jobs:
         branch:
           - openwrt-23.05
         arch:
+          - rockchip-armv8
           - aarch64_cortex-a53
           - aarch64_cortex-a72
           - aarch64_generic
