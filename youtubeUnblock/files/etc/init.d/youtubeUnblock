@@ -1,7 +1,6 @@
 #!/bin/sh /etc/rc.common
 
-# Thanks @spvkgn https://github.com/spvkgn/ByeDPI-OpenWrt/blob/main/byedpi/files/byedpi.init
-# For reference
+# Thanks @spvkgn for reference: https://github.com/spvkgn/ByeDPI-OpenWrt/blob/main/byedpi/files/byedpi.init
 
 
 START=91
@@ -11,6 +10,9 @@ PROG=/usr/bin/youtubeUnblock
 
 # You should use uci for configuration
 OPTS=""
+
+# If you prefer to pass args as cmdline arguments, pass them here
+POST_ARGS=""
 
 xappend() {
 	local name="$1" value="$2"
@@ -83,13 +85,10 @@ start_service() {
 	config_load youtubeUnblock
 	config_foreach parse_options youtubeUnblock
 
-	
-	if [[ "$PROCD_DEBUG" == "1" ]]; then
-		echo "$OPTS"
-	fi
+	echo "youtubeUnblock is running as: '$PROG $OPTS $POST_ARGS'"
 
 	procd_open_instance 'youtubeUnblock'
-	procd_set_param command $PROG $OPTS
+	procd_set_param command $PROG $OPTS $POST_ARGS
 	procd_set_param stdout 1
 	procd_set_param stderr 1
 	procd_close_instance
