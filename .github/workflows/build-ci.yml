@@ -228,6 +228,48 @@ jobs:
           path: /builder/youtubeUnblock*.ipk
           if-no-files-found: error
 
+  build-openwrt-luci:
+    needs: prepare
+    runs-on: ubuntu-latest
+    container:
+      image: openwrt/sdk:x86_64-openwrt-23.05
+      options: --user root
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: 'openwrt'
+
+      - name: Prepare build
+        env:
+          VERSION: ${{ needs.prepare.outputs.version }}
+          SHA: ${{ needs.prepare.outputs.sha }}
+        run: |
+          sed -i "s/PKG_REV:=.*$/PKG_REV:=$SHA/;s/PKG_VERSION:=.*$/PKG_VERSION:=$VERSION-$SHA/" youtubeUnblock/Makefile
+
+      - name: Build packages
+        id: build
+        env:
+          VERSION: ${{ needs.prepare.outputs.version }}
+          SHA: ${{ needs.prepare.outputs.sha }}
+        working-directory: /builder
+        run: |
+          echo "src-link youtubeUnblock $GITHUB_WORKSPACE" >> feeds.conf
+          cat feeds.conf
+          ./scripts/feeds update youtubeUnblock
+          ./scripts/feeds install -a -p youtubeUnblock
+          make defconfig
+          make package/luci-app-youtubeUnblock/compile V=s
+          mv $(find ./bin -type f -name 'luci-app-youtubeUnblock*.ipk') ./luci-app-youtubeUnblock-$VERSION-$SHA.ipk
+
+      - name: Upload packages
+        if: steps.build.outcome == 'success'
+        uses: actions/upload-artifact@v4
+        with:
+          name: luci-app-youtubeUnblock
+          path: /builder/luci-app-youtubeUnblock*.ipk
+          if-no-files-found: error
+
   build-entware:
     needs: prepare
     runs-on: ubuntu-latest
@@ -341,3 +383,4 @@ jobs:
           files: |
             ./**/youtubeUnblock*.ipk
             ./**/youtubeUnblock*.tar.gz
+            ./**/luci-app-youtubeUnblock*.ipk

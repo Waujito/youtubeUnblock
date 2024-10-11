@@ -85,7 +85,9 @@ For nftables on OpenWRT rules comes out-of-the-box and stored under `/usr/share/
 
 Now we go to the configuration. For OpenWRT here is configuration via [UCI](https://openwrt.org/docs/guide-user/base-system/uci) and [LuCI](https://openwrt.org/docs/guide-user/luci/start) available (CLI and GUI respectively).
 
-Luci is a configuration interface for your router (which you connect when enter 192.168.1.1 in browser). LuCI configuration lives in **Services->youtubeUnblock** section. It is self descriptive, with description for each flag. Note, that after you push `Save & Apply` button, the configuration is applied automatically and the service is restarted.
+For **LuCI** aka **GUI** aka **web-interface of router** you should install luci-app-youtubeUnblock package like you did it with the normal youtubeUnblock package. Note, that lists of official opkg feeds should be loaded (**Do it with Update lists option**).
+
+LuCI configuration lives in **Services->youtubeUnblock** section. It is self descriptive, with description for each flag. Note, that after you push `Save & Apply` button, the configuration is applied automatically and the service is restarted.
 
 UCI configuration is available in /etc/config/youtubeUnblock file, in section `youtubeUnblock.youtubeUnblock`. The configuration is done with [flags](#flags). Note, that names of flags are not the same: you should replace `-` with `_`, you shouldn't use leading `--` for flag. Also you will enable toggle flags (without parameters) with `1`. 
 
