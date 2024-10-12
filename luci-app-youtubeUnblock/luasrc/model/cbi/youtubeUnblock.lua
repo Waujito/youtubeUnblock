@@ -34,6 +34,16 @@ o:depends("faking_strategy", "randseq")
 o = s:option(Value, "fake_sni_seq_len", "fake sni seq len", "This flag specifies youtubeUnblock to build a complicated construction of fake client hello packets. length determines how much fakes will be sent.")
 o:depends("fake_sni", 1)
 
+o = s:option(ListValue, "fake_sni_type", "fake sni type", "This flag specifies which faking message type should be used for fake packets. For random, the message of the random length and with random payload will be sent. For default the default payload (sni=www.google.com) is used. And for the custom option, the payload from --fake-custom-payload section utilized. Defaults to <code>default</code>.")
+o:value("default", "default")
+o:value("custom", "custom")
+o:value("random", "random")
+o.widget="radio"
+o:depends("fake_sni", 1)
+
+o = s:option(Value, "fake_custom_payload", "fake custom payload", "Useful with --fake-sni-type=custom. You should specify the payload for fake message manually. Use hex format: --fake-custom-payload=0001020304 mean that 5 bytes sequence: 0x00, 0x01, 0x02, 0x03, 0x04 used as fake.")
+o:depends("fake_sni_type", "custom")
+
 o = s:option(ListValue, "frag", "fragmentation strategy", "Specifies the fragmentation strategy for the packet. Tcp is used by default. Ip fragmentation may be blocked by DPI system. None specifies no fragmentation. Probably this won't work, but may be will work for some fake sni strategies.")
 o:value("tcp", "tcp")
 o:value("ip", "ip")
@@ -143,6 +153,13 @@ fwo.inputtitle = "Reload"
 fwo.inputstyle = "action"
 function fwo.write(self, section)
 	sys.call("/etc/init.d/firewall reload")
+end
+
+local rso = bs:option(Button, "_reset_settings", "Reset settins to defaults")
+rso.inputtitle = "Reset"
+rso.inputstyle = "negative"
+function rso.write(self, section)
+	sys.call("/usr/share/youtubeUnblock/youtubeUnblock_defaults.sh --force")
 end
 
 local logs = sys.exec("logread -l 800 -p youtubeUnblock | grep youtubeUnblock | sed '1!G;h;$!d'")

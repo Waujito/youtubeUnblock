@@ -71,7 +71,7 @@ parse_options() {
 		append_commasep_list "$config" sni_domains
 	fi
 	
-	append_opts "$config" queue_num fake_sni_seq_len faking_strategy faking_ttl fake_seq_offset frag frag_sni_pos fk_winsize synfake_len seg2delay packet_mark 
+	append_opts "$config" queue_num fake_sni_seq_len faking_strategy faking_ttl fake_seq_offset frag frag_sni_pos fk_winsize synfake_len seg2delay packet_mark fake_sni_type fake_custom_payload
 	append_commasep_list "$config" exclude_domains 
 	append_opts_boolean "$config" fake_sni frag_sni_reverse frag_sni_faked frag_middle_sni synfake
 	append_opts_btoggler "$config" quic_drop silent trace no_gso no_ipv6
