@@ -85,7 +85,7 @@ For nftables on OpenWRT rules comes out-of-the-box and stored under `/usr/share/
 
 Now we go to the configuration. For OpenWRT here is configuration via [UCI](https://openwrt.org/docs/guide-user/base-system/uci) and [LuCI](https://openwrt.org/docs/guide-user/luci/start) available (CLI and GUI respectively).
 
-For **LuCI** aka **GUI** aka **web-interface of router** you should install luci-app-youtubeUnblock package like you did it with the normal youtubeUnblock package. Note, that lists of official opkg feeds should be loaded (**Do it with Update lists option**).
+For **LuCI** aka **GUI** aka **web-interface of router** you should install **luci-app-youtubeUnblock** package like you did it with the normal youtubeUnblock package. Note, that lists of official opkg feeds should be loaded (**Do it with Update lists option**).
 
 LuCI configuration lives in **Services->youtubeUnblock** section. It is self descriptive, with description for each flag. Note, that after you push `Save & Apply` button, the configuration is applied automatically and the service is restarted.
 
@@ -182,6 +182,10 @@ Available flags:
 - `--fake-sni={0|1}` This flag enables fake-sni which forces **youtubeUnblock** to send at least three packets instead of one with TLS *ClientHello*: Fake *ClientHello*, 1st part of original *ClientHello*, 2nd part of original *ClientHello*. This flag may be related to some Operation not permitted error messages, so before open an issue refer to [Troubleshooting for EPERMS](#troubleshooting-eperms-operation-not-permitted). Defaults to **1**.
 
 - `--fake-sni-seq-len=<length>` This flag specifies **youtubeUnblock** to build a complicated construction of fake client hello packets. length determines how much fakes will be sent. Defaults to **1**.
+
+- `--fake-sni-type={default|custom|random}` This flag specifies which faking messages should use fake packets. If you pass random, the message of random length and random payload will be sent. For default the default payload is used. And for custom the payload from `--fake-custom-payload` is used. Default to `default`.
+
+- `--fake-custom-payload=<payload>` Usable with `--fake-sni-type=custom`. You should specify the payload for fake message manually. Use hex format: `--fake-custom-payload=0001020304` mean that 5 bytes sequence: `0x00`, `0x01`, `0x02`, `0x03`, `0x04` used as fake.
 
 - `--faking-strategy={randseq|ttl|tcp_check|pastseq|md5sum}` This flag determines the strategy of fake packets invalidation. Defaults to `randseq`
   - `randseq` specifies that random sequence/acknowledgemend random will be set. This option may be handled by provider which uses *conntrack* with drop on invalid *conntrack* state firewall rule enabled. 

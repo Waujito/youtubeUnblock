@@ -273,18 +273,9 @@ int gen_fake_sni(struct fake_type type,
 		const void *ipxh, uint32_t iph_len, 
 		const struct tcphdr *tcph, uint32_t tcph_len,
 		uint8_t *buf, uint32_t *buflen) {
-
 	uint32_t data_len = type.fake_len;
 	if (type.type == FAKE_PAYLOAD_RANDOM && data_len == 0) {
-#ifdef KERNEL_SPACE
-		
-		get_random_bytes(&data_len, sizeof(data_len));
-		data_len = data_len % 1200;
-#else
-		data_len = random() % 1200;
-#endif
-	} else if (type.type == FAKE_PAYLOAD_DEFAULT) {
-		data_len = config.fake_sni_pkt_sz;
+		data_len = (uint32_t)randint() % 1200;
 	}
 
 	if (!ipxh || !tcph || !buf || !buflen)
@@ -320,9 +311,6 @@ int gen_fake_sni(struct fake_type type,
 	uint8_t *bfdptr = buf + iph_len + tcph_len;
 
 	switch (type.type) {
-		case FAKE_PAYLOAD_DEFAULT:
-			memcpy(bfdptr, config.fake_sni_pkt, data_len);
-			break;
 		case FAKE_PAYLOAD_DATA:
 			memcpy(bfdptr, type.fake_data, data_len);
 			break;

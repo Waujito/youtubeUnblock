@@ -175,18 +175,27 @@ int process_tcp_packet(const uint8_t *raw_payload, uint32_t raw_payload_len) {
 
 		if (config.fk_winsize) {
 			tcph->window = htons(config.fk_winsize);
+			set_tcp_checksum(tcph, iph, iph_len);
 		}
 
-		set_ip_checksum(iph, iph_len);
-		set_tcp_checksum(tcph, iph, iph_len);
+		if (0) {
+			int delta = 2;
+			ret = seqovl_packet(payload, &payload_len, delta);
+			int ret = tcp_payload_split(payload, payload_len,
+				      &iph, &iph_len, &tcph, &tcph_len,
+				      &data, &dlen);
+			if (ret < 0) {
+				lgerror("seqovl_packet delta %d", ret, delta);
+			}
+		}
+
 		
 		if (dlen > 1480 && config.verbose) {
 			lgdebugmsg("WARNING! Client Hello packet is too big and may cause issues!");
 		}
 
 		if (config.fake_sni) {
-			post_fake_sni(iph, iph_len, tcph, tcph_len, 
-				config.fake_sni_seq_len);	
+			post_fake_sni(args_default_fake_type(), iph, iph_len, tcph, tcph_len);	
 		}
 
 		size_t ipd_offset;
@@ -324,39 +333,75 @@ int process_udp_packet(const uint8_t *pkt, uint32_t pktlen) {
 		printf("], ");
 	}
 
-	lgtrace_addp("QUIC probe");
-	const struct quic_lhdr *qch;
-	uint32_t qch_len;
-	struct quic_cids qci;
-	uint8_t *quic_raw_payload;
-	uint32_t quic_raw_plen;
-	ret = quic_parse_data((uint8_t *)data, dlen, 
-		 (struct quic_lhdr **)&qch, &qch_len, &qci, 
-		 &quic_raw_payload, &quic_raw_plen);
-
-	if (ret < 0) {
-		lgtrace_addp("undefined type");
-		goto accept;
-	}
-
-	lgtrace_addp("QUIC detected");
-	uint8_t qtype = qch->type;
 
 	if (config.quic_drop) {
+		lgtrace_addp("QUIC probe");
+		const struct quic_lhdr *qch;
+		uint32_t qch_len;
+		struct quic_cids qci;
+		uint8_t *quic_raw_payload;
+		uint32_t quic_raw_plen;
+		ret = quic_parse_data((uint8_t *)data, dlen, 
+			 (struct quic_lhdr **)&qch, &qch_len, &qci, 
+			 &quic_raw_payload, &quic_raw_plen);
+
+		if (ret < 0) {
+			lgtrace_addp("undefined type");
+			goto accept_quic;
+		}
+
+		lgtrace_addp("QUIC detected");
+		uint8_t qtype = qch->type;
+
 		goto drop;
+
+		if (qch->version == QUIC_V1)
+			qtype = quic_convtype_v1(qtype);
+		else if (qch->version == QUIC_V2) 
+			qtype = quic_convtype_v2(qtype);
+
+		if (qtype != QUIC_INITIAL_TYPE) {
+			lgtrace_addp("quic message type: %d", qtype);
+			goto accept_quic;
+		}
+		
+		lgtrace_addp("quic initial message");
 	}
 
-	if (qch->version == QUIC_V1)
-		qtype = quic_convtype_v1(qtype);
-	else if (qch->version == QUIC_V2) 
-		qtype = quic_convtype_v2(qtype);
+accept_quic:
+	;
 
-	if (qtype != QUIC_INITIAL_TYPE) {
-		lgtrace_addp("quic message type: %d", qtype);
-		goto accept;
+/*
+	if (1) {
+		lgtrace_addp("Probe udp");
+		if (ipver == IP4VERSION && ntohs(udph->dest) > 30) {
+			lgtrace_addp("udp fool");
+			const uint8_t *payload;
+			uint32_t payload_len;
+
+			uint32_t poses[10];
+			int cnt = 3;
+
+			poses[0] = 8;
+			for (int i = 1; i < cnt; i++) {
+				poses[i] = poses[i - 1] + 8;
+			}
+
+			ret = send_ip4_frags(pkt, pktlen, poses, cnt, 0);
+			if (ret < 0) {
+				lgerror("ip4 send frags", ret);
+				goto accept;
+			}
+
+			goto drop;
+		} else {
+			printf("WARNING: IP fragmentation is supported only for IPv4\n");	
+			goto accept;
+		}
 	}
-	
-	lgtrace_addp("quic initial message");
+*/
+
+
 
 accept:
 	lgtrace_addp("accepted");
@@ -377,11 +422,13 @@ int send_ip4_frags(const uint8_t *packet, uint32_t pktlen, const uint32_t *poses
 				return -EINVAL;
 			}
 
+			lgtrace_addp("Sent %d delayed for %d", pktlen, config.seg2_delay);
 			instance_config.send_delayed_packet(
 				packet, pktlen, config.seg2_delay);
 
 			return 0;
 		} else {
+			lgtrace_addp("Sent %d bytes", pktlen);
 			return instance_config.send_raw_packet(
 				packet, pktlen);
 		}
@@ -399,8 +446,17 @@ int send_ip4_frags(const uint8_t *packet, uint32_t pktlen, const uint32_t *poses
 			return -ENOMEM;
 		}
 
+		NETBUF_ALLOC(fake_pad, MAX_PACKET_SIZE);
+		if (!NETBUF_CHECK(fake_pad)) {
+			lgerror("Allocation error", -ENOMEM);
+			NETBUF_FREE(frag1);
+			NETBUF_FREE(frag2);
+			return -ENOMEM;
+		}
+
 		uint32_t f1len = MAX_PACKET_SIZE;
 		uint32_t f2len = MAX_PACKET_SIZE;
+		uint32_t fake_pad_len = MAX_PACKET_SIZE;
 
 		int ret;
 
@@ -410,13 +466,18 @@ int send_ip4_frags(const uint8_t *packet, uint32_t pktlen, const uint32_t *poses
 			goto erret_lc;
 		}
 
-		ret = ip4_frag(packet, pktlen, poses[0] - dvs, 
+		uint32_t frag_pos = poses[0] - dvs;
+		frag_pos += 8 - frag_pos % 8;
+
+		ret = ip4_frag(packet, pktlen, frag_pos, 
 			frag1, &f1len, frag2, &f2len);
 
 		if (ret < 0) {
 			lgerror("send_frags: frag: with context packet with size %d, position: %d, recursive dvs: %d", ret, pktlen, poses[0], dvs);
 			goto erret_lc;
 		}
+
+		dvs += frag_pos;
 
 		if (config.frag_sni_reverse)
 			goto send_frag2;
@@ -429,23 +490,54 @@ send_frag1:
 		if (config.frag_sni_reverse)
 			goto out_lc;
 
+send_fake:
+/*
+		if (config.frag_sni_faked) {
+			ITER_FAKE_STRAT(config.faking_strategy, strategy) {
+				uint32_t iphfl;
+				fake_pad_len = f2len;
+				ret = ip4_payload_split(frag2, f2len, NULL, &iphfl, NULL, NULL);
+				if (ret < 0) {
+					lgerror("Invalid frag2", ret);
+					goto erret_lc;
+				}
+				memcpy(fake_pad, frag2, iphfl + sizeof(struct udphdr));
+				memset(fake_pad + iphfl + sizeof(struct udphdr), 0, f2len - iphfl - sizeof(struct udphdr));
+				((struct iphdr *)fake_pad)->tot_len = htons(fake_pad_len);
+				((struct iphdr *)fake_pad)->id = 1;
+				((struct iphdr *)fake_pad)->ttl = 8;
+				((struct iphdr *)fake_pad)->frag_off = 0;
+				ip4_set_checksum((struct iphdr*)fake_pad);
+				// *(struct udphdr *)(fake_pad + iphfl) = *(struct udphdr *)(frag2 + iphfl);
+				ret = send_ip4_frags(fake_pad, fake_pad_len, NULL, 0, 0);
+				if (ret < 0) {
+					goto erret_lc;
+				}
+			}
+		}
+*/
+
+		if (config.frag_sni_reverse)
+			goto send_frag1;
+
 send_frag2:
-		dvs += poses[0];
 		ret = send_ip4_frags(frag2, f2len, poses + 1, poses_sz - 1, dvs);
 		if (ret < 0) {
 			goto erret_lc;
 		}
 
 		if (config.frag_sni_reverse)
-			goto send_frag1;
+			goto send_fake;
 
 out_lc:
 		NETBUF_FREE(frag1);
 		NETBUF_FREE(frag2);
+		NETBUF_FREE(fake_pad);
 		goto out;
 erret_lc:
 		NETBUF_FREE(frag1);
 		NETBUF_FREE(frag2);
+		NETBUF_FREE(fake_pad);
 		return ret;
 	}
 
@@ -483,18 +575,8 @@ int send_tcp_frags(const uint8_t *packet, uint32_t pktlen, const uint32_t *poses
 			return -ENOMEM;
 		}
 
-		NETBUF_ALLOC(fake_pad, MAX_PACKET_SIZE);
-		if (!NETBUF_CHECK(fake_pad)) {
-			lgerror("Allocation error", -ENOMEM);
-			NETBUF_FREE(frag1);
-			NETBUF_FREE(frag2);
-			return -ENOMEM;
-		}
-
-
 		uint32_t f1len = MAX_PACKET_SIZE;
 		uint32_t f2len = MAX_PACKET_SIZE;
-		uint32_t fake_pad_len = MAX_PACKET_SIZE;
 
 		int ret;
 
@@ -508,6 +590,7 @@ int send_tcp_frags(const uint8_t *packet, uint32_t pktlen, const uint32_t *poses
 		ret = tcp_frag(packet, pktlen, poses[0] - dvs, 
 			frag1, &f1len, frag2, &f2len);
 
+
 		lgtrace_addp("Packet split in %d bytes position of payload start, dvs: %d to two packets of %d and %d lengths", poses[0], dvs, f1len, f2len);
 
 		if (ret < 0) {
@@ -515,6 +598,8 @@ int send_tcp_frags(const uint8_t *packet, uint32_t pktlen, const uint32_t *poses
 			goto erret_lc;
 		}
 
+
+		dvs += poses[0];
 
 		if (config.frag_sni_reverse)
 			goto send_frag2;
@@ -532,33 +617,20 @@ send_frag1:
 
 send_fake:
 		if (config.frag_sni_faked) {
-			ITER_FAKE_STRAT(config.faking_strategy, strategy) {
-				uint32_t iphfl, tcphfl;
-				fake_pad_len = f2len;
-				ret = tcp_payload_split(frag2, f2len, NULL, &iphfl, NULL, &tcphfl, NULL, NULL);
-				if (ret < 0) {
-					lgerror("Invalid frag2", ret);
-					goto erret_lc;
-				}
-				memcpy(fake_pad, frag2, iphfl + tcphfl);
-				memset(fake_pad + iphfl + tcphfl, 0, f2len - iphfl - tcphfl);
-				struct tcphdr *fakethdr = (void *)(fake_pad + iphfl);
-				if (config.faking_strategy == FAKE_STRAT_PAST_SEQ) {
-					lgtrace("frag fake sent with %u -> ", ntohl(fakethdr->seq));
-					fakethdr->seq = htonl(ntohl(fakethdr->seq) - dvs);
-					lgtrace_addp("%u, ", ntohl(fakethdr->seq));
-				}
-				ret = fail_packet(strategy, 
-					fake_pad, &fake_pad_len, MAX_PACKET_SIZE);
-				if (ret < 0) {
-					lgerror("Failed to fail packet", ret);
-					goto erret_lc;
-				}
-				ret = send_tcp_frags(fake_pad, fake_pad_len, NULL, 0, 0);
-				if (ret < 0) {
-					goto erret_lc;
-				}
+			uint32_t iphfl, tcphfl;
+			void *iph;
+			struct tcphdr *tcph;
+			ret = tcp_payload_split(frag2, f2len, &iph, &iphfl, &tcph, &tcphfl, NULL, NULL);
+			struct fake_type f_type = args_default_fake_type();
+			if ((f_type.strategy.strategy & FAKE_STRAT_PAST_SEQ) == FAKE_STRAT_PAST_SEQ) {
+				f_type.strategy.strategy ^= FAKE_STRAT_PAST_SEQ;
+				f_type.strategy.strategy |= FAKE_STRAT_RAND_SEQ;
+				f_type.strategy.randseq_offset = dvs;
 			}
+
+			f_type.seg2delay = config.seg2_delay;
+
+			post_fake_sni(f_type, iph, iphfl, tcph, tcphfl);	
 		}
 
 		if (config.frag_sni_reverse)
@@ -566,7 +638,6 @@ send_fake:
 
 send_frag2:
 		{
-			dvs += poses[0];
 			ret = send_tcp_frags(frag2, f2len, poses + 1, poses_sz - 1, dvs);
 			if (ret < 0) {
 				goto erret_lc;
@@ -578,24 +649,25 @@ send_frag2:
 out_lc:
 		NETBUF_FREE(frag1);
 		NETBUF_FREE(frag2);
-		NETBUF_FREE(fake_pad);
 		goto out;
 erret_lc:
 		NETBUF_FREE(frag1);
 		NETBUF_FREE(frag2);
-		NETBUF_FREE(fake_pad);
 		return ret;
 	}
 out:
 	return 0;
 }
 
-int post_fake_sni(const void *iph, unsigned int iph_len, 
-		     const struct tcphdr *tcph, unsigned int tcph_len,
-		     unsigned char sequence_len) {
+int post_fake_sni(struct fake_type f_type, 
+		const void *iph, unsigned int iph_len, 
+		const struct tcphdr *tcph, unsigned int tcph_len) {
+
 	uint8_t rfsiph[128];
 	uint8_t rfstcph[60];
 	int ret;
+
+	int ipxv = netproto_version(iph, iph_len);
 
 	memcpy(rfsiph, iph, iph_len);
 	memcpy(rfstcph, tcph, tcph_len);
@@ -603,27 +675,12 @@ int post_fake_sni(const void *iph, unsigned int iph_len,
 	void *fsiph = (void *)rfsiph;
 	struct tcphdr *fstcph = (void *)rfstcph;
 
-	ITER_FAKE_STRAT(config.faking_strategy, strategy) {
-		struct fake_type fake_seq_type = {
-			.type = FAKE_PAYLOAD_DEFAULT,
-			.strategy = strategy,
-		};
-
-		switch (config.fake_sni_seq_type) {
-			case FAKE_PAYLOAD_RANDOM:
-				fake_seq_type.type = FAKE_PAYLOAD_RANDOM;
-				break;
-			case FAKE_PAYLOAD_CUSTOM:
-				fake_seq_type.type = FAKE_PAYLOAD_CUSTOM;
-				fake_seq_type.fake_data = config.fake_custom_pkt;
-				fake_seq_type.fake_len = config.fake_custom_pkt_sz;
-				break;
-			default:
-				fake_seq_type.type = FAKE_PAYLOAD_DEFAULT;
-		}
+	ITER_FAKE_STRAT(f_type.strategy.strategy, strategy) {
+		struct fake_type fake_seq_type = f_type;
+		fake_seq_type.strategy.strategy = strategy;
 
 		// one goes for default fake
-		for (int i = 1; i < sequence_len; i++) {
+		for (int i = 0; i < fake_seq_type.sequence_len; i++) {
 			NETBUF_ALLOC(fake_sni, MAX_PACKET_SIZE);
 			if (!NETBUF_CHECK(fake_sni)) {
 				lgerror("Allocation error", -ENOMEM);
@@ -641,36 +698,45 @@ int post_fake_sni(const void *iph, unsigned int iph_len,
 			}
 
 			lgtrace_addp("post fake sni #%d", i + 1);
-			lgtrace_addp("post with %d bytes", fsn_len);
-			ret = instance_config.send_raw_packet(fake_sni, fsn_len);
+
+			if (f_type.seg2delay) {
+				ret = instance_config.send_delayed_packet(fake_sni, fsn_len, f_type.seg2delay);
+			} else {
+				ret = instance_config.send_raw_packet(fake_sni, fsn_len);
+			}
 			if (ret < 0) {
 				lgerror("send fake sni", ret);
 				goto erret_lc;
 			}
+			uint32_t iph_len;
+			uint32_t tcph_len;
+			uint32_t plen;
+			ret = tcp_payload_split(
+				fake_sni, fsn_len, 
+				&fsiph, &iph_len,
+				&fstcph, &tcph_len,
+				NULL, &plen);
 
-			if (!(config.faking_strategy == FAKE_STRAT_PAST_SEQ ||
-				config.faking_strategy == FAKE_STRAT_RAND_SEQ)) {
-
-				uint32_t iph_len;
-				uint32_t tcph_len;
-				uint32_t plen;
-				ret = tcp_payload_split(
-					fake_sni, fsn_len, 
-					&fsiph, &iph_len,
-					&fstcph, &tcph_len,
-					NULL, &plen);
-
-				if (ret < 0) {
-					lgtrace_addp("continue fake seq");
-					goto erret_lc;
-				}
-
-				fstcph->seq = htonl(ntohl(fstcph->seq) + plen);
-				memcpy(rfsiph, fsiph, iph_len);
-				memcpy(rfstcph, fstcph, tcph_len);
-				fsiph = (void *)rfsiph;
-				fstcph = (void *)rfstcph;
+			if (ret < 0) {
+				lgtrace_addp("continue fake seq");
+				goto erret_lc;
 			}
+
+
+			if (!(strategy == FAKE_STRAT_PAST_SEQ ||
+				strategy == FAKE_STRAT_RAND_SEQ)) {
+				fstcph->seq = htonl(ntohl(fstcph->seq) + plen);
+			}
+
+			if (ipxv == IP4VERSION) {
+				((struct iphdr *)fsiph)->id = htons(ntohs(((struct iphdr *)fsiph)->id) + 1);
+			}
+
+			memcpy(rfsiph, fsiph, iph_len);
+
+			memcpy(rfstcph, fstcph, tcph_len);
+			fsiph = (void *)rfsiph;
+			fstcph = (void *)rfstcph;
 			
 			NETBUF_FREE(fake_sni);
 			continue;
@@ -678,55 +744,6 @@ erret_lc:
 			NETBUF_FREE(fake_sni);
 			return ret;
 		}
-
-		struct fake_type ftype = {
-			.type = FAKE_PAYLOAD_DEFAULT,
-			.strategy = strategy
-		};
-
-		switch (config.fake_sni_type) {
-			case FAKE_PAYLOAD_RANDOM:
-				ftype.type = FAKE_PAYLOAD_RANDOM;
-				break;
-			case FAKE_PAYLOAD_CUSTOM:
-				ftype.type = FAKE_PAYLOAD_CUSTOM;
-				ftype.fake_data = config.fake_custom_pkt;
-				ftype.fake_len = config.fake_custom_pkt_sz;
-				break;
-			default:
-				ftype.type = FAKE_PAYLOAD_DEFAULT;
-		}
-
-		NETBUF_ALLOC(fake_sni, MAX_PACKET_SIZE);
-		if (!NETBUF_CHECK(fake_sni)) {
-			lgerror("Allocation error", -ENOMEM);
-			return -ENOMEM;
-		}
-		uint32_t fsn_len = MAX_PACKET_SIZE;
-		ret = gen_fake_sni(
-			ftype,
-			iph, iph_len, tcph, tcph_len, 
-			fake_sni, &fsn_len);
-		if (ret < 0) {
-			lgerror("gen_fake_sni", ret);
-			goto erret_lc_cst;
-		}
-
-		lgtrace_addp("post normal fake sni");
-		lgtrace_addp("post with %d bytes", fsn_len);
-		ret = instance_config.send_raw_packet(fake_sni, fsn_len);
-		if (ret < 0) {
-			lgerror("send fake sni", ret);
-			goto erret_lc_cst;
-		}
-
-		goto after_cus2;
-
-erret_lc_cst:
-		NETBUF_FREE(fake_sni);
-		return ret;
-after_cus2:
-		;
 	}
 
 	return 0;

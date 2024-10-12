@@ -306,16 +306,18 @@ static int send_raw_socket(const uint8_t *pkt, uint32_t pktlen) {
 	
 	int ipvx = netproto_version(pkt, pktlen);
 
-	if (ipvx == IP4VERSION) 
-		return send_raw_ipv4(pkt, pktlen);
-	else if (ipvx == IP6VERSION) 
-		return send_raw_ipv6(pkt, pktlen);
+	if (ipvx == IP4VERSION) {
+		ret = send_raw_ipv4(pkt, pktlen);
+	} else if (ipvx == IP6VERSION) {
+		ret = send_raw_ipv6(pkt, pktlen);
+	} else {
+		printf("proto version %d is unsupported\n", ipvx);
+		return -EINVAL;
+	}
 
-	printf("proto version %d is unsupported\n", ipvx);
-	return -EINVAL;
+	lgtrace_addp("raw_sock_send: %d", ret);
+	return ret;
 }
-
-
 
 struct packet_data {
 	uint32_t id;
@@ -375,7 +377,7 @@ void *delay_packet_send_fn(void *data) {
 	return NULL;
 }
 
-void delay_packet_send(const unsigned char *data, unsigned int data_len, unsigned int delay_ms) {
+int delay_packet_send(const unsigned char *data, unsigned int data_len, unsigned int delay_ms) {
 	struct dps_t *dpdt = malloc(sizeof(struct dps_t));
 	dpdt->pkt = malloc(data_len);
 	memcpy(dpdt->pkt, data, data_len);
@@ -384,6 +386,9 @@ void delay_packet_send(const unsigned char *data, unsigned int data_len, unsigne
 	pthread_t thr;
 	pthread_create(&thr, NULL, delay_packet_send_fn, dpdt);
 	pthread_detach(thr);
+	lgtrace_addp("Scheduled packet send after %d ms", delay_ms);
+
+	return 0;
 }
 
 static int queue_cb(const struct nlmsghdr *nlh, void *data) {

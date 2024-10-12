@@ -8,6 +8,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include "types.h"
+#include "args.h"
 
 static char custom_fake_buf[MAX_FAKE_SIZE];
 
@@ -20,7 +21,6 @@ struct config_t config = {
 	.faking_ttl = FAKE_TTL,
 	.fake_sni = 1,
 	.fake_sni_seq_len = 1,
-	.fake_sni_seq_type = FAKE_PAYLOAD_DEFAULT,
 	.fake_sni_type = FAKE_PAYLOAD_DEFAULT,
 	.frag_middle_sni = 1,
 	.frag_sni_pos = 1,
@@ -69,7 +69,6 @@ struct config_t config = {
 #define OPT_FAKING_TTL		3
 #define OPT_FAKING_STRATEGY	10
 #define OPT_FAKE_SNI_SEQ_LEN	11
-#define OPT_FAKE_SNI_SEQ_TYPE	26
 #define OPT_FAKE_SNI_TYPE	27
 #define OPT_FAKE_CUSTOM_PAYLOAD	28
 #define OPT_FRAG    		4
@@ -103,7 +102,6 @@ static struct option long_opt[] = {
 	{"synfake",		1, 0, OPT_SYNFAKE},
 	{"synfake-len",		1, 0, OPT_SYNFAKE_LEN},
 	{"fake-sni-seq-len",	1, 0, OPT_FAKE_SNI_SEQ_LEN},
-	{"fake-sni-seq-type",	1, 0, OPT_FAKE_SNI_SEQ_TYPE},
 	{"fake-sni-type",	1, 0, OPT_FAKE_SNI_TYPE},
 	{"fake-custom-payload", 1, 0, OPT_FAKE_CUSTOM_PAYLOAD},
 	{"faking-strategy",	1, 0, OPT_FAKING_STRATEGY},
@@ -162,7 +160,6 @@ void print_usage(const char *argv0) {
 	printf("\t--exclude-domains=<comma separated domain list>\n");
 	printf("\t--fake-sni={1|0}\n");
 	printf("\t--fake-sni-seq-len=<length>\n");
-	printf("\t--fake-sni-seq-type={default|random|custom}\n");
 	printf("\t--fake-sni-type={default|random|custom}\n");
 	printf("\t--fake-custom-payload=<hex payload>\n");
 	printf("\t--fake-seq-offset=<offset>\n");
@@ -337,18 +334,6 @@ int parse_args(int argc, char *argv[]) {
 			}
 
 			config.fake_sni_seq_len = num;
-			break;
-		case OPT_FAKE_SNI_SEQ_TYPE:
-			if (strcmp(optarg, "default") == 0) {
-				config.fake_sni_seq_type = FAKE_PAYLOAD_DEFAULT;
-			} else if (strcmp(optarg, "random") == 0) {
-				config.fake_sni_seq_type = FAKE_PAYLOAD_RANDOM;
-			} else if (strcmp(optarg, "custom") == 0) {
-				config.fake_sni_seq_type = FAKE_PAYLOAD_CUSTOM;
-			} else {
-				goto invalid_opt;
-			}
-
 			break;
 		case OPT_FAKE_SNI_TYPE:
 			if (strcmp(optarg, "default") == 0) {
@@ -553,3 +538,4 @@ void print_welcome() {
 	}
 
 }
+

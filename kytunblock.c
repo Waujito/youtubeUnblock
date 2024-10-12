@@ -217,19 +217,22 @@ erret_lc:
 	
 	int ipvx = netproto_version(pkt, pktlen);
 
-	if (ipvx == IP4VERSION) 
+	if (ipvx == IP4VERSION) {
 		return send_raw_ipv4(pkt, pktlen);
-
-	else if (ipvx == IP6VERSION) 
+	} else if (ipvx == IP6VERSION) {
 		return send_raw_ipv6(pkt, pktlen);
+	} else {
+		printf("proto version %d is unsupported\n", ipvx);
+		return -EINVAL;
+	}
 
-	printf("proto version %d is unsupported\n", ipvx);
-	return -EINVAL;
+	lgtrace_addp("raw_sock_send: %d", ret);
+	return ret;
 }
 
-static void delay_packet_send(const unsigned char *data, unsigned int data_len, unsigned int delay_ms) {
+static int delay_packet_send(const unsigned char *data, unsigned int data_len, unsigned int delay_ms) {
 	pr_info("delay_packet_send won't work on current youtubeUnblock version");
-	send_raw_socket(data, data_len);
+	return send_raw_socket(data, data_len);
 }
 
 struct instance_config_t instance_config = {

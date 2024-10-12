@@ -10,7 +10,7 @@ typedef int (*raw_send_t)(const unsigned char *data, unsigned int data_len);
  * Sends the packet after delay_ms. The function should schedule send and return immediately
  * (for example, open daemon thread)
  */
-typedef void (*delayed_send_t)(const unsigned char *data, unsigned int data_len, unsigned int delay_ms);
+typedef int (*delayed_send_t)(const unsigned char *data, unsigned int data_len, unsigned int delay_ms);
 
 struct instance_config_t {
 	raw_send_t send_raw_packet;
@@ -37,7 +37,6 @@ struct config_t {
 #define FAKE_PAYLOAD_CUSTOM	1
 // In default mode all other options will be skipped.
 #define FAKE_PAYLOAD_DEFAULT	2
-	int fake_sni_seq_type;
 	int fake_sni_type;
 
 #define VERBOSE_INFO	0

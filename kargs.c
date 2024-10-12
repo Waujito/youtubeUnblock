@@ -23,7 +23,6 @@ struct config_t config = {
 	.mark = DEFAULT_RAWSOCKET_MARK,
 	.synfake = 0,
 	.synfake_len = 0,
-	.fake_sni_seq_type = FAKE_PAYLOAD_DEFAULT,
 	.fake_sni_type = FAKE_PAYLOAD_DEFAULT,
 
 	.sni_detection = SNI_DETECTION_PARSE,

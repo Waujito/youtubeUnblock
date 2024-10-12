@@ -2,6 +2,7 @@
 #define YU_MANGLE_H
 
 #include "types.h"
+#include "tls.h"
 
 #define PKT_ACCEPT	0
 #define PKT_DROP	1
@@ -26,12 +27,14 @@ int process_tcp_packet(const uint8_t *raw_payload, uint32_t raw_payload_len);
  */
 int process_udp_packet(const uint8_t *pkt, uint32_t pktlen);
 
+
+
 /**
  * Sends fake client hello.
  */
-int post_fake_sni(const void *iph, unsigned int iph_len, 
-		     const struct tcphdr *tcph, unsigned int tcph_len,
-		     unsigned char sequence_len);
+int post_fake_sni(struct fake_type f_type, 
+		const void *iph, unsigned int iph_len, 
+		const struct tcphdr *tcph, unsigned int tcph_len);
 
 /**
  * Splits packet by poses and posts.
