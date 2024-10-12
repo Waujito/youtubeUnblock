@@ -183,9 +183,8 @@ Available flags:
 
 - `--fake-sni-seq-len=<length>` This flag specifies **youtubeUnblock** to build a complicated construction of fake client hello packets. length determines how much fakes will be sent. Defaults to **1**.
 
-- `--fake-sni-type={default|custom|random}` This flag specifies which faking messages should use fake packets. If you pass random, the message of random length and random payload will be sent. For default the default payload is used. And for custom the payload from `--fake-custom-payload` is used. Default to `default`.
-
-- `--fake-custom-payload=<payload>` Usable with `--fake-sni-type=custom`. You should specify the payload for fake message manually. Use hex format: `--fake-custom-payload=0001020304` mean that 5 bytes sequence: `0x00`, `0x01`, `0x02`, `0x03`, `0x04` used as fake.
+- `--fake-sni-type={default|custom|random}` This flag specifies which faking message type should be used for fake packets. For `random`, the message of random length and with random payload will be sent. For `default` the default payload (sni=www.google.com) is used. And for the `custom` option, the payload from `--fake-custom-payload` section utilized. Defaults to `default`.
+- `--fake-custom-payload=<payload>` Useful with `--fake-sni-type=custom`. You should specify the payload for fake message manually. Use hex format: `--fake-custom-payload=0001020304` mean that 5 bytes sequence: `0x00`, `0x01`, `0x02`, `0x03`, `0x04` used as fake.
 
 - `--faking-strategy={randseq|ttl|tcp_check|pastseq|md5sum}` This flag determines the strategy of fake packets invalidation. Defaults to `randseq`
   - `randseq` specifies that random sequence/acknowledgemend random will be set. This option may be handled by provider which uses *conntrack* with drop on invalid *conntrack* state firewall rule enabled. 

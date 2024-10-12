@@ -125,6 +125,7 @@ module_param_cb(fk_winsize, &unumeric_parameter_ops, &config.fk_winsize, 0664);
 module_param_cb(synfake, &boolean_parameter_ops, &config.synfake, 0664);
 module_param_cb(synfake_len, &unumeric_parameter_ops, &config.synfake_len, 0664);
 module_param_cb(packet_mark, &unumeric_parameter_ops, &config.mark, 0664);
+// module_param_cb(seg2delay, &unumeric_parameter_ops, &config.seg2_delay, 0664);
 
 static int sni_domains_set(const char *val, const struct kernel_param *kp) {
 	size_t len;
@@ -404,3 +405,110 @@ static const struct kernel_param_ops sni_detection_ops = {
 };
 
 module_param_cb(sni_detection, &sni_detection_ops, &config.sni_detection, 0664);
+
+static int fake_type_set(const char *val, const struct kernel_param *kp) {
+	size_t len;
+
+	len = strnlen(val, STR_MAXLEN + 1);
+	if (len == STR_MAXLEN + 1) {
+		pr_err("%s: string parameter too long\n", kp->name);
+		return -ENOSPC;
+	}
+
+	if (len >= 1 && val[len - 1] == '\n') {
+		len--;
+	}
+
+	if (strncmp(val, "default", len) == 0) {
+		*(int *)kp->arg = FAKE_PAYLOAD_DEFAULT;
+	} else if (strncmp(val, "custom", len) == 0) {
+		*(int *)kp->arg = FAKE_PAYLOAD_CUSTOM;
+	} else if (strncmp(val, "random", len) == 0) {
+		*(int *)kp->arg = FAKE_PAYLOAD_RANDOM;
+	} else {
+		return -EINVAL;
+	}
+
+	return 0;
+}
+
+static int fake_type_get(char *buffer, const struct kernel_param *kp) {
+	switch (*(int *)kp->arg) {
+		case FAKE_PAYLOAD_DEFAULT:
+			strcpy(buffer, "default\n");
+			break;
+		case FAKE_PAYLOAD_RANDOM:
+			strcpy(buffer, "random\n");
+			break;
+		case FAKE_PAYLOAD_CUSTOM:
+			strcpy(buffer, "custom\n");
+			break;
+		default:
+			strcpy(buffer, "unknown\n");
+	}
+
+	return strlen(buffer);
+}
+
+static const struct kernel_param_ops fake_type_ops = {
+	.set = fake_type_set,
+	.get = fake_type_get,
+};
+
+module_param_cb(fake_sni_type, &fake_type_ops, &config.fake_sni_type, 0664);
+
+static int fake_custom_pl_set(const char *val, const struct kernel_param *kp) {
+	size_t len;
+
+	len = strnlen(val, STR_MAXLEN + 1);
+	if (len == STR_MAXLEN + 1) {
+		pr_err("%s: string parameter too long\n", kp->name);
+		return -ENOSPC;
+	}
+
+	if (len >= 1 && val[len - 1] == '\n') {
+		len--;
+	}
+
+	uint8_t *const custom_buf = (uint8_t *)custom_fake_buf;
+	const char *custom_hex_fake = val;
+	size_t custom_hlen = len;
+
+	if ((custom_hlen & 1) == 1) {
+		return -EINVAL;
+	}
+
+
+	size_t custom_len = custom_hlen >> 1;
+	if (custom_len > MAX_FAKE_SIZE) {
+		return -EINVAL;
+	}
+
+	for (int i = 0; i < custom_len; i++) {
+		sscanf(custom_hex_fake + (i << 1), "%2hhx", custom_buf + i);
+	}
+
+	config.fake_custom_pkt_sz = custom_len;
+	config.fake_custom_pkt = (char *)custom_buf;
+
+	return 0;
+}
+
+static int fake_custom_pl_get(char *buffer, const struct kernel_param *kp) {
+	int cflen = config.fake_custom_pkt_sz;
+	const uint8_t *cbf_data = config.fake_custom_pkt;
+	int bflen = config.fake_custom_pkt_sz << 1;
+
+	for (int i = 0; i < cflen; i++) {
+		sprintf(buffer + (i << 1), "%02x", *((unsigned char *)cbf_data + i));
+	}
+
+	return bflen;
+}
+
+static const struct kernel_param_ops fake_custom_pl_ops = {
+	.set = fake_custom_pl_set,
+	.get = fake_custom_pl_get,
+};
+
+module_param_cb(fake_custom_payload, &fake_custom_pl_ops, &config.fake_custom_pkt, 0664);
