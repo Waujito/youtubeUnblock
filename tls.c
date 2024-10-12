@@ -5,8 +5,8 @@
 #include "utils.h"
 
 #ifndef KERNEL_SPACE
-#include <stdlib.h>
-#include <sys/random.h>
+#include <fcntl.h>
+#include <unistd.h>
 #endif
 
 #define TLS_CONTENT_TYPE_HANDSHAKE 0x16
@@ -274,6 +274,8 @@ int gen_fake_sni(struct fake_type type,
 		const struct tcphdr *tcph, uint32_t tcph_len,
 		uint8_t *buf, uint32_t *buflen) {
 	uint32_t data_len = type.fake_len;
+	int ret;
+
 	if (type.type == FAKE_PAYLOAD_RANDOM && data_len == 0) {
 		data_len = (uint32_t)randint() % 1200;
 	}
@@ -317,9 +319,21 @@ int gen_fake_sni(struct fake_type type,
 		default: // FAKE_PAYLOAD_RANDOM
 #ifdef KERNEL_SPACE
 			get_random_bytes(bfdptr, data_len);
-#else
+#else /* KERNEL_SPACE */
+#if _NO_GETRANDOM
+			ret = open("/dev/urandom", O_RDONLY);
+			if (ret < 0) {
+				lgerror("Unable to open /dev/urandom", ret);
+				return ret;
+			}
+			
+			read(ret, bfdptr, data_len);
+			close(ret);
+			
+#else /* _NO_GETRANDOM */
 			getrandom(bfdptr, data_len, 0);
-#endif
+#endif /* _NO_GETRANDOM */
+#endif /* KERNEL_SPACE */
 	}
 
 	if (ipxv == IP4VERSION) {

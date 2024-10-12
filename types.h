@@ -14,7 +14,13 @@
 #include <stdint.h> // IWYU pragma: export
 #include <string.h> // IWYU pragma: export
 #include <stdlib.h> // IWYU pragma: export
+
+
+#define _NO_GETRANDOM ((__GLIBC__ <= 2 && __GLIBC_MINOR__ < 25))
+
+#if !_NO_GETRANDOM
 #include <sys/random.h> // IWYU pragma: export
+#endif
 
 #endif /* SPACES */
 

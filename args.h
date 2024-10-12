@@ -1,6 +1,3 @@
-#include "utils.h"
-#include "tls.h"
-
 #ifndef ARGS_H
 #define ARGS_H
 
@@ -10,6 +7,5 @@ int parse_args(int argc, char *argv[]);
 
 /* Prints starting messages */
 void print_welcome();
-
 
 #endif /* ARGS_H */
