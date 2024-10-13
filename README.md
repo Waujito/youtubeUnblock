@@ -235,6 +235,8 @@ Available flags:
 
 ## Troubleshooting
 
+Check up [this issue](https://github.com/Waujito/youtubeUnblock/issues/148) for useful configs.
+
 If you got troubles with some sites and you sure that they are blocked by SNI (youtube for example), use may play around with [flags](#flags) and their combinations. At first it is recommended to try `--faking-strategy` flag and `--frag-sni-faked=1`.
 If you have troubles with some sites being proxied, you can play with flags values. For example, for someone `--faking-strategy=ttl` works. You should specify proper `--fake-sni-ttl=<ttl value>` where ttl is the amount of hops between you and DPI.
 
