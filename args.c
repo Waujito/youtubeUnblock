@@ -427,6 +427,23 @@ int parse_args(int argc, char *argv[]) {
 			}
 
 			break;
+		case OPT_SYNFAKE:
+			if (strcmp(optarg, "1") == 0) {
+				sect_config->synfake = 1;
+			} else if (strcmp(optarg, "0") == 0) {
+				sect_config->synfake = 0;
+			} else {
+				goto invalid_opt;
+			}
+
+			break;
+		case OPT_SYNFAKE_LEN:
+			num = parse_numeric_option(optarg);
+			if (errno != 0 || num < 0) {
+				goto invalid_opt;
+			}
+			sect_config->synfake_len = num;
+			break;
 		default:
 			goto error;
 		}
