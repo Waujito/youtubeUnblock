@@ -155,7 +155,7 @@ function fwo.write(self, section)
 	sys.call("/etc/init.d/firewall reload")
 end
 
-local rso = bs:option(Button, "_reset_settings", "Reset settins to defaults")
+local rso = bs:option(Button, "_reset_settings", "Reset settings to defaults")
 rso.inputtitle = "Reset"
 rso.inputstyle = "negative"
 function rso.write(self, section)
