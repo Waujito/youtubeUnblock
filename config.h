@@ -5,6 +5,8 @@
 #define USER_SPACE
 #endif
 
+#include "raw_replacements.h"
+
 typedef int (*raw_send_t)(const unsigned char *data, unsigned int data_len);
 /**
  * Sends the packet after delay_ms. The function should schedule send and return immediately
@@ -90,6 +92,37 @@ extern struct config_t config;
 for (struct section_config_t *section = &config.default_config + config.custom_configs_len; section >= &config.default_config; section--)
 
 #define CONFIG_SECTION_NUMBER(section) (int)((section) - &config.default_config)
+
+#define default_section_config {				\
+	.frag_sni_reverse = 1,                                  \
+	.frag_sni_faked = 0,                                    \
+	.fragmentation_strategy = FRAGMENTATION_STRATEGY,       \
+	.faking_strategy = FAKING_STRATEGY,                     \
+	.faking_ttl = FAKE_TTL,                                 \
+	.fake_sni = 1,                                          \
+	.fake_sni_seq_len = 1,                                  \
+	.fake_sni_type = FAKE_PAYLOAD_DEFAULT,                  \
+	.frag_middle_sni = 1,                                   \
+	.frag_sni_pos = 1,                                      \
+	.fakeseq_offset = 10000,                                \
+	.synfake = 0,                                           \
+	.synfake_len = 0,                                       \
+	.quic_drop = 0,                                         \
+                                                                \
+	.seg2_delay = 0,                                        \
+                                                                \
+	.domains_str = defaul_snistr,                           \
+	.domains_strlen = sizeof(defaul_snistr),                \
+                                                                \
+	.exclude_domains_str = "",                              \
+	.exclude_domains_strlen = 0,                            \
+                                                                \
+	.fake_sni_pkt = fake_sni_old,                           \
+	.fake_sni_pkt_sz = sizeof(fake_sni_old) - 1,		\
+	.fake_custom_pkt = custom_fake_buf,                     \
+	.fake_custom_pkt_sz = 0,                                \
+	.sni_detection = SNI_DETECTION_PARSE,                   \
+}
 
 #define MAX_THREADS 16
 
