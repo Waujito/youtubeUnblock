@@ -171,25 +171,10 @@ static int send_raw_socket(const uint8_t *pkt, uint32_t pktlen) {
 		uint32_t buff1_size = MAX_PACKET_SIZE;
 		uint32_t buff2_size = MAX_PACKET_SIZE;
 
-		switch (config.fragmentation_strategy) {
-			case FRAG_STRAT_TCP:
-				if ((ret = tcp_frag(pkt, pktlen, AVAILABLE_MTU-128,
-					buff1, &buff1_size, buff2, &buff2_size)) < 0) {
+		if ((ret = tcp_frag(pkt, pktlen, AVAILABLE_MTU-128,
+			buff1, &buff1_size, buff2, &buff2_size)) < 0) {
 
-					goto erret_lc;
-				}
-				break;
-			case FRAG_STRAT_IP:
-				if ((ret = ip4_frag(pkt, pktlen, AVAILABLE_MTU-128,
-					buff1, &buff1_size, buff2, &buff2_size)) < 0) {
-
-					goto erret_lc;
-				}
-				break;
-			default:
-				pr_info("send_raw_socket: Packet is too big but fragmentation is disabled!");
-				ret = -EINVAL;
-				goto erret_lc;
+			goto erret_lc;
 		}
 
 		int sent = 0;

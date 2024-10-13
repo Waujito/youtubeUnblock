@@ -21,6 +21,7 @@
  * dlen Length of `data`.
  */
 struct tls_verdict analyze_tls_data(
+	const struct section_config_t *section,
 	const uint8_t *data, 
 	uint32_t dlen) 
 {
@@ -43,7 +44,7 @@ struct tls_verdict analyze_tls_data(
 		if (tls_content_type != TLS_CONTENT_TYPE_HANDSHAKE) 
 			goto nextMessage;
 
-		if (config.sni_detection == SNI_DETECTION_BRUTE) {
+		if (section->sni_detection == SNI_DETECTION_BRUTE) {
 			goto brute;
 		}
 
@@ -126,22 +127,22 @@ struct tls_verdict analyze_tls_data(
 			vrd.sni_len = sni_len;
 			vrd.sni_target_len = vrd.sni_len;
 
-			if (config.all_domains) {
+			if (section->all_domains) {
 				vrd.target_sni = 1;
 				goto check_domain;
 			}
 
 			unsigned int j = 0;
-			for (unsigned int i = 0; i <= config.domains_strlen; i++) {
+			for (unsigned int i = 0; i <= section->domains_strlen; i++) {
 				if (	i > j &&
-					(i == config.domains_strlen	||	
-					config.domains_str[i] == '\0'	||
-					config.domains_str[i] == ','	|| 
-					config.domains_str[i] == '\n'	)) {
+					(i == section->domains_strlen	||	
+					section->domains_str[i] == '\0'	||
+					section->domains_str[i] == ','	|| 
+					section->domains_str[i] == '\n'	)) {
 
 					unsigned int domain_len = (i - j);
 					const char *sni_startp = sni_name + sni_len - domain_len;
-					const char *domain_startp = config.domains_str + j;
+					const char *domain_startp = section->domains_str + j;
 
 					if (sni_len >= domain_len &&
 						sni_len < 128 && 
@@ -159,18 +160,18 @@ struct tls_verdict analyze_tls_data(
 			}
 
 check_domain:
-			if (vrd.target_sni == 1 && config.exclude_domains_strlen != 0) {
+			if (vrd.target_sni == 1 && section->exclude_domains_strlen != 0) {
 				unsigned int j = 0;
-				for (unsigned int i = 0; i <= config.exclude_domains_strlen; i++) {
+				for (unsigned int i = 0; i <= section->exclude_domains_strlen; i++) {
 					if (	i > j &&
-						(i == config.exclude_domains_strlen	||	
-						config.exclude_domains_str[i] == '\0'	||
-						config.exclude_domains_str[i] == ','	|| 
-						config.exclude_domains_str[i] == '\n'	)) {
+						(i == section->exclude_domains_strlen	||	
+						section->exclude_domains_str[i] == '\0'	||
+						section->exclude_domains_str[i] == ','	|| 
+						section->exclude_domains_str[i] == '\n'	)) {
 
 						unsigned int domain_len = (i - j);
 						const char *sni_startp = sni_name + sni_len - domain_len;
-						const char *domain_startp = config.exclude_domains_str + j;
+						const char *domain_startp = section->exclude_domains_str + j;
 
 						if (sni_len >= domain_len &&
 							sni_len < 128 && 
@@ -203,7 +204,7 @@ out:
 
 
 brute:
-	if (config.all_domains) {
+	if (section->all_domains) {
 		vrd.target_sni = 1;
 		vrd.sni_len = 0;
 		vrd.sni_offset = dlen / 2;
@@ -211,15 +212,15 @@ brute:
 	}
 
 	unsigned int j = 0;
-	for (unsigned int i = 0; i <= config.domains_strlen; i++) {
+	for (unsigned int i = 0; i <= section->domains_strlen; i++) {
 		if (	i > j &&
-			(i == config.domains_strlen	||	
-			config.domains_str[i] == '\0'	||
-			config.domains_str[i] == ','	|| 
-			config.domains_str[i] == '\n'	)) {
+			(i == section->domains_strlen	||	
+			section->domains_str[i] == '\0'	||
+			section->domains_str[i] == ','	|| 
+			section->domains_str[i] == '\n'	)) {
 
 			unsigned int domain_len = (i - j);
-			const char *domain_startp = config.domains_str + j;
+			const char *domain_startp = section->domains_str + j;
 
 			if (domain_len + dlen + 1> MAX_PACKET_SIZE) { 
 				continue;

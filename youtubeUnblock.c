@@ -264,27 +264,11 @@ static int send_raw_socket(const uint8_t *pkt, uint32_t pktlen) {
 		uint8_t buff2[MNL_SOCKET_BUFFER_SIZE];
 		uint32_t buff2_size = MNL_SOCKET_BUFFER_SIZE;
 
-		switch (config.fragmentation_strategy) {
-			case FRAG_STRAT_TCP:
-				if ((ret = tcp_frag(pkt, pktlen, AVAILABLE_MTU-128,
-					buff1, &buff1_size, buff2, &buff2_size)) < 0) {
+		if ((ret = tcp_frag(pkt, pktlen, AVAILABLE_MTU-128,
+			buff1, &buff1_size, buff2, &buff2_size)) < 0) {
 
-					errno = -ret;
-					return ret;
-				}
-				break;
-			case FRAG_STRAT_IP:
-				if ((ret = ip4_frag(pkt, pktlen, AVAILABLE_MTU-128,
-					buff1, &buff1_size, buff2, &buff2_size)) < 0) {
-
-					errno = -ret;
-					return ret;
-				}
-				break;
-			default:
-				errno = EINVAL;
-				printf("send_raw_socket: Packet is too big but fragmentation is disabled!\n");
-				return -EINVAL;
+			errno = -ret;
+			return ret;
 		}
 
 		int sent = 0;

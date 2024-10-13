@@ -26,6 +26,8 @@ int process_packet(const uint8_t *raw_payload, uint32_t raw_payload_len) {
 	int ipver = netproto_version(raw_payload, raw_payload_len);
 	int ret;
 
+	lgtrace_start();
+	lgtrace_addp("IPv%d", ipver);
 
 	if (ipver == IP4VERSION) {
 		ret = ip4_payload_split((uint8_t *)raw_payload, raw_payload_len,
@@ -52,21 +54,39 @@ int process_packet(const uint8_t *raw_payload, uint32_t raw_payload_len) {
 		goto accept;
 	}
 
+	int verdict = PKT_CONTINUE;
+
+	if (transport_proto == IPPROTO_TCP) 
+		lgtrace_addp("TCP");
+	else if (transport_proto == IPPROTO_UDP) 
+		lgtrace_addp("UDP");
+
 	
-	switch (transport_proto) {
-	case IPPROTO_TCP:
-		return process_tcp_packet(raw_payload, raw_payload_len);
-	case IPPROTO_UDP:
-		return process_udp_packet(raw_payload, raw_payload_len);
-	default:
-		goto accept;
+	ITER_CONFIG_SECTIONS(section) {
+		lgtrace_addp("Section #%d", CONFIG_SECTION_NUMBER(section));
+
+		switch (transport_proto) {
+		case IPPROTO_TCP:
+			verdict = process_tcp_packet(section, raw_payload, raw_payload_len);
+			break;
+		case IPPROTO_UDP:
+			verdict = process_udp_packet(section, raw_payload, raw_payload_len);
+			break;
+		}
+
+		if (verdict == PKT_CONTINUE)
+			continue;
+
+		lgtrace_end();
+		return verdict;
 	}
-	
-accept:
+
+accept:	
+	lgtrace_end();
 	return PKT_ACCEPT;
 }
 
-int process_tcp_packet(const uint8_t *raw_payload, uint32_t raw_payload_len) {
+int process_tcp_packet(const struct section_config_t *section, const uint8_t *raw_payload, uint32_t raw_payload_len) {
 	const void *ipxh;
 	uint32_t iph_len;
 	const struct tcphdr *tcph;
@@ -76,9 +96,6 @@ int process_tcp_packet(const uint8_t *raw_payload, uint32_t raw_payload_len) {
 
 
 	int ipxv = netproto_version(raw_payload, raw_payload_len);
-
-	lgtrace_start("TCP");
-	lgtrace_addp("IPv%d", ipxv);
 
 	int ret = tcp_payload_split((uint8_t *)raw_payload, raw_payload_len,
 			      (void *)&ipxh, &iph_len,
@@ -90,7 +107,7 @@ int process_tcp_packet(const uint8_t *raw_payload, uint32_t raw_payload_len) {
 		goto accept;
 	}
 
-	if (tcph->syn && config.synfake) {
+	if (tcph->syn && section->synfake) {
 		lgtrace_addp("TCP syn alter");
 
 		NETBUF_ALLOC(payload, MAX_PACKET_SIZE);
@@ -101,12 +118,12 @@ int process_tcp_packet(const uint8_t *raw_payload, uint32_t raw_payload_len) {
 
 		memcpy(payload, ipxh, iph_len);
 		memcpy(payload + iph_len, tcph, tcph_len);
-		uint32_t fake_len = config.fake_sni_pkt_sz;
+		uint32_t fake_len = section->fake_sni_pkt_sz;
 
-		if (config.synfake_len) 
-			fake_len = min(config.synfake_len, fake_len);
+		if (section->synfake_len) 
+			fake_len = min(section->synfake_len, fake_len);
 
-		memcpy(payload + iph_len + tcph_len, config.fake_sni_pkt, fake_len);
+		memcpy(payload + iph_len + tcph_len, section->fake_sni_pkt, fake_len);
 
 
 		struct tcphdr *tcph = (struct tcphdr *)(payload + iph_len);
@@ -130,16 +147,15 @@ int process_tcp_packet(const uint8_t *raw_payload, uint32_t raw_payload_len) {
 			NETBUF_FREE(payload);
 			goto accept;
 		}
-		lgtrace_addp("rawsocket sent %d", ret);
 
 		NETBUF_FREE(payload);
 		goto drop;
 	}
 
-	if (tcph->syn) goto accept;
+	if (tcph->syn) goto continue_flow;
 
-	struct tls_verdict vrd = analyze_tls_data(data, dlen);
-	lgtrace_addp("Analyzed");
+	struct tls_verdict vrd = analyze_tls_data(section, data, dlen);
+	lgtrace_addp("TLS analyzed");
 
 	if (vrd.sni_len != 0) {
 		lgtrace_addp("SNI detected: %.*s", vrd.sni_len, data + vrd.sni_offset);
@@ -173,8 +189,8 @@ int process_tcp_packet(const uint8_t *raw_payload, uint32_t raw_payload_len) {
 			goto accept_lc;
 		}
 
-		if (config.fk_winsize) {
-			tcph->window = htons(config.fk_winsize);
+		if (section->fk_winsize) {
+			tcph->window = htons(section->fk_winsize);
 			set_tcp_checksum(tcph, iph, iph_len);
 		}
 
@@ -194,14 +210,14 @@ int process_tcp_packet(const uint8_t *raw_payload, uint32_t raw_payload_len) {
 			lgdebugmsg("WARNING! Client Hello packet is too big and may cause issues!");
 		}
 
-		if (config.fake_sni) {
-			post_fake_sni(args_default_fake_type(), iph, iph_len, tcph, tcph_len);	
+		if (section->fake_sni) {
+			post_fake_sni(args_default_fake_type(section), iph, iph_len, tcph, tcph_len);	
 		}
 
 		size_t ipd_offset;
 		size_t mid_offset;
 
-		switch (config.fragmentation_strategy) {
+		switch (section->fragmentation_strategy) {
 			case FRAG_STRAT_TCP: {
 				ipd_offset = vrd.sni_target_offset;
 				mid_offset = ipd_offset + vrd.sni_target_len / 2;
@@ -209,11 +225,11 @@ int process_tcp_packet(const uint8_t *raw_payload, uint32_t raw_payload_len) {
 				uint32_t poses[2];
 				int cnt = 0;
 
-				if (config.frag_sni_pos && dlen > config.frag_sni_pos) {
-					poses[cnt++] = config.frag_sni_pos;
+				if (section->frag_sni_pos && dlen > section->frag_sni_pos) {
+					poses[cnt++] = section->frag_sni_pos;
 				}
 
-				if (config.frag_middle_sni) {
+				if (section->frag_middle_sni) {
 					poses[cnt++] = mid_offset;
 				}
 
@@ -223,7 +239,7 @@ int process_tcp_packet(const uint8_t *raw_payload, uint32_t raw_payload_len) {
 					poses[1] = tmp;
 				}
 
-				ret = send_tcp_frags(payload, payload_len, poses, cnt, 0);
+				ret = send_tcp_frags(section, payload, payload_len, poses, cnt, 0);
 				if (ret < 0) {
 					lgerror("tcp4 send frags", ret);
 					goto accept_lc;
@@ -241,13 +257,13 @@ int process_tcp_packet(const uint8_t *raw_payload, uint32_t raw_payload_len) {
 				uint32_t poses[2];
 				int cnt = 0;
 
-				if (config.frag_sni_pos && dlen > config.frag_sni_pos) {
-					poses[cnt] = config.frag_sni_pos + ((char *)data - (char *)tcph);
+				if (section->frag_sni_pos && dlen > section->frag_sni_pos) {
+					poses[cnt] = section->frag_sni_pos + ((char *)data - (char *)tcph);
 					poses[cnt] += 8 - poses[cnt] % 8;
 					cnt++;
 				}
 
-				if (config.frag_middle_sni) {
+				if (section->frag_middle_sni) {
 					poses[cnt++] = mid_offset;
 				}
 
@@ -257,7 +273,7 @@ int process_tcp_packet(const uint8_t *raw_payload, uint32_t raw_payload_len) {
 					poses[1] = tmp;
 				}
 
-				ret = send_ip4_frags(payload, payload_len, poses, cnt, 0);
+				ret = send_ip4_frags(section, payload, payload_len, poses, cnt, 0);
 				if (ret < 0) {
 					lgerror("ip4 send frags", ret);
 					goto accept_lc;
@@ -292,27 +308,24 @@ drop_lc:
 
 	}
 
+continue_flow:
+	lgtrace_addp("continue_flow");
+	return PKT_CONTINUE;
 accept:
 	lgtrace_addp("accept");
-	lgtrace_end();
-
 	return PKT_ACCEPT;
 drop:
 	lgtrace_addp("drop");
-	lgtrace_end();
-
 	return PKT_DROP;
 }
 
-int process_udp_packet(const uint8_t *pkt, uint32_t pktlen) {
+int process_udp_packet(const struct section_config_t *section, const uint8_t *pkt, uint32_t pktlen) {
 	const void *iph;
 	uint32_t iph_len;
 	const struct udphdr *udph;
 	const uint8_t *data;
 	uint32_t dlen;
 	int ipver = netproto_version(pkt, pktlen);
-	lgtrace_start("Got udp packet");
-	lgtrace_addp("IPv%d", ipver);
 
 	int ret = udp_payload_split((uint8_t *)pkt, pktlen,
 			      (void **)&iph, &iph_len, 
@@ -334,7 +347,7 @@ int process_udp_packet(const uint8_t *pkt, uint32_t pktlen) {
 	}
 
 
-	if (config.quic_drop) {
+	if (section->quic_drop) {
 		lgtrace_addp("QUIC probe");
 		const struct quic_lhdr *qch;
 		uint32_t qch_len;
@@ -368,9 +381,6 @@ int process_udp_packet(const uint8_t *pkt, uint32_t pktlen) {
 		lgtrace_addp("quic initial message");
 	}
 
-accept_quic:
-	;
-
 /*
 	if (1) {
 		lgtrace_addp("Probe udp");
@@ -402,29 +412,26 @@ accept_quic:
 */
 
 
-
+continue_flow:
+	lgtrace_addp("continue_flow");
+	return PKT_CONTINUE;
+accept_quic:
 accept:
-	lgtrace_addp("accepted");
-	lgtrace_end();
-
 	return PKT_ACCEPT;
 drop:
-	lgtrace_addp("dropped");
-	lgtrace_end();
-
 	return PKT_DROP;
 }
 
-int send_ip4_frags(const uint8_t *packet, uint32_t pktlen, const uint32_t *poses, uint32_t poses_sz, uint32_t dvs) {
+int send_ip4_frags(const struct section_config_t *section, const uint8_t *packet, uint32_t pktlen, const uint32_t *poses, uint32_t poses_sz, uint32_t dvs) {
 	if (poses_sz == 0) {
-		if (config.seg2_delay && ((dvs > 0) ^ config.frag_sni_reverse)) {
+		if (section->seg2_delay && ((dvs > 0) ^ section->frag_sni_reverse)) {
 			if (!instance_config.send_delayed_packet) {
 				return -EINVAL;
 			}
 
-			lgtrace_addp("Sent %d delayed for %d", pktlen, config.seg2_delay);
+			lgtrace_addp("Sent %d delayed for %d", pktlen, section->seg2_delay);
 			instance_config.send_delayed_packet(
-				packet, pktlen, config.seg2_delay);
+				packet, pktlen, section->seg2_delay);
 
 			return 0;
 		} else {
@@ -479,21 +486,21 @@ int send_ip4_frags(const uint8_t *packet, uint32_t pktlen, const uint32_t *poses
 
 		dvs += frag_pos;
 
-		if (config.frag_sni_reverse)
+		if (section->frag_sni_reverse)
 			goto send_frag2;
 send_frag1:
-		ret = send_ip4_frags(frag1, f1len, NULL, 0, 0);
+		ret = send_ip4_frags(section, frag1, f1len, NULL, 0, 0);
 		if (ret < 0) {
 			goto erret_lc;
 		}
 
-		if (config.frag_sni_reverse)
+		if (section->frag_sni_reverse)
 			goto out_lc;
 
 send_fake:
 /*
-		if (config.frag_sni_faked) {
-			ITER_FAKE_STRAT(config.faking_strategy, strategy) {
+		if (section->frag_sni_faked) {
+			ITER_FAKE_STRAT(section->faking_strategy, strategy) {
 				uint32_t iphfl;
 				fake_pad_len = f2len;
 				ret = ip4_payload_split(frag2, f2len, NULL, &iphfl, NULL, NULL);
@@ -517,16 +524,16 @@ send_fake:
 		}
 */
 
-		if (config.frag_sni_reverse)
+		if (section->frag_sni_reverse)
 			goto send_frag1;
 
 send_frag2:
-		ret = send_ip4_frags(frag2, f2len, poses + 1, poses_sz - 1, dvs);
+		ret = send_ip4_frags(section, frag2, f2len, poses + 1, poses_sz - 1, dvs);
 		if (ret < 0) {
 			goto erret_lc;
 		}
 
-		if (config.frag_sni_reverse)
+		if (section->frag_sni_reverse)
 			goto send_fake;
 
 out_lc:
@@ -545,15 +552,15 @@ out:
 	return 0;
 }
 
-int send_tcp_frags(const uint8_t *packet, uint32_t pktlen, const uint32_t *poses, uint32_t poses_sz, uint32_t dvs) {
+int send_tcp_frags(const struct section_config_t *section, const uint8_t *packet, uint32_t pktlen, const uint32_t *poses, uint32_t poses_sz, uint32_t dvs) {
 	if (poses_sz == 0) {
-		if (config.seg2_delay && ((dvs > 0) ^ config.frag_sni_reverse)) {
+		if (section->seg2_delay && ((dvs > 0) ^ section->frag_sni_reverse)) {
 			if (!instance_config.send_delayed_packet) {
 				return -EINVAL;
 			}
 
 			instance_config.send_delayed_packet(
-				packet, pktlen, config.seg2_delay);
+				packet, pktlen, section->seg2_delay);
 
 			return 0;
 		} else {
@@ -601,49 +608,49 @@ int send_tcp_frags(const uint8_t *packet, uint32_t pktlen, const uint32_t *poses
 
 		dvs += poses[0];
 
-		if (config.frag_sni_reverse)
+		if (section->frag_sni_reverse)
 			goto send_frag2;
 		
 send_frag1:
 		{
-			ret = send_tcp_frags(frag1, f1len, NULL, 0, 0);
+			ret = send_tcp_frags(section, frag1, f1len, NULL, 0, 0);
 			if (ret < 0) {
 				goto erret_lc;
 			}
 
-			if (config.frag_sni_reverse) 
+			if (section->frag_sni_reverse) 
 				goto out_lc;
 		}
 
 send_fake:
-		if (config.frag_sni_faked) {
+		if (section->frag_sni_faked) {
 			uint32_t iphfl, tcphfl;
 			void *iph;
 			struct tcphdr *tcph;
 			ret = tcp_payload_split(frag2, f2len, &iph, &iphfl, &tcph, &tcphfl, NULL, NULL);
-			struct fake_type f_type = args_default_fake_type();
+			struct fake_type f_type = args_default_fake_type(section);
 			if ((f_type.strategy.strategy & FAKE_STRAT_PAST_SEQ) == FAKE_STRAT_PAST_SEQ) {
 				f_type.strategy.strategy ^= FAKE_STRAT_PAST_SEQ;
 				f_type.strategy.strategy |= FAKE_STRAT_RAND_SEQ;
 				f_type.strategy.randseq_offset = dvs;
 			}
 
-			f_type.seg2delay = config.seg2_delay;
+			f_type.seg2delay = section->seg2_delay;
 
 			post_fake_sni(f_type, iph, iphfl, tcph, tcphfl);	
 		}
 
-		if (config.frag_sni_reverse)
+		if (section->frag_sni_reverse)
 			goto send_frag1;
 
 send_frag2:
 		{
-			ret = send_tcp_frags(frag2, f2len, poses + 1, poses_sz - 1, dvs);
+			ret = send_tcp_frags(section, frag2, f2len, poses + 1, poses_sz - 1, dvs);
 			if (ret < 0) {
 				goto erret_lc;
 			}
 
-			if (config.frag_sni_reverse)
+			if (section->frag_sni_reverse)
 				goto send_fake;
 		}
 out_lc:
