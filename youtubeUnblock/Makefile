@@ -4,7 +4,7 @@ include $(TOPDIR)/rules.mk
 
 PKG_NAME:=youtubeUnblock
 PKG_VERSION:=1.0.0
-PKG_REV:=2d1b58bc6d6dbe397dee1dd1729129bc4871b890
+PKG_REV:=58f4802f6466e48734d303ff0a2deb2bfe9e7f16
 PKG_RELEASE:=1
 
 PKG_SOURCE_URL:=https://github.com/Waujito/youtubeUnblock.git
@@ -55,7 +55,10 @@ define Package/youtubeUnblock/install
 endef
 
 define Package/youtubeUnblock/postinst
-/etc/init.d/firewall reload
+[ -n "$${IPKG_INSTROOT}" ] || { \
+	/etc/init.d/firewall reload 2>1
+	exit 0
+}
 endef
 
 $(eval $(call BuildPackage,youtubeUnblock))
