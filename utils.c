@@ -418,7 +418,6 @@ int tcp_frag(const uint8_t *pkt, uint32_t buflen, uint32_t payload_offset,
 			uint8_t *seg1, uint32_t *s1len, 
 			uint8_t *seg2, uint32_t *s2len) {
 
-	// struct ip6_hdr *hdr6;
 	void *hdr;
 	uint32_t hdr_len;
 	struct tcphdr *tcph;
@@ -485,6 +484,11 @@ int tcp_frag(const uint8_t *pkt, uint32_t buflen, uint32_t payload_offset,
 		struct iphdr *s2_hdr = (void *)seg2;
 		s1_hdr->tot_len = htons(s1_dlen);
 		s2_hdr->tot_len = htons(s2_dlen);
+		s1_hdr->id = randint();
+		s2_hdr->id = randint();
+
+		set_ip_checksum(s1_hdr, sizeof(struct iphdr));
+		set_ip_checksum(s2_hdr, sizeof(struct iphdr));
 	} else {
 		struct ip6_hdr *s1_hdr = (void *)seg1;
 		struct ip6_hdr *s2_hdr = (void *)seg2;
@@ -521,5 +525,164 @@ void z_function(const char *str, int *zbuf, size_t len) {
 			rh = i + zbuf[i];
 		}
 	}
+}
+
+void shift_data(uint8_t *data, uint32_t dlen, uint32_t delta) {
+	uint8_t *ndptr = data + delta + dlen;
+	uint8_t *dptr = data + dlen;
+	uint8_t *ndlptr = data;
+	for (size_t i = dlen + 1; i > 0; i--) {
+		*ndptr = *dptr;
+		--ndptr, --dptr;
+	}
+	for (size_t i = 0; i < delta; i++) {
+		*ndlptr++ = 0;
+	}
+}
+
+#define TCP_MD5SIG_LEN 16
+#define TCP_MD5SIG_KIND 19
+struct tcp_md5sig_opt {
+	uint8_t kind;
+	uint8_t len;
+	uint8_t sig[TCP_MD5SIG_LEN];
+};
+#define TCP_MD5SIG_OPT_LEN (sizeof(struct tcp_md5sig_opt))
+// Real length of the option, with NOOP fillers
+#define TCP_MD5SIG_OPT_RLEN 20
+
+int fail_packet(struct failing_strategy strategy, uint8_t *payload, uint32_t *plen, uint32_t avail_buflen) {
+	void *iph;
+	uint32_t iph_len;
+	struct tcphdr *tcph;
+	uint32_t tcph_len;
+	uint8_t *data;
+	uint32_t dlen;
+	int ret;
+
+	ret = tcp_payload_split(payload, *plen, 
+			&iph, &iph_len, &tcph, &tcph_len,
+			&data, &dlen);
+
+	uint32_t ipxv = netproto_version(payload, *plen);
+
+	if (ret < 0) {
+		return ret;
+	}
+
+
+	if (strategy.strategy == FAKE_STRAT_RAND_SEQ) {
+		lgtrace("fake seq: %u -> ", ntohl(tcph->seq));
+
+		tcph->seq = htonl(ntohl(tcph->seq) - (strategy.randseq_offset + dlen));
+
+		lgtrace_addp("%u", ntohl(tcph->seq));
+	} else if (strategy.strategy == FAKE_STRAT_PAST_SEQ) {
+		lgtrace("fake seq: %u -> ", ntohl(tcph->seq));
+		tcph->seq = htonl(ntohl(tcph->seq) - dlen);
+		lgtrace_addp("%u", ntohl(tcph->seq));
+
+	} else if (strategy.strategy == FAKE_STRAT_TTL) {
+		lgtrace_addp("set fake ttl to %d", strategy.faking_ttl);
+
+		if (ipxv == IP4VERSION) {
+			((struct iphdr *)iph)->ttl = strategy.faking_ttl;
+		} else if (ipxv == IP6VERSION) {
+			((struct ip6_hdr *)iph)->ip6_hops = strategy.faking_ttl;
+		} else {
+			lgerror("fail_packet: IP version is unsupported", -EINVAL);
+			return -EINVAL;
+		}
+	} else if (strategy.strategy == FAKE_STRAT_TCP_MD5SUM) {
+		int optp_len = tcph_len - sizeof(struct tcphdr);
+		int delta = TCP_MD5SIG_OPT_RLEN - optp_len;
+		lgtrace_addp("Incr delta %d: %d -> %d", delta, optp_len, optp_len + delta);
+		
+		if (delta > 0) {
+			if (avail_buflen - *plen < delta) {
+				return -1;
+			}
+
+			shift_data(data, dlen, delta);
+			data += delta;
+			tcph_len = tcph_len + delta;
+			tcph->doff = tcph_len >> 2;
+			if (ipxv == IP4VERSION) {
+				((struct iphdr *)iph)->tot_len = htons(ntohs(((struct iphdr *)iph)->tot_len) + delta);
+			} else if (ipxv == IP6VERSION) {
+				((struct ip6_hdr *)iph)->ip6_plen = htons(ntohs(((struct ip6_hdr *)iph)->ip6_plen) + delta);
+			} else {
+				lgerror("fail_packet: IP version is unsupported", -EINVAL);
+				return -EINVAL;
+			}
+			optp_len += delta;
+			*plen += delta;
+		}
+
+		uint8_t *optplace = (uint8_t *)tcph + sizeof(struct tcphdr);
+		struct tcp_md5sig_opt *mdopt = (void *)optplace;
+		mdopt->kind = TCP_MD5SIG_KIND;
+		mdopt->len = TCP_MD5SIG_OPT_LEN;
+
+		optplace += sizeof(struct tcp_md5sig_opt);
+		optp_len -= sizeof(struct tcp_md5sig_opt);
+
+		while (optp_len-- > 0) {
+			*optplace++ = 0x01;
+		}
+	}
+
+	if (ipxv == IP4VERSION) {
+		((struct iphdr *)iph)->frag_off = 0;
+	}
+
+
+	set_ip_checksum(iph, iph_len);
+	set_tcp_checksum(tcph, iph, iph_len);
+
+	if (strategy.strategy == FAKE_STRAT_TCP_CHECK) {
+		lgtrace_addp("break fake tcp checksum");
+		tcph->check += 1;
+	}
+
+	return 0;
+}
+
+int seqovl_packet(uint8_t *payload, uint32_t *plen, uint32_t seq_delta) {
+	int ipxv = netproto_version(payload, *plen);
+
+	void *iph;
+	uint32_t iph_len;
+	struct tcphdr *tcph;
+	uint32_t tcph_len;
+	uint8_t *data;
+	uint32_t dlen;
+
+
+	int ret = tcp_payload_split(payload, *plen,
+			      &iph, &iph_len, &tcph, &tcph_len,
+			      &data, &dlen);
+
+	if (ret < 0) {
+		return -1;
+	}
+
+	if (ipxv == IP4VERSION) {
+		struct iphdr *ip4h = iph;
+		ip4h->tot_len = htons(ntohs(ip4h->tot_len) + seq_delta); 
+	} else if (ipxv == IP6VERSION) {
+		struct ip6_hdr *ip6h = iph;
+		ip6h->ip6_plen = htons(ntohs(ip6h->ip6_plen) + seq_delta); 
+	} else {
+		return -1;
+	}
+
+	tcph->seq = htons(ntohs(tcph->seq) - seq_delta);
+	shift_data(data, dlen, seq_delta);
+	*plen += seq_delta;
+
+	set_ip_checksum(iph, iph_len);
+	set_tcp_checksum(tcph, iph, iph_len);
+	return 0;
 }
 

@@ -13,6 +13,14 @@
 #include <errno.h>  // IWYU pragma: export
 #include <stdint.h> // IWYU pragma: export
 #include <string.h> // IWYU pragma: export
+#include <stdlib.h> // IWYU pragma: export
+
+
+#define _NO_GETRANDOM ((__GLIBC__ <= 2 && __GLIBC_MINOR__ < 25))
+
+#if !_NO_GETRANDOM
+#include <sys/random.h> // IWYU pragma: export
+#endif
 
 #endif /* SPACES */
 
@@ -98,5 +106,17 @@
 #define NETBUF_CHECK(buf) (1)
 #define NETBUF_FREE(buf) ;
 #endif
+
+static inline int randint(void) {
+	int rnd;
+	
+#ifdef KERNEL_SPACE
+		get_random_bytes(&rnd, sizeof(rnd));
+#else
+		rnd = random();
+#endif
+
+	return rnd;
+}
 
 #endif /* TYPES_H */

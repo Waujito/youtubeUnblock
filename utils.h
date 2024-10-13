@@ -2,6 +2,7 @@
 #define UTILS_H
 
 #include "types.h"
+#include "config.h"
 
 #define IP4VERSION 4
 #define IP6VERSION 6
@@ -100,5 +101,93 @@ int  set_ip_checksum(void *iph, uint32_t iphb_len);
 int  set_tcp_checksum(struct tcphdr *tcph, void *iph, uint32_t iphb_len);
 
 void z_function(const char *str, int *zbuf, size_t len);
+
+/**
+ * Shifts data left delta bytes. Fills delta buffer with zeroes.
+ */
+void shift_data(uint8_t *data, uint32_t dlen, uint32_t delta);
+
+
+struct failing_strategy {
+	unsigned int strategy;
+	uint8_t faking_ttl;
+	uint32_t randseq_offset;
+};
+
+
+struct fake_type {
+
+#define FAKE_PAYLOAD_RANDOM	0
+#define FAKE_PAYLOAD_DATA	1
+// In default mode all other options will be skipped.
+#define FAKE_PAYLOAD_DEFAULT	2
+	int type;	
+
+	// Length of the final fake message. 
+	// Pass 0 in RANDOM mode to make it random
+	uint16_t fake_len;
+
+	// Payload of the fake message of fake_len length. 
+	// Will be omitted in RANDOM mode.
+	const char *fake_data;
+
+	unsigned int sequence_len;
+
+	// If non-0 the packet send will be delayed for n milliseconds
+	unsigned int seg2delay;
+
+	// faking strategy of the fake packet.
+	// Does not support bitmask, pass standalone strategy.
+	// Pass 0 if you don't want any faking procedures.
+	struct failing_strategy strategy;
+};
+
+/**
+ * Invalidates the raw packet. The function aims to invalid the packet
+ * in such way as it will be accepted by DPI, but dropped by target server
+ *
+ * Does not support bitmask, pass standalone strategy.
+ */
+int fail_packet(struct failing_strategy strategy, uint8_t *payload, uint32_t *plen, uint32_t avail_buflen);
+
+/**
+ * Shifts the payload right and pushes zeroes before it. Useful for TCP TLS faking.
+ */
+int seqovl_packet(uint8_t *payload, uint32_t *plen, uint32_t seq_delta);
+
+
+
+static inline struct failing_strategy args_default_failing_strategy(const struct section_config_t *section) {
+	struct failing_strategy fl_strat = {
+		.strategy = (unsigned int)section->faking_strategy,
+		.faking_ttl = section->faking_ttl,
+		.randseq_offset = (uint32_t)section->fakeseq_offset
+	};
+	return fl_strat;
+}
+
+static inline struct fake_type args_default_fake_type(const struct section_config_t *section) {
+	struct fake_type f_type = {
+		.sequence_len = section->fake_sni_seq_len,
+		.strategy = args_default_failing_strategy(section),
+	};
+
+	switch (section->fake_sni_type) {
+		case FAKE_PAYLOAD_RANDOM:
+			f_type.type = FAKE_PAYLOAD_RANDOM;
+			break;
+		case FAKE_PAYLOAD_CUSTOM:
+			f_type.type = FAKE_PAYLOAD_CUSTOM;
+			f_type.fake_data = section->fake_custom_pkt;
+			f_type.fake_len = section->fake_custom_pkt_sz;
+			break;
+		default:
+			f_type.type = FAKE_PAYLOAD_CUSTOM;
+			f_type.fake_data = section->fake_sni_pkt;
+			f_type.fake_len = section->fake_sni_pkt_sz;
+	}
+
+	return f_type;
+}
 
 #endif /* UTILS_H */

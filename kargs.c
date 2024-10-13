@@ -1,53 +1,26 @@
 #include "config.h"
-#include "raw_replacements.h"
 #include "types.h"
 #include <linux/moduleparam.h>
+#include "types.h"
 
 #define STR_MAXLEN 2048
 
+static char custom_fake_buf[MAX_FAKE_SIZE];
+
 struct config_t config = {
-	.frag_sni_reverse = 1,
-	.frag_sni_faked = 0,
-	.fragmentation_strategy = FRAGMENTATION_STRATEGY,
-	.faking_strategy = FAKING_STRATEGY,
-	.faking_ttl = FAKE_TTL,
-	.fake_sni = 1,
-	.fake_sni_seq_len = 1,
-	.frag_middle_sni = 1,
-	.frag_sni_pos = 1,
-	.use_ipv6 = 1,
-	.fakeseq_offset = 10000,
-	.mark = DEFAULT_RAWSOCKET_MARK,
-	.synfake = 0,
-	.synfake_len = 0,
-
-	.sni_detection = SNI_DETECTION_PARSE,
-
-#ifdef SEG2_DELAY
-	.seg2_delay = SEG2_DELAY,
-#else
-	.seg2_delay = 0,
-#endif
-
-#ifdef USE_GSO
-	.use_gso = 1,
-#else
-	.use_gso = false,
-#endif
-
-#ifdef DEBUG
-	.verbose = 2,
-#else
-	.verbose = 1,
-#endif
-
-	.domains_str = defaul_snistr,
-	.domains_strlen = sizeof(defaul_snistr),
-
+	.threads = THREADS_NUM,
 	.queue_start_num = DEFAULT_QUEUE_NUM,
-	.fake_sni_pkt = fake_sni_old,
-	.fake_sni_pkt_sz = sizeof(fake_sni_old) - 1, // - 1 for null-terminator
+	.mark = DEFAULT_RAWSOCKET_MARK,
+	.use_ipv6 = 1,
+
+	.verbose = VERBOSE_DEBUG,
+	.use_gso = 1,
+
+	.default_config = default_section_config,
+	.custom_configs_len = 0
 };
+
+#define def_section (&config.default_config)
 
 static int unumeric_set(const char *val, const struct kernel_param *kp) {
 	int n = 0, ret;
@@ -107,18 +80,19 @@ static const struct kernel_param_ops inverse_boolean_ops = {
 	.get = inverse_boolean_get,
 };
 
-module_param_cb(fake_sni, &boolean_parameter_ops, &config.fake_sni, 0664);
-module_param_cb(fake_sni_seq_len, &unumeric_parameter_ops, &config.fake_sni_seq_len, 0664);
-module_param_cb(faking_ttl, &unumeric_parameter_ops, &config.faking_ttl, 0664);
-module_param_cb(fake_seq_offset, &unumeric_parameter_ops, &config.fakeseq_offset, 0664);
-module_param_cb(frag_sni_reverse, &unumeric_parameter_ops, &config.frag_sni_reverse, 0664);
-module_param_cb(frag_sni_faked, &boolean_parameter_ops, &config.frag_sni_faked, 0664);
-module_param_cb(frag_middle_sni, &boolean_parameter_ops, &config.frag_middle_sni, 0664);
-module_param_cb(frag_sni_pos, &unumeric_parameter_ops, &config.frag_sni_pos, 0664);
-module_param_cb(fk_winsize, &unumeric_parameter_ops, &config.fk_winsize, 0664);
-module_param_cb(synfake, &boolean_parameter_ops, &config.synfake, 0664);
-module_param_cb(synfake_len, &unumeric_parameter_ops, &config.synfake_len, 0664);
+module_param_cb(fake_sni, &boolean_parameter_ops, &def_section->fake_sni, 0664);
+module_param_cb(fake_sni_seq_len, &unumeric_parameter_ops, &def_section->fake_sni_seq_len, 0664);
+module_param_cb(faking_ttl, &unumeric_parameter_ops, &def_section->faking_ttl, 0664);
+module_param_cb(fake_seq_offset, &unumeric_parameter_ops, &def_section->fakeseq_offset, 0664);
+module_param_cb(frag_sni_reverse, &unumeric_parameter_ops, &def_section->frag_sni_reverse, 0664);
+module_param_cb(frag_sni_faked, &boolean_parameter_ops, &def_section->frag_sni_faked, 0664);
+module_param_cb(frag_middle_sni, &boolean_parameter_ops, &def_section->frag_middle_sni, 0664);
+module_param_cb(frag_sni_pos, &unumeric_parameter_ops, &def_section->frag_sni_pos, 0664);
+module_param_cb(fk_winsize, &unumeric_parameter_ops, &def_section->fk_winsize, 0664);
+module_param_cb(synfake, &boolean_parameter_ops, &def_section->synfake, 0664);
+module_param_cb(synfake_len, &unumeric_parameter_ops, &def_section->synfake_len, 0664);
 module_param_cb(packet_mark, &unumeric_parameter_ops, &config.mark, 0664);
+// module_param_cb(seg2delay, &unumeric_parameter_ops, &def_section->seg2_delay, 0664);
 
 static int sni_domains_set(const char *val, const struct kernel_param *kp) {
 	size_t len;
@@ -137,13 +111,13 @@ static int sni_domains_set(const char *val, const struct kernel_param *kp) {
 	ret = param_set_charp(val, kp);
 
 	if (ret < 0) {
-		config.domains_strlen = 0;
+		def_section->domains_strlen = 0;
 	} else {
-		config.domains_strlen = len;
+		def_section->domains_strlen = len;
 		if (len == 3 && !strncmp(val, "all", len)) {
-			config.all_domains = 1;
+			def_section->all_domains = 1;
 		} else {
-			config.all_domains = 0;
+			def_section->all_domains = 0;
 		}
 	}
 
@@ -156,7 +130,7 @@ static const struct kernel_param_ops sni_domains_ops = {
 	.get = param_get_charp,
 };
 
-module_param_cb(sni_domains, &sni_domains_ops, &config.domains_str, 0664);
+module_param_cb(sni_domains, &sni_domains_ops, &def_section->domains_str, 0664);
 
 static int exclude_domains_set(const char *val, const struct kernel_param *kp) {
 	size_t len;
@@ -171,9 +145,9 @@ static int exclude_domains_set(const char *val, const struct kernel_param *kp) {
 	ret = param_set_charp(val, kp);
 
 	if (ret < 0) {
-		config.exclude_domains_strlen = 0;
+		def_section->exclude_domains_strlen = 0;
 	} else {
-		config.exclude_domains_strlen = len;
+		def_section->exclude_domains_strlen = len;
 	}
 
 	return ret;
@@ -184,36 +158,62 @@ static const struct kernel_param_ops exclude_domains_ops = {
 	.get = param_get_charp,
 };
 
-module_param_cb(exclude_domains, &exclude_domains_ops, &config.exclude_domains_str, 0664);
+module_param_cb(exclude_domains, &exclude_domains_ops, &def_section->exclude_domains_str, 0664);
 
 module_param_cb(no_ipv6, &inverse_boolean_ops, &config.use_ipv6, 0664);
-module_param_cb(silent, &inverse_boolean_ops, &config.verbose, 0664);
-module_param_cb(quic_drop, &boolean_parameter_ops, &config.quic_drop, 0664);
+module_param_cb(quic_drop, &boolean_parameter_ops, &def_section->quic_drop, 0664);
 
-static int verbose_trace_set(const char *val, const struct kernel_param *kp) {
-	int n = 0, ret;
-	ret = kstrtoint(val, 10, &n);
-	if (ret != 0 || (n != 0 && n != 1))
-		return -EINVAL;
+static int verbosity_set(const char *val, const struct kernel_param *kp) {
+	size_t len;
 
-	if (n) {
-		n = VERBOSE_TRACE;
-	} else {
-		n = VERBOSE_DEBUG;
+	len = strnlen(val, STR_MAXLEN + 1);
+	if (len == STR_MAXLEN + 1) {
+		pr_err("%s: string parameter too long\n", kp->name);
+		return -ENOSPC;
 	}
-	if (kp->arg == NULL) 
-		return -EINVAL;
 
-	*(int *)kp->arg = n;
+	if (len >= 1 && val[len - 1] == '\n') {
+		len--;
+	}
+
+	if (strncmp(val, "trace", len) == 0) {
+		*(int *)kp->arg = VERBOSE_TRACE;
+	} else if (strncmp(val, "debug", len) == 0) {
+		*(int *)kp->arg = VERBOSE_DEBUG;
+	} else if (strncmp(val, "silent", len) == 0) {
+		*(int *)kp->arg = VERBOSE_INFO;
+	} else {
+		return -EINVAL;
+	}
+
 	return 0;
 }
 
-static const struct kernel_param_ops verbose_trace_ops = {
-	.set = verbose_trace_set,
-	.get = param_get_int,
+
+static int verbosity_get(char *buffer, const struct kernel_param *kp) {
+	switch (*(int *)kp->arg) {
+		case VERBOSE_TRACE:
+			strcpy(buffer, "trace\n");
+			break;
+		case VERBOSE_DEBUG:
+			strcpy(buffer, "debug\n");
+			break;
+		case VERBOSE_INFO:
+			strcpy(buffer, "silent\n");
+			break;
+		default:
+			strcpy(buffer, "unknown\n");
+	}
+
+	return strlen(buffer);
+}
+
+static const struct kernel_param_ops verbosity_ops = {
+	.set = verbosity_set,
+	.get = verbosity_get,
 };
 
-module_param_cb(trace, &verbose_trace_ops, &config.verbose, 0664);
+module_param_cb(verbosity, &verbosity_ops, &config.verbose, 0664);
 
 static int frag_strat_set(const char *val, const struct kernel_param *kp) {
 	size_t len;
@@ -264,7 +264,7 @@ static const struct kernel_param_ops frag_strat_ops = {
 	.get = frag_strat_get,
 };
 
-module_param_cb(fragmentation_strategy, &frag_strat_ops, &config.fragmentation_strategy, 0664);
+module_param_cb(fragmentation_strategy, &frag_strat_ops, &def_section->fragmentation_strategy, 0664);
 
 static int fake_strat_set(const char *val, const struct kernel_param *kp) {
 	size_t len;
@@ -325,7 +325,7 @@ static const struct kernel_param_ops fake_strat_ops = {
 	.get = fake_strat_get,
 };
 
-module_param_cb(faking_strategy, &fake_strat_ops, &config.faking_strategy, 0664);
+module_param_cb(faking_strategy, &fake_strat_ops, &def_section->faking_strategy, 0664);
 
 static int sni_detection_set(const char *val, const struct kernel_param *kp) {
 	size_t len;
@@ -371,4 +371,111 @@ static const struct kernel_param_ops sni_detection_ops = {
 	.get = sni_detection_get,
 };
 
-module_param_cb(sni_detection, &sni_detection_ops, &config.sni_detection, 0664);
+module_param_cb(sni_detection, &sni_detection_ops, &def_section->sni_detection, 0664);
+
+static int fake_type_set(const char *val, const struct kernel_param *kp) {
+	size_t len;
+
+	len = strnlen(val, STR_MAXLEN + 1);
+	if (len == STR_MAXLEN + 1) {
+		pr_err("%s: string parameter too long\n", kp->name);
+		return -ENOSPC;
+	}
+
+	if (len >= 1 && val[len - 1] == '\n') {
+		len--;
+	}
+
+	if (strncmp(val, "default", len) == 0) {
+		*(int *)kp->arg = FAKE_PAYLOAD_DEFAULT;
+	} else if (strncmp(val, "custom", len) == 0) {
+		*(int *)kp->arg = FAKE_PAYLOAD_CUSTOM;
+	} else if (strncmp(val, "random", len) == 0) {
+		*(int *)kp->arg = FAKE_PAYLOAD_RANDOM;
+	} else {
+		return -EINVAL;
+	}
+
+	return 0;
+}
+
+static int fake_type_get(char *buffer, const struct kernel_param *kp) {
+	switch (*(int *)kp->arg) {
+		case FAKE_PAYLOAD_DEFAULT:
+			strcpy(buffer, "default\n");
+			break;
+		case FAKE_PAYLOAD_RANDOM:
+			strcpy(buffer, "random\n");
+			break;
+		case FAKE_PAYLOAD_CUSTOM:
+			strcpy(buffer, "custom\n");
+			break;
+		default:
+			strcpy(buffer, "unknown\n");
+	}
+
+	return strlen(buffer);
+}
+
+static const struct kernel_param_ops fake_type_ops = {
+	.set = fake_type_set,
+	.get = fake_type_get,
+};
+
+module_param_cb(fake_sni_type, &fake_type_ops, &def_section->fake_sni_type, 0664);
+
+static int fake_custom_pl_set(const char *val, const struct kernel_param *kp) {
+	size_t len;
+
+	len = strnlen(val, STR_MAXLEN + 1);
+	if (len == STR_MAXLEN + 1) {
+		pr_err("%s: string parameter too long\n", kp->name);
+		return -ENOSPC;
+	}
+
+	if (len >= 1 && val[len - 1] == '\n') {
+		len--;
+	}
+
+	uint8_t *const custom_buf = (uint8_t *)custom_fake_buf;
+	const char *custom_hex_fake = val;
+	size_t custom_hlen = len;
+
+	if ((custom_hlen & 1) == 1) {
+		return -EINVAL;
+	}
+
+
+	size_t custom_len = custom_hlen >> 1;
+	if (custom_len > MAX_FAKE_SIZE) {
+		return -EINVAL;
+	}
+
+	for (int i = 0; i < custom_len; i++) {
+		sscanf(custom_hex_fake + (i << 1), "%2hhx", custom_buf + i);
+	}
+
+	def_section->fake_custom_pkt_sz = custom_len;
+	def_section->fake_custom_pkt = (char *)custom_buf;
+
+	return 0;
+}
+
+static int fake_custom_pl_get(char *buffer, const struct kernel_param *kp) {
+	int cflen = def_section->fake_custom_pkt_sz;
+	const uint8_t *cbf_data = def_section->fake_custom_pkt;
+	int bflen = def_section->fake_custom_pkt_sz << 1;
+
+	for (int i = 0; i < cflen; i++) {
+		sprintf(buffer + (i << 1), "%02x", *((unsigned char *)cbf_data + i));
+	}
+
+	return bflen;
+}
+
+static const struct kernel_param_ops fake_custom_pl_ops = {
+	.set = fake_custom_pl_set,
+	.get = fake_custom_pl_get,
+};
+
+module_param_cb(fake_custom_payload, &fake_custom_pl_ops, &def_section->fake_custom_pkt, 0664);
