@@ -259,16 +259,27 @@ static int send_raw_socket(const uint8_t *pkt, uint32_t pktlen) {
 		if (config.verbose)
 			printf("Split packet!\n");
 
-		uint8_t buff1[MNL_SOCKET_BUFFER_SIZE];
+		NETBUF_ALLOC(buff1, MNL_SOCKET_BUFFER_SIZE);
+		if (!NETBUF_CHECK(buff1)) {
+			lgerror("Allocation error", -ENOMEM);
+			return -ENOMEM;
+		}
+
+		NETBUF_ALLOC(buff2, MNL_SOCKET_BUFFER_SIZE);
+		if (!NETBUF_CHECK(buff2)) {
+			lgerror("Allocation error", -ENOMEM);
+			NETBUF_FREE(buff1);
+			return -ENOMEM;
+		}
+
 		uint32_t buff1_size = MNL_SOCKET_BUFFER_SIZE;
-		uint8_t buff2[MNL_SOCKET_BUFFER_SIZE];
 		uint32_t buff2_size = MNL_SOCKET_BUFFER_SIZE;
 
 		if ((ret = tcp_frag(pkt, pktlen, AVAILABLE_MTU-128,
 			buff1, &buff1_size, buff2, &buff2_size)) < 0) {
 
 			errno = -ret;
-			return ret;
+			goto free_buffs;
 		}
 
 		int sent = 0;
@@ -276,16 +287,23 @@ static int send_raw_socket(const uint8_t *pkt, uint32_t pktlen) {
 
 		if (status >= 0) sent += status;
 		else {
-			return status;
+			ret = status;
+			goto free_buffs;
 		}
 
 		status = send_raw_socket(buff2, buff2_size);
 		if (status >= 0) sent += status;
 		else {
-			return status;
+			ret = status;
+			goto free_buffs;
 		}
 
-		return sent;
+		ret = sent;
+
+free_buffs:
+		NETBUF_FREE(buff1)
+		NETBUF_FREE(buff2)
+		return ret;
 	}
 	
 	int ipvx = netproto_version(pkt, pktlen);
@@ -452,7 +470,12 @@ int init_queue(int queue_num) {
 	uint32_t portid = mnl_socket_get_portid(nl);
 
 	struct nlmsghdr *nlh;
-	char buf[BUF_SIZE];
+	NETBUF_ALLOC(bbuf, BUF_SIZE);
+	if (!NETBUF_CHECK(bbuf)) {
+		lgerror("Allocation error", -ENOMEM);
+		goto die_alloc;
+	}
+	char *buf = (char *)bbuf;
 
 	/* Support for kernels versions < 3.8 */
 	// Obsolete and ignored in kernel version 3.8
@@ -547,10 +570,13 @@ int init_queue(int queue_num) {
 	}
 
 
+	NETBUF_FREE(bbuf)
 	close_socket(&nl);
 	return 0;
 
 die:
+	NETBUF_FREE(bbuf)
+die_alloc:
 	close_socket(&nl);
 	return -1;
 }

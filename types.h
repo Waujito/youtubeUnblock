@@ -85,6 +85,9 @@
 
 #endif /* not a KERNEL_SPACE */
 
+/* An alternative memory allocation strategy for userspace app */
+// #define ALLOC_MALLOC
+
 /**
  * Use NETBUF_ALLOC and NETBUF_FREE as an abstraction of memory allocation.
  * Do not use it within expressions, consider these defines as separate statements.
