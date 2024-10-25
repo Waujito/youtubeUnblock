@@ -105,9 +105,18 @@ for example, you can enable it with `/etc/init.d/youtubeUnblock enable`.
 
 ### Entware
 
-For Entware on Keenetic here is an [installation guide (russian)](https://help.keenetic.com/hc/ru/articles/360021214160-%D0%A3%D1%81%D1%82%D0%B0%D0%BD%D0%BE%D0%B2%D0%BA%D0%B0-%D1%81%D0%B8%D1%81%D1%82%D0%B5%D0%BC%D1%8B-%D0%BF%D0%B0%D0%BA%D0%B5%D1%82%D0%BE%D0%B2-%D1%80%D0%B5%D0%BF%D0%BE%D0%B7%D0%B8%D1%82%D0%BE%D1%80%D0%B8%D1%8F-Entware-%D0%BD%D0%B0-USB-%D0%BD%D0%B0%D0%BA%D0%BE%D0%BF%D0%B8%D1%82%D0%B5%D0%BB%D1%8C). Note that if your Entware router is missing netfilter queue kernel modules, here is no way to deal with it since Entware does not offer kernel modules. 
+For Entware on Keenetic here is an [installation guide (russian)](https://help.keenetic.com/hc/ru/articles/360021214160-%D0%A3%D1%81%D1%82%D0%B0%D0%BD%D0%BE%D0%B2%D0%BA%D0%B0-%D1%81%D0%B8%D1%81%D1%82%D0%B5%D0%BC%D1%8B-%D0%BF%D0%B0%D0%BA%D0%B5%D1%82%D0%BE%D0%B2-%D1%80%D0%B5%D0%BF%D0%BE%D0%B7%D0%B8%D1%82%D0%BE%D1%80%D0%B8%D1%8F-Entware-%D0%BD%D0%B0-USB-%D0%BD%D0%B0%D0%BA%D0%BE%D0%BF%D0%B8%D1%82%D0%B5%D0%BB%D1%8C).
 
 Install the binary with `opkg install youtubeUnblock-*.ipk`. After installation, the binary in /opt/bin and the init script in /opt/etc/init.d/S51youtubeUnblock will be available. To run the youtubeUnblock, simply run `/opt/etc/init.d/S51youtubeUnblock start`
+
+### NFNETLINK_QUEUE kernel modules
+
+Note, that you should feed the target kernel with nfnetlink_queue kernel module. The module may be disabled or even not present. Entware S51youtubeUnblock will try to insert kmods any way but if they are not provided by software, you should install them manually. AFAIK on keenetics here is a repository with modules compiled by customer. You can find them somewhere in the web interface of your device. On other routers you may want to do deeper research in that case and find your kmods. If you can't find anything, you may ask the customer for GPL codes of linux kernel (and may be even OpenWRT) and compile kmods manually.
+
+You should insert the module with (this step may be omitted on Entware and OpenWRT):
+```sh
+modprobe nfnetlink_queue
+```
 
 ### PC configuration
 On local host make sure to change **FORWARD** to **OUTPUT** chain in the following Firewall rulesets.
