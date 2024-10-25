@@ -114,6 +114,8 @@ jobs:
             tool: mips-unknown-linux-musl
           - arch: mipssf
             tool: mips-unknown-linux-muslsf
+          - arch: armv7sf
+            tool: armv7-unknown-linux-musleabi
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -281,6 +283,11 @@ jobs:
           - mips-3.4
           - mipsel-3.4
           - x64-3.2
+        include:
+          - arch: armv7-2.6
+            k26: true
+          - arch: x86-2.6
+            k26: true
     steps:
       - name: Set up Entware docker container
         run: |
@@ -302,10 +309,19 @@ jobs:
           docker run --rm --mount source=entware-home,target=/home/me -w /home/me ubuntu bash -c 'cp -r ./backup_vol/* ./'
           docker run --rm --mount source=entware-home,target=/home/me -w /home/me ubuntu bash -c 'chown -R 1000:1000 ./* ./'
 
-      - name: Build Entware
-        if: steps.cache-restore.outputs.cache-hit != 'true'
+      - name: Obtain Entware
+        if: ${{ steps.cache-restore.outputs.cache-hit != 'true' &&  ! matrix.k26 }}
         run: |
           docker run --rm -i --mount source=entware-home,target=/home/me -w /home/me --name builder builder git clone --depth 1 https://github.com/Entware/Entware.git
+
+      - name: Obtain Entware k2.6
+        if: ${{ steps.cache-restore.outputs.cache-hit != 'true' && matrix.k26 }}
+        run: |
+          docker run --rm -i --mount source=entware-home,target=/home/me -w /home/me --name builder builder git clone --depth 1 https://github.com/Entware/Entware.git -b k2.6
+
+      - name: Build Entware 
+        if: steps.cache-restore.outputs.cache-hit != 'true'
+        run: |
           docker run --rm -i --mount source=entware-home,target=/home/me -w /home/me/Entware --name builder builder make package/symlinks
           docker run --rm -i --mount source=entware-home,target=/home/me -w /home/me/Entware --name builder builder cp -v configs/${{ matrix.arch }}.config .config
           docker run --rm -i --mount source=entware-home,target=/home/me -w /home/me/Entware --name builder builder make -j$(nproc) toolchain/install
