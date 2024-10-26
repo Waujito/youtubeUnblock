@@ -21,7 +21,10 @@ struct config_t config = {
 	.use_gso = true,
 
 	.default_config = default_section_config,
-	.custom_configs_len = 0
+	.custom_configs_len = 0,
+
+	.daemonize = 0,
+	.noclose = 0
 };
 
 #define OPT_SNI_DOMAINS		1
@@ -34,6 +37,8 @@ struct config_t config = {
 #define OPT_FAKE_CUSTOM_PAYLOAD	28
 #define OPT_START_SECTION	29
 #define OPT_END_SECTION		30
+#define OPT_DAEMONIZE		31
+#define OPT_NOCLOSE		32
 #define OPT_FRAG    		4
 #define OPT_FRAG_SNI_REVERSE	12
 #define OPT_FRAG_SNI_FAKED	13
@@ -54,7 +59,7 @@ struct config_t config = {
 #define OPT_NO_GSO 		8
 #define OPT_QUEUE_NUM		9
 
-#define OPT_MAX OPT_END_SECTION
+#define OPT_MAX OPT_NOCLOSE
 
 static struct option long_opt[] = {
 	{"help",		0, 0, 'h'},
@@ -84,6 +89,8 @@ static struct option long_opt[] = {
 	{"trace",		0, 0, OPT_TRACE},
 	{"no-gso",		0, 0, OPT_NO_GSO},
 	{"no-ipv6",		0, 0, OPT_NO_IPV6},
+	{"daemonize",		0, 0, OPT_DAEMONIZE},
+	{"noclose",		0, 0, OPT_NOCLOSE},
 	{"queue-num",		1, 0, OPT_QUEUE_NUM},
 	{"packet-mark",		1, 0, OPT_PACKET_MARK},
 	{"fbegin",		0, 0, OPT_START_SECTION},
@@ -152,6 +159,8 @@ void print_usage(const char *argv0) {
 	printf("\t--trace\n");
 	printf("\t--no-gso\n");
 	printf("\t--no-ipv6\n");
+	printf("\t--daemonize\n");
+	printf("\t--noclose\n");
 	printf("\t--fbegin\n");
 	printf("\t--fend\n");
 	printf("\n");
@@ -201,6 +210,12 @@ int parse_args(int argc, char *argv[]) {
 				goto invalid_opt;
 
 			config.use_ipv6 = 0;
+			break;
+		case OPT_DAEMONIZE:
+			config.daemonize = 1;
+			break;
+		case OPT_NOCLOSE:
+			config.noclose = 1;
 			break;
 		case OPT_THREADS:
 			if (section_iter != SECT_ITER_DEFAULT)

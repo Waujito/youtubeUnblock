@@ -64,7 +64,6 @@ struct section_config_t {
 #define SNI_DETECTION_BRUTE 1
 	int sni_detection;
 
-
 };
 
 #define MAX_CONFIGLIST_LEN 64
@@ -75,6 +74,9 @@ struct config_t {
 	int use_gso;
 	int use_ipv6;
 	unsigned int mark;
+	int daemonize;
+	// Same as daemon() noclose
+	int noclose;
 
 #define VERBOSE_INFO	0
 #define VERBOSE_DEBUG	1

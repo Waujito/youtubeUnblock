@@ -625,6 +625,7 @@ int main(int argc, char *argv[]) {
 	print_version();
 	print_welcome();
 
+
 	if (open_raw_socket() < 0) {
 		perror("Unable to open raw socket");
 		exit(EXIT_FAILURE);
@@ -636,6 +637,10 @@ int main(int argc, char *argv[]) {
 			close_raw_socket();
 			exit(EXIT_FAILURE);
 		}
+	}
+
+	if (config.daemonize) {
+		daemon(0, config.noclose);
 	}
 
 	struct queue_res *qres = &defqres;
