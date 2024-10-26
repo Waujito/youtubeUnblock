@@ -497,20 +497,22 @@ int init_queue(int queue_num) {
 		goto die;
 	}
 
-	nlh = nfq_nlmsg_put(buf, NFQNL_MSG_CONFIG, queue_num);
-	nfq_nlmsg_cfg_put_cmd(nlh, PF_INET6, NFQNL_CFG_CMD_PF_UNBIND);
+	if (config.use_ipv6) {
+		nlh = nfq_nlmsg_put(buf, NFQNL_MSG_CONFIG, queue_num);
+		nfq_nlmsg_cfg_put_cmd(nlh, PF_INET6, NFQNL_CFG_CMD_PF_UNBIND);
 
-	if (mnl_socket_sendto(nl, nlh, nlh->nlmsg_len) < 0) {
-		perror("mnl_socket_send");
-		goto die;
-	}
+		if (mnl_socket_sendto(nl, nlh, nlh->nlmsg_len) < 0) {
+			perror("mnl_socket_send");
+			goto die;
+		}
 
-	nlh = nfq_nlmsg_put(buf, NFQNL_MSG_CONFIG, queue_num);
-	nfq_nlmsg_cfg_put_cmd(nlh, PF_INET6, NFQNL_CFG_CMD_PF_BIND);
+		nlh = nfq_nlmsg_put(buf, NFQNL_MSG_CONFIG, queue_num);
+		nfq_nlmsg_cfg_put_cmd(nlh, PF_INET6, NFQNL_CFG_CMD_PF_BIND);
 
-	if (mnl_socket_sendto(nl, nlh, nlh->nlmsg_len) < 0) {
-		perror("mnl_socket_send");
-		goto die;
+		if (mnl_socket_sendto(nl, nlh, nlh->nlmsg_len) < 0) {
+			perror("mnl_socket_send");
+			goto die;
+		}
 	}
 	/* End of support for kernel versions < 3.8 */
 
