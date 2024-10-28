@@ -110,8 +110,13 @@ static long parse_numeric_option(const char* value) {
 }
 
 void print_version() {
-  	printf("youtubeUnblock\n");	
-	printf("Bypasses deep packet inspection systems that relies on SNI\n");
+  	printf("youtubeUnblock" 
+#if defined(PKG_VERSION)
+	" " PKG_VERSION
+#endif
+	"\n"
+	);	
+	printf("Bypasses deep packet inspection systems that rely on SNI\n");
 	printf("\n");
 }
 

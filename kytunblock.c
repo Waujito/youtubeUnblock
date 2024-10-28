@@ -21,8 +21,11 @@
 #include "utils.h"
 #include "logging.h"
 
+#if defined(PKG_VERSION)
+MODULE_VERSION(PKG_VERSION);
+#endif
+
 MODULE_LICENSE("GPL");
-MODULE_VERSION("0.3.2");
 MODULE_AUTHOR("Vadim Vetrov <vetrovvd@gmail.com>");
 MODULE_DESCRIPTION("Linux kernel module for youtubeUnblock");
 

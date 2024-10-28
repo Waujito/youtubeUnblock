@@ -16,12 +16,11 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.gh.outputs.version }}
+      release: ${{ steps.gh.outputs.release }}
       sha: ${{ steps.gh.outputs.sha }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-        with:
-          ref: 'openwrt'
 
       - name: GH
         id: gh
@@ -30,7 +29,8 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         shell: bash
         run: |
-          echo "version=$(cat youtubeUnblock/Makefile | grep PKG_VERSION | sed 's/PKG_VERSION:=//')" >> $GITHUB_OUTPUT
+          echo "version=$(cat Makefile | grep "PKG_VERSION :=" | sed 's/PKG_VERSION := //')" >> $GITHUB_OUTPUT
+          echo "release=$(cat Makefile | grep "PKG_RELEASE :=" | sed 's/PKG_RELEASE := //')" >> $GITHUB_OUTPUT
           if [[ "${{ github.event_name }}" != "pull_request" ]]; then
             echo "sha=$(echo ${GITHUB_SHA::7})" >> $GITHUB_OUTPUT
           else
@@ -72,6 +72,7 @@ jobs:
           ARCH: ${{ matrix.arch }}
           CCACHE_DIR: ${{ github.workspace }}/.ccache
           VERSION: ${{ needs.prepare.outputs.version }}
+          RELEASE: ${{ needs.prepare.outputs.release }}
           SHA: ${{ needs.prepare.outputs.sha }}
         shell: alpine.sh {0}
         run: |
@@ -85,7 +86,7 @@ jobs:
           make -j$(nproc) CC="ccache gcc -static-libgcc -static" || exit 1
           strip -s build/youtubeUnblock
           cp -va build/youtubeUnblock .
-          tar -czvf youtubeUnblock-$VERSION-$SHA-$PLATFORM-static.tar.gz youtubeUnblock youtubeUnblock.service README.md
+          tar -czvf youtubeUnblock-$VERSION-$RELEASE-$SHA-$PLATFORM-static.tar.gz youtubeUnblock youtubeUnblock.service README.md
           ccache --show-stats
 
       - name: Upload artifacts
@@ -137,6 +138,7 @@ jobs:
           ARCH: ${{ matrix.arch }}
           TOOL: ${{ matrix.tool }}
           VERSION: ${{ needs.prepare.outputs.version }}
+          RELEASE: ${{ needs.prepare.outputs.release }}
           SHA: ${{ needs.prepare.outputs.sha }}
         run: |
           make -j$(nproc) \
@@ -148,13 +150,13 @@ jobs:
             CROSS_COMPILE_PLATFORM=$TOOL || exit 1
           $TOOL-strip -s build/youtubeUnblock
           cp -va build/youtubeUnblock .
-          tar -czvf youtubeUnblock-$VERSION-$SHA-$ARCH-static.tar.gz youtubeUnblock youtubeUnblock.service README.md
+          tar -czvf youtubeUnblock-$VERSION-$RELEASE-$SHA-$ARCH-static.tar.gz youtubeUnblock youtubeUnblock.service README.md
 
       - name: Upload artifacts
         if: steps.build.outcome == 'success'
         uses: actions/upload-artifact@v4
         with:
-          name: static-${{ matrix.arch }}
+          name: youtubeUnblock-static-${{ matrix.arch }}
           path: ./**/youtubeUnblock*.tar.gz
 
   build-openwrt:
@@ -203,14 +205,16 @@ jobs:
       - name: Prepare build
         env:
           VERSION: ${{ needs.prepare.outputs.version }}
+          RELEASE: ${{ needs.prepare.outputs.release }}
           SHA: ${{ needs.prepare.outputs.sha }}
         run: |
-          sed -i "s/PKG_REV:=.*$/PKG_REV:=$SHA/;s/PKG_VERSION:=.*$/PKG_VERSION:=$VERSION-$SHA/" youtubeUnblock/Makefile
+          sed -i "s/PKG_REV:=.*$/PKG_REV:=$SHA/;s/PKG_VERSION:=.*$/PKG_VERSION:=$VERSION-$RELEASE-$SHA/" youtubeUnblock/Makefile
 
       - name: Build packages
         id: build
         env:
           VERSION: ${{ needs.prepare.outputs.version }}
+          RELEASE: ${{ needs.prepare.outputs.release }}
           SHA: ${{ needs.prepare.outputs.sha }}
         working-directory: /builder
         run: |
@@ -220,7 +224,7 @@ jobs:
           ./scripts/feeds install -a -p youtubeUnblock
           make defconfig
           make package/youtubeUnblock/compile V=s
-          mv $(find ./bin -type f -name 'youtubeUnblock*.ipk') ./youtubeUnblock-$VERSION-$SHA-${{ matrix.arch }}-${{ matrix.branch }}.ipk
+          mv $(find ./bin -type f -name 'youtubeUnblock*.ipk') ./youtubeUnblock-$VERSION-$RELEASE-$SHA-${{ matrix.arch }}-${{ matrix.branch }}.ipk
 
       - name: Upload packages
         if: steps.build.outcome == 'success'
@@ -245,14 +249,16 @@ jobs:
       - name: Prepare build
         env:
           VERSION: ${{ needs.prepare.outputs.version }}
+          RELEASE: ${{ needs.prepare.outputs.release }}
           SHA: ${{ needs.prepare.outputs.sha }}
         run: |
-          sed -i "s/PKG_REV:=.*$/PKG_REV:=$SHA/;s/PKG_VERSION:=.*$/PKG_VERSION:=$VERSION-$SHA/" youtubeUnblock/Makefile
+          sed -i "s/PKG_REV:=.*$/PKG_REV:=$SHA/;s/PKG_VERSION:=.*$/PKG_VERSION:=$VERSION-$RELEASE-$SHA/" youtubeUnblock/Makefile
 
       - name: Build packages
         id: build
         env:
           VERSION: ${{ needs.prepare.outputs.version }}
+          RELEASE: ${{ needs.prepare.outputs.release }}
           SHA: ${{ needs.prepare.outputs.sha }}
         working-directory: /builder
         run: |
@@ -262,7 +268,7 @@ jobs:
           ./scripts/feeds install -a -p youtubeUnblock
           make defconfig
           make package/luci-app-youtubeUnblock/compile V=s
-          mv $(find ./bin -type f -name 'luci-app-youtubeUnblock*.ipk') ./luci-app-youtubeUnblock-$VERSION-$SHA.ipk
+          mv $(find ./bin -type f -name 'luci-app-youtubeUnblock*.ipk') ./luci-app-youtubeUnblock-$VERSION-$RELEASE-$SHA.ipk
 
       - name: Upload packages
         if: steps.build.outcome == 'success'
@@ -343,9 +349,10 @@ jobs:
       - name: Prepare build
         env:
           VERSION: ${{ needs.prepare.outputs.version }}
+          RELEASE: ${{ needs.prepare.outputs.release }}
           SHA: ${{ needs.prepare.outputs.sha }}
         run: |
-          sed -i "s/PKG_REV:=.*$/PKG_REV:=$SHA/;s/PKG_VERSION:=.*$/PKG_VERSION:=$VERSION-$SHA/" youtubeUnblock/Makefile
+          sed -i "s/PKG_REV:=.*$/PKG_REV:=$SHA/;s/PKG_VERSION:=.*$/PKG_VERSION:=$VERSION-$RELEASE-$SHA/" youtubeUnblock/Makefile
 
       - name: Build packages
         id: build
@@ -361,6 +368,7 @@ jobs:
         shell: bash
         env:
           VERSION: ${{ needs.prepare.outputs.version }}
+          RELEASE: ${{ needs.prepare.outputs.release }}
           SHA: ${{ needs.prepare.outputs.sha }}
         run: |
           mkdir output
@@ -368,7 +376,7 @@ jobs:
           rm -rf youtubeUnblock || true
           mkdir youtubeUnblock
           bash -c "cp -r ./output/* youtubeUnblock"
-          tar -czvf youtubeUnblock-$VERSION-$SHA-${{ matrix.arch }}-entware.tar.gz youtubeUnblock
+          tar -czvf youtubeUnblock-$VERSION-$RELEASE-$SHA-${{ matrix.arch }}-entware.tar.gz youtubeUnblock
 
       - name: Upload packages
         if: steps.build.outcome == 'success'
@@ -380,7 +388,7 @@ jobs:
 
   pre-release:
     if: github.event_name != 'pull_request' && github.ref_name == 'main'
-    needs: [build-static, build-static-cross, build-openwrt, build-entware]
+    needs: [build-static, build-static-cross, build-openwrt, build-entware, build-openwrt-luci]
     permissions:
       contents: write
     runs-on: ubuntu-latest
