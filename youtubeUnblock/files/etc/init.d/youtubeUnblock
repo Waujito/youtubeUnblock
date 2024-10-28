@@ -70,11 +70,16 @@ parse_options() {
 	else
 		append_commasep_list "$config" sni_domains
 	fi
-	
-	append_opts "$config" queue_num fake_sni_seq_len faking_strategy faking_ttl fake_seq_offset frag frag_sni_pos fk_winsize synfake_len seg2delay packet_mark fake_sni_type fake_custom_payload
-	append_commasep_list "$config" exclude_domains 
-	append_opts_boolean "$config" fake_sni frag_sni_reverse frag_sni_faked frag_middle_sni synfake
-	append_opts_btoggler "$config" quic_drop silent trace no_gso no_ipv6
+
+	append_opts "$config" queue_num fake_sni_seq_len faking_strategy faking_ttl fake_seq_offset frag frag_sni_pos fk_winsize synfake_len seg2delay packet_mark fake_sni_ty
+        append_commasep_list "$config" exclude_domains
+        append_opts_boolean "$config" fake_sni frag_sni_reverse frag_sni_faked frag_middle_sni synfake
+        append_opts_btoggler "$config" quic_drop silent trace no_gso no_ipv6
+
+        config_get value "$config" post_args
+        if [ -n "$value" ]; then
+                OPTS="$OPTS $value"
+        fi
 }
 
 # Openwrt procd script: https://openwrt.org/docs/guide-developer/procd-init-script-example

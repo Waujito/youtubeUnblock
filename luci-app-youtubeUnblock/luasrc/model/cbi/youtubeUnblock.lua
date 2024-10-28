@@ -97,6 +97,8 @@ o:depends("all_domains", 0)
 
 o = s:option(DynamicList, "exclude_domains", "excluded domains", "List of domains to be excluded from targetting.")
 
+o = s:option(Value, "post_args", "Post args", "Anything you pass here will be passed to youtubeUnblock as raw args")
+
 local bs = m:section(NamedSection, "youtubeUnblock", "youtubeUnblock", "Service status")
 
 local asts = sys.call("/etc/init.d/youtubeUnblock enabled &>/dev/null")
