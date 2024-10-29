@@ -110,8 +110,13 @@ static long parse_numeric_option(const char* value) {
 }
 
 void print_version() {
-  	printf("youtubeUnblock\n");	
-	printf("Bypasses deep packet inspection systems that relies on SNI\n");
+  	printf("youtubeUnblock" 
+#if defined(PKG_VERSION)
+	" " PKG_VERSION
+#endif
+	"\n"
+	);	
+	printf("Bypasses deep packet inspection systems that rely on SNI\n");
 	printf("\n");
 }
 
@@ -477,7 +482,7 @@ void print_welcome() {
 	}
 	
 	printf("Detected %d config sections\n", config.custom_configs_len + 1);
-	printf("The sections will be processed in ordred they goes in this output");
+	printf("The sections will be processed in ordred they goes in this output\n");
 
 	ITER_CONFIG_SECTIONS(section) {
 		int section_number = CONFIG_SECTION_NUMBER(section);

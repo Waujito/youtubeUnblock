@@ -21,8 +21,11 @@
 #include "utils.h"
 #include "logging.h"
 
+#if defined(PKG_VERSION)
+MODULE_VERSION(PKG_VERSION);
+#endif
+
 MODULE_LICENSE("GPL");
-MODULE_VERSION("0.3.2");
 MODULE_AUTHOR("Vadim Vetrov <vetrovvd@gmail.com>");
 MODULE_DESCRIPTION("Linux kernel module for youtubeUnblock");
 
@@ -80,7 +83,7 @@ static int send_raw_ipv4(const uint8_t *pkt, uint32_t pktlen) {
 	iov.iov_base = (__u8 *)pkt;
 	iov.iov_len = pktlen;
 
-	msg.msg_flags = 0;
+	msg.msg_flags = MSG_DONTWAIT;
 	msg.msg_name = &daddr;
 	msg.msg_namelen = sizeof(struct sockaddr_in);
 	msg.msg_control = NULL;
@@ -140,7 +143,7 @@ static int send_raw_ipv6(const uint8_t *pkt, uint32_t pktlen) {
 	iov.iov_base = (__u8 *)pkt;
 	iov.iov_len = pktlen;
 
-	msg.msg_flags = 0;
+	msg.msg_flags = MSG_DONTWAIT;
 	msg.msg_name = &daddr;
 	msg.msg_namelen = sizeof(struct sockaddr_in6);
 	msg.msg_control = NULL;

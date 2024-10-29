@@ -17,6 +17,8 @@ else
 	override CFLAGS += -Wall -Wpedantic -Wno-unused-variable -std=gnu11
 endif
 
+override CFLAGS += -DPKG_VERSION=\"$(PKG_FULLVERSION)\"
+
 LIBNFNETLINK_CFLAGS := -I$(DEPSDIR)/include
 LIBNFNETLINK_LIBS := -L$(DEPSDIR)/lib
 LIBMNL_CFLAGS := -I$(DEPSDIR)/include

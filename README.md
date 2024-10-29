@@ -21,6 +21,7 @@
       - [Building on host system](#building-on-host-system)
       - [Building on any kernel](#building-on-any-kernel)
       - [Building with openwrt SDK](#building-with-openwrt-sdk)
+  - [Padavan](#padavan)
 
 
 # youtubeUnblock
@@ -390,4 +391,11 @@ make package/kyoutubeUnblock/compile V=s
 
 When the commands finish, the module is ready. Find it with `find bin -name "kmod-youtubeUnblock*.ipk"`, copy to your host and install to the router via gui software interface. The module should start immediately. If not, do `modprobe kyoutubeUnblock`.
 
+
+## Padavan
+YoutubeUnblock may also run on Padavan. [Check the manual here\[rus\]](Padavan.md)
+
+
  >If you have any questions/suggestions/problems feel free to open an [issue](https://github.com/Waujito/youtubeUnblock/issues).
+
+

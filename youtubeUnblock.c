@@ -203,7 +203,7 @@ static int send_raw_ipv4(const uint8_t *pkt, uint32_t pktlen) {
 		pthread_mutex_lock(&rawsocket_lock);
 
 	int sent = sendto(rawsocket, 
-	    pkt, pktlen, 0, 
+	    pkt, pktlen, MSG_DONTWAIT, 
 	    (struct sockaddr *)&daddr, sizeof(daddr));
 
 	if (config.threads != 1)
@@ -238,7 +238,7 @@ static int send_raw_ipv6(const uint8_t *pkt, uint32_t pktlen) {
 		pthread_mutex_lock(&rawsocket_lock);
 
 	int sent = sendto(raw6socket, 
-	    pkt, pktlen, 0, 
+	    pkt, pktlen, MSG_DONTWAIT, 
 	    (struct sockaddr *)&daddr, sizeof(daddr));
 
 	lgtrace_addp("rawsocket sent %d", sent);
@@ -259,16 +259,27 @@ static int send_raw_socket(const uint8_t *pkt, uint32_t pktlen) {
 		if (config.verbose)
 			printf("Split packet!\n");
 
-		uint8_t buff1[MNL_SOCKET_BUFFER_SIZE];
+		NETBUF_ALLOC(buff1, MNL_SOCKET_BUFFER_SIZE);
+		if (!NETBUF_CHECK(buff1)) {
+			lgerror("Allocation error", -ENOMEM);
+			return -ENOMEM;
+		}
+
+		NETBUF_ALLOC(buff2, MNL_SOCKET_BUFFER_SIZE);
+		if (!NETBUF_CHECK(buff2)) {
+			lgerror("Allocation error", -ENOMEM);
+			NETBUF_FREE(buff1);
+			return -ENOMEM;
+		}
+
 		uint32_t buff1_size = MNL_SOCKET_BUFFER_SIZE;
-		uint8_t buff2[MNL_SOCKET_BUFFER_SIZE];
 		uint32_t buff2_size = MNL_SOCKET_BUFFER_SIZE;
 
 		if ((ret = tcp_frag(pkt, pktlen, AVAILABLE_MTU-128,
 			buff1, &buff1_size, buff2, &buff2_size)) < 0) {
 
 			errno = -ret;
-			return ret;
+			goto free_buffs;
 		}
 
 		int sent = 0;
@@ -276,16 +287,23 @@ static int send_raw_socket(const uint8_t *pkt, uint32_t pktlen) {
 
 		if (status >= 0) sent += status;
 		else {
-			return status;
+			ret = status;
+			goto free_buffs;
 		}
 
 		status = send_raw_socket(buff2, buff2_size);
 		if (status >= 0) sent += status;
 		else {
-			return status;
+			ret = status;
+			goto free_buffs;
 		}
 
-		return sent;
+		ret = sent;
+
+free_buffs:
+		NETBUF_FREE(buff1)
+		NETBUF_FREE(buff2)
+		return ret;
 	}
 	
 	int ipvx = netproto_version(pkt, pktlen);
@@ -452,7 +470,51 @@ int init_queue(int queue_num) {
 	uint32_t portid = mnl_socket_get_portid(nl);
 
 	struct nlmsghdr *nlh;
-	char buf[BUF_SIZE];
+	NETBUF_ALLOC(bbuf, BUF_SIZE);
+	if (!NETBUF_CHECK(bbuf)) {
+		lgerror("Allocation error", -ENOMEM);
+		goto die_alloc;
+	}
+	char *buf = (char *)bbuf;
+
+	/* Support for kernels versions < 3.8 */
+	// Obsolete and ignored in kernel version 3.8
+	// https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/commit/?id=0360ae412d09bc6f4864c801effcb20bfd84520e
+
+	nlh = nfq_nlmsg_put(buf, NFQNL_MSG_CONFIG, queue_num);
+	nfq_nlmsg_cfg_put_cmd(nlh, PF_INET, NFQNL_CFG_CMD_PF_UNBIND);
+
+	if (mnl_socket_sendto(nl, nlh, nlh->nlmsg_len) < 0) {
+		perror("mnl_socket_send");
+		goto die;
+	}
+
+	nlh = nfq_nlmsg_put(buf, NFQNL_MSG_CONFIG, queue_num);
+	nfq_nlmsg_cfg_put_cmd(nlh, PF_INET, NFQNL_CFG_CMD_PF_BIND);
+
+	if (mnl_socket_sendto(nl, nlh, nlh->nlmsg_len) < 0) {
+		perror("mnl_socket_send");
+		goto die;
+	}
+
+	if (config.use_ipv6) {
+		nlh = nfq_nlmsg_put(buf, NFQNL_MSG_CONFIG, queue_num);
+		nfq_nlmsg_cfg_put_cmd(nlh, PF_INET6, NFQNL_CFG_CMD_PF_UNBIND);
+
+		if (mnl_socket_sendto(nl, nlh, nlh->nlmsg_len) < 0) {
+			perror("mnl_socket_send");
+			goto die;
+		}
+
+		nlh = nfq_nlmsg_put(buf, NFQNL_MSG_CONFIG, queue_num);
+		nfq_nlmsg_cfg_put_cmd(nlh, PF_INET6, NFQNL_CFG_CMD_PF_BIND);
+
+		if (mnl_socket_sendto(nl, nlh, nlh->nlmsg_len) < 0) {
+			perror("mnl_socket_send");
+			goto die;
+		}
+	}
+	/* End of support for kernel versions < 3.8 */
 
 	nlh = nfq_nlmsg_put(buf, NFQNL_MSG_CONFIG, queue_num);
 	nfq_nlmsg_cfg_put_cmd(nlh, AF_INET, NFQNL_CFG_CMD_BIND);
@@ -510,10 +572,13 @@ int init_queue(int queue_num) {
 	}
 
 
+	NETBUF_FREE(bbuf)
 	close_socket(&nl);
 	return 0;
 
 die:
+	NETBUF_FREE(bbuf)
+die_alloc:
 	close_socket(&nl);
 	return -1;
 }
