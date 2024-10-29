@@ -236,7 +236,7 @@ Available flags:
 
 - `--no-ipv6` Disables support for ipv6. May be useful if you don't want for ipv6 socket to be opened.
 
-- `--threads=<threads number>` Specifies the amount of threads you want to be running for your program. This defaults to **1** and shouldn't be edited for normal use. If you have performance issues, consult [performance chaptr](https://github.com/Waujito/youtubeUnblock?tab=readme-ov-file#performance)
+- `--threads=<threads number>` Specifies the amount of threads you want to be running for your program. This defaults to **1** and shouldn't be edited for normal use. But if you really want multiple queue instances of youtubeUnblock, note that you should change --queue-num to --queue balance. For example, with 4 threads, use `--queue-balance 537:540` on iptables and `queue num 537-540` on nftables.
 
 - `--packet-mark=<mark>` Use this option if youtubeUnblock conflicts with other systems rely on packet mark. Note that you may want to change accept rule for iptables to follow the mark.
 
