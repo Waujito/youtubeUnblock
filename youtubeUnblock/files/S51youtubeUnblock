@@ -47,7 +47,7 @@ start() {
 	kernel_modules_load
 
 	if [ $IPV6 -eq 0 ]; then
-		ARGS+=" --no-ipv6"
+		ARGS="$ARGS --no-ipv6"
 	fi
 	
 	$PROCS $ARGS >/dev/null 2>&1 &
@@ -79,7 +79,7 @@ _iptables()
 	$CMD -C $RULE 2>/dev/null
 	exists=$(( ! $? ))
 
-	if [[ $ACTION == "-A" ]] || [[ $ACTION == "-I" ]]
+	if [ "$ACTION" = "-A" -o "$ACTION" = "-I" ]
 	then
 		if [ $exists -eq 0 ]; then
 			$ARG || exit 1
