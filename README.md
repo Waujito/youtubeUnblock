@@ -88,6 +88,8 @@ Now we go to the configuration. For OpenWRT here is configuration via [UCI](http
 
 For **LuCI** aka **GUI** aka **web-interface of router** you should install **luci-app-youtubeUnblock** package like you did it with the normal youtubeUnblock package. Note, that lists of official opkg feeds should be loaded (**Do it with Update lists option**).
 
+If you got ` * pkg_hash_check_unresolved: cannot find dependency luci-lua-runtime for luci-app-youtubeUnblock` error, you are using old openwrt. Install [this dummy package](https://github.com/xiaorouji/openwrt-passwall/files/12605732/luci-lua-runtime_all_fake.zip). [Check this comment](https://github.com/Waujito/youtubeUnblock/issues/168#issuecomment-2449227547) for more details.
+
 LuCI configuration lives in **Services->youtubeUnblock** section. It is self descriptive, with description for each flag. Note, that after you push `Save & Apply` button, the configuration is applied automatically and the service is restarted.
 
 UCI configuration is available in /etc/config/youtubeUnblock file, in section `youtubeUnblock.youtubeUnblock`. The configuration is done with [flags](#flags). Note, that names of flags are not the same: you should replace `-` with `_`, you shouldn't use leading `--` for flag. Also you will enable toggle flags (without parameters) with `1`. 
