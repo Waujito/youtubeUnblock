@@ -482,7 +482,7 @@ void print_welcome() {
 	}
 	
 	printf("Detected %d config sections\n", config.custom_configs_len + 1);
-	printf("The sections will be processed in ordred they goes in this output\n");
+	printf("The sections will be processed in order they goes in this output\n");
 
 	ITER_CONFIG_SECTIONS(section) {
 		int section_number = CONFIG_SECTION_NUMBER(section);
@@ -558,7 +558,7 @@ void print_welcome() {
 		}
 
 		if (section->all_domains) {
-			printf("All Client Hello will be targetted by youtubeUnblock!\n");
+			printf("All Client Hello will be targeted by youtubeUnblock!\n");
 		} else {
 			printf("Target sni domains: %s\n", section->domains_str);
 		}
