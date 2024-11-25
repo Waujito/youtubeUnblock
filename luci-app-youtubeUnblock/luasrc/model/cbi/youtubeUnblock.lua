@@ -10,7 +10,7 @@ o = s:option(ListValue, "faking_strategy", "faking strategy",
 	[[
 	This flag determines the strategy of fake packets invalidation. 
 	<ul style="list-style: disc">
-	<li><code>randseq</code> specifies that random sequence/acknowledgemend random will be set. This option may be handled by provider which uses conntrack with drop on invalid conntrack state firewall rule enabled. </li>
+	<li><code>randseq</code> specifies that random sequence/acknowledgment random will be set. This option may be handled by provider which uses conntrack with drop on invalid conntrack state firewall rule enabled. </li>
 	<li><code>ttl</code> specifies that packet will be invalidated after --faking-ttl=n hops. ttl is better but may cause issues if unconfigured. </li>
 	<li><code>pastseq</code> is like randseq but sequence number is not random but references the packet sent in the past (before current). </li>
 	<li><code>tcp_check</code> will invalidate faking packet with invalid checksum. May be handled and dropped by some providers/TSPUs.</li>
@@ -95,7 +95,7 @@ o = s:option(Flag, "all_domains", "Target all domains", "Use this option if you 
 o = s:option(DynamicList, "sni_domains", "sni domains", "List of domains you want to be handled by SNI.")
 o:depends("all_domains", 0)
 
-o = s:option(DynamicList, "exclude_domains", "excluded domains", "List of domains to be excluded from targetting.")
+o = s:option(DynamicList, "exclude_domains", "excluded domains", "List of domains to be excluded from targeting.")
 
 o = s:option(Value, "post_args", "Post args", "Anything you pass here will be passed to youtubeUnblock as raw args")
 
