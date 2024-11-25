@@ -187,7 +187,7 @@ Available flags:
 
 - `--sni-domains=<comma separated domain list>|all` List of domains you want to be handled by SNI. Use this string if you want to change default domain list. Defaults to `googlevideo.com,ggpht.com,ytimg.com,youtube.com,play.google.com,youtu.be,googleapis.com,googleusercontent.com,gstatic.com,l.google.com`. You can pass **all** if you want for every *ClientHello* to be handled. You can exclude some domains with `--exclude-domains` flag.
 
-- `--exclude-domains=<comma separated domain list>` List of domains to be excluded from targetting.
+- `--exclude-domains=<comma separated domain list>` List of domains to be excluded from targeting.
 
 - `--queue-num=<number of netfilter queue>` The number of netfilter queue **youtubeUnblock** will be linked to. Defaults to **537**.
 
@@ -199,7 +199,7 @@ Available flags:
 - `--fake-custom-payload=<payload>` Useful with `--fake-sni-type=custom`. You should specify the payload for fake message manually. Use hex format: `--fake-custom-payload=0001020304` mean that 5 bytes sequence: `0x00`, `0x01`, `0x02`, `0x03`, `0x04` used as fake.
 
 - `--faking-strategy={randseq|ttl|tcp_check|pastseq|md5sum}` This flag determines the strategy of fake packets invalidation. Defaults to `randseq`
-  - `randseq` specifies that random sequence/acknowledgemend random will be set. This option may be handled by provider which uses *conntrack* with drop on invalid *conntrack* state firewall rule enabled. 
+  - `randseq` specifies that random sequence/acknowledgment random will be set. This option may be handled by provider which uses *conntrack* with drop on invalid *conntrack* state firewall rule enabled. 
   - `ttl` specifies that packet will be invalidated after `--faking-ttl=n` hops. `ttl` is better but may cause issues if unconfigured. 
   - `pastseq` is like `randseq` but sequence number is not random but references the packet sent in the past (before current).
   - `tcp_check` will invalidate faking packet with invalid checksum. May be handled and dropped by some providers/TSPUs.

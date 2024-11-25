@@ -558,7 +558,7 @@ void print_welcome() {
 		}
 
 		if (section->all_domains) {
-			printf("All Client Hello will be targetted by youtubeUnblock!\n");
+			printf("All Client Hello will be targeted by youtubeUnblock!\n");
 		} else {
 			printf("Target sni domains: %s\n", section->domains_str);
 		}
