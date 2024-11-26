@@ -129,7 +129,7 @@ jobs:
         run: |
           mkdir -p $HOME/tools
           gh api repos/$REPO/releases/latest --jq '.tag_name' |\
-            xargs -I{} wget -qO- https://github.com/$REPO/releases/download/{}/$TOOL.tgz | tar -C $HOME/tools -xz || exit 1
+            xargs -I{} wget -qO- https://github.com/$REPO/releases/download/{}/$TOOL.tar.xz | tar -C $HOME/tools -xJ || exit 1
           [ -d "$HOME/tools/$TOOL/bin" ] && echo "$HOME/tools/$TOOL/bin" >> $GITHUB_PATH
 
       - name: Build
@@ -210,6 +210,16 @@ jobs:
         run: |
           sed -i "s/PKG_REV:=.*$/PKG_REV:=$SHA/;s/PKG_VERSION:=.*$/PKG_VERSION:=$VERSION-$RELEASE-$SHA/" youtubeUnblock/Makefile
 
+      - name: Initilalize SDK
+        id: init_sdk
+        env:
+          VERSION: ${{ needs.prepare.outputs.version }}
+          RELEASE: ${{ needs.prepare.outputs.release }}
+          SHA: ${{ needs.prepare.outputs.sha }}
+        working-directory: /builder
+        run: |
+          HOME=/builder ./setup.sh
+
       - name: Build packages
         id: build
         env:
@@ -253,6 +263,16 @@ jobs:
           SHA: ${{ needs.prepare.outputs.sha }}
         run: |
           sed -i "s/PKG_REV:=.*$/PKG_REV:=$SHA/;s/PKG_VERSION:=.*$/PKG_VERSION:=$VERSION-$RELEASE-$SHA/" youtubeUnblock/Makefile
+
+      - name: Initilalize SDK
+        id: init_sdk
+        env:
+          VERSION: ${{ needs.prepare.outputs.version }}
+          RELEASE: ${{ needs.prepare.outputs.release }}
+          SHA: ${{ needs.prepare.outputs.sha }}
+        working-directory: /builder
+        run: |
+          HOME=/builder ./setup.sh
 
       - name: Build packages
         id: build
