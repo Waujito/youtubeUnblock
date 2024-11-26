@@ -162,12 +162,12 @@ static int send_raw_socket(const uint8_t *pkt, uint32_t pktlen) {
 
 		NETBUF_ALLOC(buff1, MAX_PACKET_SIZE);
 		if (!NETBUF_CHECK(buff1)) {
-			lgerror("Allocation error", -ENOMEM);
+			lgerror(-ENOMEM, "Allocation error");
 			return -ENOMEM;
 		}
 		NETBUF_ALLOC(buff2, MAX_PACKET_SIZE);
 		if (!NETBUF_CHECK(buff2)) {
-			lgerror("Allocation error", -ENOMEM);
+			lgerror(-ENOMEM, "Allocation error");
 			NETBUF_FREE(buff2);
 			return -ENOMEM;
 		}
@@ -309,7 +309,7 @@ static NF_CALLBACK(ykb_nf_hook, skb) {
 
 	ret = skb_linearize(skb);
 	if (ret < 0) {
-		lgerror("Cannot linearize", ret);
+		lgerror(ret, "Cannot linearize");
 		goto accept;
 	}
 
@@ -360,7 +360,7 @@ static int __init ykb_init(void) {
 		for_each_net(n) {
 			ret = nf_register_net_hook(n, &ykb6_nf_reg);
 			if (ret < 0) 
-				lgerror("bad rat",ret);
+				lgerror(ret, "bad rat");
 		}
 #else
 		nf_register_hook(&ykb6_nf_reg);
@@ -374,7 +374,7 @@ static int __init ykb_init(void) {
 	for_each_net(n) {
 		ret = nf_register_net_hook(n, &ykb_nf_reg);
 		if (ret < 0) 
-			lgerror("bad rat",ret);
+			lgerror(ret, "bad rat");
 	}
 #else
 	nf_register_hook(&ykb_nf_reg);

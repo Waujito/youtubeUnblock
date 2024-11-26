@@ -77,6 +77,7 @@ struct config_t {
 	int daemonize;
 	// Same as daemon() noclose
 	int noclose;
+	int syslog;
 
 #define VERBOSE_INFO	0
 #define VERBOSE_DEBUG	1

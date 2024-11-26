@@ -228,12 +228,12 @@ brute:
 
 			NETBUF_ALLOC(buf, MAX_PACKET_SIZE);
 			if (!NETBUF_CHECK(buf)) {
-				lgerror("Allocation error", -ENOMEM);
+				lgerror(-ENOMEM, "Allocation error");
 				goto out;
 			}
 			NETBUF_ALLOC(nzbuf, MAX_PACKET_SIZE * sizeof(int));
 			if (!NETBUF_CHECK(nzbuf)) {
-				lgerror("Allocation error", -ENOMEM);
+				lgerror(-ENOMEM, "Allocation error");
 				NETBUF_FREE(buf);
 				goto out;
 			}
@@ -324,7 +324,7 @@ int gen_fake_sni(struct fake_type type,
 #if _NO_GETRANDOM
 			ret = open("/dev/urandom", O_RDONLY);
 			if (ret < 0) {
-				lgerror("Unable to open /dev/urandom", ret);
+				lgerror(ret, "Unable to open /dev/urandom");
 				return ret;
 			}
 			

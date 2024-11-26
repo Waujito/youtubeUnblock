@@ -241,7 +241,9 @@ Available flags:
 
 - `--threads=<threads number>` Specifies the amount of threads you want to be running for your program. This defaults to **1** and shouldn't be edited for normal use. But if you really want multiple queue instances of youtubeUnblock, note that you should change --queue-num to --queue balance. For example, with 4 threads, use `--queue-balance 537:540` on iptables and `queue num 537-540` on nftables.
 
-- `--daemonize` Daemonizes the youtubeUnblock (forks and detaches it from the shell). Terminate the program with `killall youtubeUnblock`.
+- `--daemonize` Daemonizes the youtubeUnblock (forks and detaches it from the shell). Terminate the program with `killall youtubeUnblock`. If you want to track the logs of youtubeUnblock in logread or journalctl, use **--syslog** flag.
+
+- `--syslog` Redirects logs to the system log. You can read it with `journalctl` or `logread`.
 
 - `--noclose` Usable only with `--daemonize`. Will not redirect io streams to /dev/null.
 
