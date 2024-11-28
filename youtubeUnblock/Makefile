@@ -56,7 +56,7 @@ endef
 
 define Package/youtubeUnblock/postinst
 [ -n "$${IPKG_INSTROOT}" ] || { \
-	/etc/init.d/firewall reload 2>1
+	/etc/init.d/firewall reload 2>&1
 	exit 0
 }
 endef
