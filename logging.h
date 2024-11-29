@@ -3,7 +3,6 @@
 #include "config.h"
 
 #define LOG_LEVEL (config.verbose)
-#define USE_SYSLOG (config.syslog)
 
 #ifdef KERNEL_SPACE
 #include <linux/kernel.h>
@@ -11,12 +10,16 @@
 #define printf pr_info
 #define perror pr_err
 
-#define log_message(level, msg, ...) \
-(printf(msg, ##__VA_ARGS__))
+#define LOG_ERR KERN_ERR
+#define LOG_INFO KERN_INFO
+#define LOG_WARN KERN_WARNING
 
-#define lgerror(ret, msg, ...) __extension__ ({		\
-	pr_err(msg ": %d\n", ##__VA_ARGS__, ret);	\
-})
+#define log_message(level, msg, ...) \
+	(printk(level msg, ##__VA_ARGS__))
+
+#define lgerror(ret, msg, ...) \
+	(log_message(LOG_ERR, msg ": %d\n", ##__VA_ARGS__, ret))
+
 #else
 #include <stdio.h> // IWYU pragma: export
 #include <errno.h>
