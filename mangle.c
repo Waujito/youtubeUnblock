@@ -339,11 +339,14 @@ int process_udp_packet(const struct section_config_t *section, const uint8_t *pk
 	}
 
 	if (dlen > 10 && config.verbose >= VERBOSE_TRACE) {
-		lginfo("UDP payload start: [ ");
+		char buf[50];
+		char *bufpt = buf;
+		bufpt += sprintf(bufpt, "UDP payload start: [ ");
 		for (int i = 0; i < 10; i++) {
-			lginfo("%02x ", data[i]);
+			bufpt += sprintf(bufpt, "%02x ", data[i]);
 		}
-		lginfo("], ");
+		bufpt += sprintf(bufpt, "]");
+		lgtrace_addp("%s", buf); 
 	}
 
 
