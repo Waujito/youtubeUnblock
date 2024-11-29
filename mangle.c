@@ -112,7 +112,7 @@ int process_tcp_packet(const struct section_config_t *section, const uint8_t *ra
 
 		NETBUF_ALLOC(payload, MAX_PACKET_SIZE);
 		if (!NETBUF_CHECK(payload)) {
-			lgerror("Allocation error", -ENOMEM);
+			lgerror(-ENOMEM, "Allocation error");
 			goto accept;
 		}
 
@@ -142,7 +142,7 @@ int process_tcp_packet(const struct section_config_t *section, const uint8_t *ra
 
 		ret = instance_config.send_raw_packet(payload, iph_len + tcph_len + fake_len);
 		if (ret < 0) {
-			lgerror("send_syn_altered", ret);
+			lgerror(ret, "send_syn_altered");
 
 			NETBUF_FREE(payload);
 			goto accept;
@@ -167,7 +167,7 @@ int process_tcp_packet(const struct section_config_t *section, const uint8_t *ra
 		uint32_t payload_len = raw_payload_len;
 		NETBUF_ALLOC(payload, MAX_PACKET_SIZE);
 		if (!NETBUF_CHECK(payload)) {
-			lgerror("Allocation error", -ENOMEM);
+			lgerror(-ENOMEM, "Allocation error");
 			goto accept; 
 		}
 
@@ -185,7 +185,7 @@ int process_tcp_packet(const struct section_config_t *section, const uint8_t *ra
 				      &data, &dlen);
 
 		if (ret < 0) {
-			lgerror("tcp_payload_split in targ_sni", ret);
+			lgerror(ret, "tcp_payload_split in targ_sni");
 			goto accept_lc;
 		}
 
@@ -201,7 +201,7 @@ int process_tcp_packet(const struct section_config_t *section, const uint8_t *ra
 				      &iph, &iph_len, &tcph, &tcph_len,
 				      &data, &dlen);
 			if (ret < 0) {
-				lgerror("seqovl_packet delta %d", ret, delta);
+				lgerror(ret, "seqovl_packet delta %d", delta);
 			}
 		}
 
@@ -241,7 +241,7 @@ int process_tcp_packet(const struct section_config_t *section, const uint8_t *ra
 
 				ret = send_tcp_frags(section, payload, payload_len, poses, cnt, 0);
 				if (ret < 0) {
-					lgerror("tcp4 send frags", ret);
+					lgerror(ret, "tcp4 send frags");
 					goto accept_lc;
 				}
 
@@ -275,20 +275,20 @@ int process_tcp_packet(const struct section_config_t *section, const uint8_t *ra
 
 				ret = send_ip4_frags(section, payload, payload_len, poses, cnt, 0);
 				if (ret < 0) {
-					lgerror("ip4 send frags", ret);
+					lgerror(ret, "ip4 send frags");
 					goto accept_lc;
 				}
 
 				goto drop_lc;
 			} else {
-				printf("WARNING: IP fragmentation is supported only for IPv4\n");	
+				lginfo("WARNING: IP fragmentation is supported only for IPv4\n");	
 				goto default_send;
 			}
 			default:
 			default_send:
 				ret = instance_config.send_raw_packet(payload, payload_len);
 				if (ret < 0) {
-					lgerror("raw pack send", ret);
+					lgerror(ret, "raw pack send");
 					goto accept_lc;
 				}
 
@@ -339,11 +339,14 @@ int process_udp_packet(const struct section_config_t *section, const uint8_t *pk
 	}
 
 	if (dlen > 10 && config.verbose >= VERBOSE_TRACE) {
-		printf("UDP payload start: [ ");
+		char buf[50];
+		char *bufpt = buf;
+		bufpt += sprintf(bufpt, "UDP payload start: [ ");
 		for (int i = 0; i < 10; i++) {
-			printf("%02x ", data[i]);
+			bufpt += sprintf(bufpt, "%02x ", data[i]);
 		}
-		printf("], ");
+		bufpt += sprintf(bufpt, "]");
+		lgtrace_addp("%s", buf); 
 	}
 
 
@@ -405,7 +408,7 @@ int process_udp_packet(const struct section_config_t *section, const uint8_t *pk
 
 			goto drop;
 		} else {
-			printf("WARNING: IP fragmentation is supported only for IPv4\n");	
+			lginfo("WARNING: IP fragmentation is supported only for IPv4\n");	
 			goto accept;
 		}
 	}
@@ -442,20 +445,20 @@ int send_ip4_frags(const struct section_config_t *section, const uint8_t *packet
 	} else {
 		NETBUF_ALLOC(frag1, MAX_PACKET_SIZE);
 		if (!NETBUF_CHECK(frag1)) {
-			lgerror("Allocation error", -ENOMEM);
+			lgerror(-ENOMEM, "Allocation error");
 			return -ENOMEM;
 		}
 
 		NETBUF_ALLOC(frag2, MAX_PACKET_SIZE);
 		if (!NETBUF_CHECK(frag2)) {
-			lgerror("Allocation error", -ENOMEM);
+			lgerror(-ENOMEM, "Allocation error");
 			NETBUF_FREE(frag1);
 			return -ENOMEM;
 		}
 
 		NETBUF_ALLOC(fake_pad, MAX_PACKET_SIZE);
 		if (!NETBUF_CHECK(fake_pad)) {
-			lgerror("Allocation error", -ENOMEM);
+			lgerror(-ENOMEM, "Allocation error");
 			NETBUF_FREE(frag1);
 			NETBUF_FREE(frag2);
 			return -ENOMEM;
@@ -468,7 +471,7 @@ int send_ip4_frags(const struct section_config_t *section, const uint8_t *packet
 		int ret;
 
 		if (dvs > poses[0]) {
-			lgerror("send_frags: Recursive dvs(%d) is more than poses0(%d)", -EINVAL, dvs, poses[0]);
+			lgerror(-EINVAL, "send_frags: Recursive dvs(%d) is more than poses0(%d)", dvs, poses[0]);
 			ret = -EINVAL;
 			goto erret_lc;
 		}
@@ -480,7 +483,7 @@ int send_ip4_frags(const struct section_config_t *section, const uint8_t *packet
 			frag1, &f1len, frag2, &f2len);
 
 		if (ret < 0) {
-			lgerror("send_frags: frag: with context packet with size %d, position: %d, recursive dvs: %d", ret, pktlen, poses[0], dvs);
+			lgerror(ret, "send_frags: frag: with context packet with size %d, position: %d, recursive dvs: %d", pktlen, poses[0], dvs);
 			goto erret_lc;
 		}
 
@@ -571,13 +574,13 @@ int send_tcp_frags(const struct section_config_t *section, const uint8_t *packet
 	} else {
 		NETBUF_ALLOC(frag1, MAX_PACKET_SIZE);
 		if (!NETBUF_CHECK(frag1)) {
-			lgerror("Allocation error", -ENOMEM);
+			lgerror(-ENOMEM, "Allocation error");
 			return -ENOMEM;
 		}
 
 		NETBUF_ALLOC(frag2, MAX_PACKET_SIZE);
 		if (!NETBUF_CHECK(frag2)) {
-			lgerror("Allocation error", -ENOMEM);
+			lgerror(-ENOMEM, "Allocation error");
 			NETBUF_FREE(frag1);
 			return -ENOMEM;
 		}
@@ -588,7 +591,7 @@ int send_tcp_frags(const struct section_config_t *section, const uint8_t *packet
 		int ret;
 
 		if (dvs > poses[0]) {
-			lgerror("send_frags: Recursive dvs(%d) is more than poses0(%d)", -EINVAL, dvs, poses[0]);
+			lgerror(-EINVAL, "send_frags: Recursive dvs(%d) is more than poses0(%d)", dvs, poses[0]);
 			ret = -EINVAL;
 			goto erret_lc;
 		}
@@ -601,7 +604,7 @@ int send_tcp_frags(const struct section_config_t *section, const uint8_t *packet
 		lgtrace_addp("Packet split in %d bytes position of payload start, dvs: %d to two packets of %d and %d lengths", poses[0], dvs, f1len, f2len);
 
 		if (ret < 0) {
-			lgerror("send_frags: tcp_frag: with context packet with size %d, position: %d, recursive dvs: %d", ret, pktlen, poses[0], dvs);
+			lgerror(ret, "send_frags: tcp_frag: with context packet with size %d, position: %d, recursive dvs: %d", pktlen, poses[0], dvs);
 			goto erret_lc;
 		}
 
@@ -690,7 +693,7 @@ int post_fake_sni(struct fake_type f_type,
 		for (int i = 0; i < fake_seq_type.sequence_len; i++) {
 			NETBUF_ALLOC(fake_sni, MAX_PACKET_SIZE);
 			if (!NETBUF_CHECK(fake_sni)) {
-				lgerror("Allocation error", -ENOMEM);
+				lgerror(-ENOMEM, "Allocation error");
 				return -ENOMEM;
 			}
 			uint32_t fsn_len = MAX_PACKET_SIZE;
@@ -700,7 +703,7 @@ int post_fake_sni(struct fake_type f_type,
 				fsiph, iph_len, fstcph, tcph_len, 
 				fake_sni, &fsn_len);
 			if (ret < 0) {
-				lgerror("gen_fake_sni", ret);
+				lgerror(ret, "gen_fake_sni");
 				goto erret_lc;
 			}
 
@@ -712,7 +715,7 @@ int post_fake_sni(struct fake_type f_type,
 				ret = instance_config.send_raw_packet(fake_sni, fsn_len);
 			}
 			if (ret < 0) {
-				lgerror("send fake sni", ret);
+				lgerror(ret, "send fake sni");
 				goto erret_lc;
 			}
 			uint32_t iph_len;

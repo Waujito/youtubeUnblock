@@ -8,6 +8,7 @@
 #include <string.h>
 #include "types.h"
 #include "args.h"
+#include "logging.h"
 
 static char custom_fake_buf[MAX_FAKE_SIZE];
 
@@ -21,40 +22,47 @@ struct config_t config = {
 	.use_gso = true,
 
 	.default_config = default_section_config,
-	.custom_configs_len = 0
+	.custom_configs_len = 0,
+
+	.daemonize = 0,
+	.noclose = 0,
+	.syslog = 0,
 };
 
-#define OPT_SNI_DOMAINS		1
-#define OPT_EXCLUDE_DOMAINS	25
-#define OPT_FAKE_SNI 		2
-#define OPT_FAKING_TTL		3
-#define OPT_FAKING_STRATEGY	10
-#define OPT_FAKE_SNI_SEQ_LEN	11
-#define OPT_FAKE_SNI_TYPE	27
-#define OPT_FAKE_CUSTOM_PAYLOAD	28
-#define OPT_START_SECTION	29
-#define OPT_END_SECTION		30
-#define OPT_FRAG    		4
-#define OPT_FRAG_SNI_REVERSE	12
-#define OPT_FRAG_SNI_FAKED	13
-#define OPT_FRAG_MIDDLE_SNI	18
-#define OPT_FRAG_SNI_POS	19
-#define OPT_FK_WINSIZE		14
-#define OPT_TRACE		15
-#define OPT_QUIC_DROP		16
-#define OPT_SNI_DETECTION	17
-#define OPT_NO_IPV6		20
-#define OPT_FAKE_SEQ_OFFSET	21
-#define OPT_PACKET_MARK 	22
-#define OPT_SYNFAKE	 	23
-#define OPT_SYNFAKE_LEN	 	24
-#define OPT_SEG2DELAY 		5
-#define OPT_THREADS 		6
-#define OPT_SILENT 		7
-#define OPT_NO_GSO 		8
-#define OPT_QUEUE_NUM		9
-
-#define OPT_MAX OPT_END_SECTION
+enum {
+	OPT_SNI_DOMAINS,
+	OPT_EXCLUDE_DOMAINS,
+	OPT_FAKE_SNI,
+	OPT_FAKING_TTL,
+	OPT_FAKING_STRATEGY,
+	OPT_FAKE_SNI_SEQ_LEN,
+	OPT_FAKE_SNI_TYPE,
+	OPT_FAKE_CUSTOM_PAYLOAD,
+	OPT_START_SECTION,
+	OPT_END_SECTION,
+	OPT_DAEMONIZE,
+	OPT_NOCLOSE,
+	OPT_SYSLOG,
+	OPT_FRAG,
+	OPT_FRAG_SNI_REVERSE,
+	OPT_FRAG_SNI_FAKED,
+	OPT_FRAG_MIDDLE_SNI,
+	OPT_FRAG_SNI_POS,
+	OPT_FK_WINSIZE,
+	OPT_TRACE,
+	OPT_QUIC_DROP,
+	OPT_SNI_DETECTION,
+	OPT_NO_IPV6,
+	OPT_FAKE_SEQ_OFFSET,
+	OPT_PACKET_MARK,
+	OPT_SYNFAKE,
+	OPT_SYNFAKE_LEN,
+	OPT_SEG2DELAY,
+	OPT_THREADS,
+	OPT_SILENT,
+	OPT_NO_GSO,
+	OPT_QUEUE_NUM,
+};
 
 static struct option long_opt[] = {
 	{"help",		0, 0, 'h'},
@@ -84,6 +92,9 @@ static struct option long_opt[] = {
 	{"trace",		0, 0, OPT_TRACE},
 	{"no-gso",		0, 0, OPT_NO_GSO},
 	{"no-ipv6",		0, 0, OPT_NO_IPV6},
+	{"daemonize",		0, 0, OPT_DAEMONIZE},
+	{"noclose",		0, 0, OPT_NOCLOSE},
+	{"syslog",		0, 0, OPT_SYSLOG},
 	{"queue-num",		1, 0, OPT_QUEUE_NUM},
 	{"packet-mark",		1, 0, OPT_PACKET_MARK},
 	{"fbegin",		0, 0, OPT_START_SECTION},
@@ -152,6 +163,9 @@ void print_usage(const char *argv0) {
 	printf("\t--trace\n");
 	printf("\t--no-gso\n");
 	printf("\t--no-ipv6\n");
+	printf("\t--daemonize\n");
+	printf("\t--noclose\n");
+	printf("\t--syslog\n");
 	printf("\t--fbegin\n");
 	printf("\t--fend\n");
 	printf("\n");
@@ -201,6 +215,15 @@ int parse_args(int argc, char *argv[]) {
 				goto invalid_opt;
 
 			config.use_ipv6 = 0;
+			break;
+		case OPT_DAEMONIZE:
+			config.daemonize = 1;
+			break;
+		case OPT_NOCLOSE:
+			config.noclose = 1;
+			break;
+		case OPT_SYSLOG:
+			config.syslog = 1;
 			break;
 		case OPT_THREADS:
 			if (section_iter != SECT_ITER_DEFAULT)
@@ -471,96 +494,99 @@ error:
 }
 
 void print_welcome() {
+	if (config.syslog) {
+		printf("Logging to system log\n");
+	}
 	if (config.use_gso) {
-		printf("GSO is enabled\n");
+		lginfo("GSO is enabled\n");
 	}
 
 	if (config.use_ipv6) {
-		printf("IPv6 is enabled\n");
+		lginfo("IPv6 is enabled\n");
 	} else {
-		printf("IPv6 is disabled\n");
+		lginfo("IPv6 is disabled\n");
 	}
 	
-	printf("Detected %d config sections\n", config.custom_configs_len + 1);
-	printf("The sections will be processed in order they goes in this output\n");
+	lginfo("Detected %d config sections\n", config.custom_configs_len + 1);
+	lginfo("The sections will be processed in order they goes in this output\n");
 
 	ITER_CONFIG_SECTIONS(section) {
 		int section_number = CONFIG_SECTION_NUMBER(section);
-		printf("Section #%d\n", section_number);
+		lginfo("Section #%d\n", section_number);
 
 		switch (section->fragmentation_strategy) {
 			case FRAG_STRAT_TCP:
-				printf("Using TCP segmentation\n");
+				lginfo("Using TCP segmentation\n");
 				break;
 			case FRAG_STRAT_IP:
-				printf("Using IP fragmentation\n");
+				lginfo("Using IP fragmentation\n");
 				break;
 			default:
-				printf("SNI fragmentation is disabled\n");
+				lginfo("SNI fragmentation is disabled\n");
 				break;
 		}
 
 		if (section->seg2_delay) {
-			printf("Some outgoing googlevideo request segments will be delayed for %d ms as of seg2_delay define\n", section->seg2_delay);
+			lginfo("Some outgoing googlevideo request segments will be delayed for %d ms as of seg2_delay define\n", section->seg2_delay);
 		}
 
 		if (section->fake_sni) {
-			printf("Fake SNI will be sent before each target client hello\n");
+			lginfo("Fake SNI will be sent before each target client hello\n");
 		} else {
-			printf("Fake SNI is disabled\n");
+			lginfo("Fake SNI is disabled\n");
 		}
 
 		if (section->frag_sni_reverse) {
-			printf("Fragmentation Client Hello will be reversed\n");
+			lginfo("Fragmentation Client Hello will be reversed\n");
 		}
 
 		if (section->frag_sni_faked) {
-			printf("Fooling packets will be sent near the original Client Hello\n");
+			lginfo("Fooling packets will be sent near the original Client Hello\n");
 		}
 
 		if (section->fake_sni_seq_len > 1) {
-			printf("Faking sequence of length %d will be built as fake sni\n", section->fake_sni_seq_len);
+			lginfo("Faking sequence of length %d will be built as fake sni\n", section->fake_sni_seq_len);
 		}
 
 		switch (section->faking_strategy) {
 			case FAKE_STRAT_TTL:
-				printf("TTL faking strategy will be used with TTL %d\n", section->faking_ttl);
+				lginfo("TTL faking strategy will be used with TTL %d\n", section->faking_ttl);
 				break;
 			case FAKE_STRAT_RAND_SEQ:
-				printf("Random seq faking strategy will be used\n");
-				printf("Fake seq offset set to %u\n", section->fakeseq_offset);
+				lginfo("Random seq faking strategy will be used\n");
+				lginfo("Fake seq offset set to %u\n", section->fakeseq_offset);
 				break;
 			case FAKE_STRAT_TCP_CHECK:
-				printf("TCP checksum faking strategy will be used\n");
+				lginfo("TCP checksum faking strategy will be used\n");
 				break;
 			case FAKE_STRAT_PAST_SEQ:
-				printf("Past seq faking strategy will be used\n");
+				lginfo("Past seq faking strategy will be used\n");
 				break;
 			case FAKE_STRAT_TCP_MD5SUM:
-				printf("md5sum faking strategy will be used\n");
+				lginfo("md5sum faking strategy will be used\n");
 				break;
 		}
 
 		if (section->fk_winsize) {
-			printf("Response TCP window will be set to %d with the appropriate scale\n", section->fk_winsize);
+			lginfo("Response TCP window will be set to %d with the appropriate scale\n", section->fk_winsize);
 		}
 
 		if (section->synfake) {
-			printf("Fake SYN payload will be sent with each TCP request SYN packet\n");
+			lginfo("Fake SYN payload will be sent with each TCP request SYN packet\n");
 		}
 
 		if (section->quic_drop) {
-			printf("All QUIC packets will be dropped\n");
+			lginfo("All QUIC packets will be dropped\n");
 		}
 
 		if (section->sni_detection == SNI_DETECTION_BRUTE) {
-			printf("Server Name Extension will be parsed in the bruteforce mode\n");
+			lginfo("Server Name Extension will be parsed in the bruteforce mode\n");
 		}
 
 		if (section->all_domains) {
-			printf("All Client Hello will be targeted by youtubeUnblock!\n");
+			lginfo("All Client Hello will be targeted by youtubeUnblock!\n");
 		} else {
-			printf("Target sni domains: %s\n", section->domains_str);
+			lginfo("Target sni domains: %s\n", section->domains_str);
 		}
 	}
 }
