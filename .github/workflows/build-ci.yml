@@ -168,6 +168,13 @@ jobs:
       matrix:
         branch:
           - openwrt-23.05
+          - SNAPSHOT
+        include:
+          - branch: SNAPSHOT
+            package_extension: apk
+          - branch: openwrt-23.05
+            package_extension: ipk
+
         arch:
           - aarch64_cortex-a53
           - aarch64_cortex-a72
@@ -195,6 +202,9 @@ jobs:
           - mipsel_74kc
           - mipsel_mips32
           - x86_64
+        exclude:
+          - branch: SNAPSHOT
+            arch: arm_mpcore
     container:
       image: openwrt/sdk:${{ matrix.arch }}-${{ matrix.branch }}
       options: --user root
@@ -210,7 +220,8 @@ jobs:
           RELEASE: ${{ needs.prepare.outputs.release }}
           SHA: ${{ needs.prepare.outputs.sha }}
         run: |
-          sed -i "s/PKG_REV:=.*$/PKG_REV:=$SHA/;s/PKG_VERSION:=.*$/PKG_VERSION:=$VERSION-$RELEASE-$SHA/" youtubeUnblock/Makefile
+          sed -i "s/PKG_REV:=.*$/PKG_REV:=$SHA/;s/PKG_VERSION:=.*$/PKG_VERSION:=$VERSION/;s/PKG_RELEASE:=.*$/PKG_RELEASE:=$RELEASE/;" youtubeUnblock/Makefile
+
 
       - name: Initilalize SDK
         id: init_sdk
@@ -221,6 +232,15 @@ jobs:
         working-directory: /builder
         run: |
           HOME=/builder ./setup.sh
+
+      - name: Add signing key
+        if: matrix.package_extension == 'apk'
+        id: signing_key
+        env:
+          SIGNING_KEY: ${{ secrets.EC_PRIVATE_KEY }}
+        working-directory: /builder
+        run: |
+          ([ -n "$SIGNING_KEY" ] && echo "$SIGNING_KEY" > private-key.pem) || true
 
       - name: Build packages
         id: build
@@ -236,14 +256,14 @@ jobs:
           ./scripts/feeds install -a -p youtubeUnblock
           make defconfig
           make package/youtubeUnblock/compile V=s
-          mv $(find ./bin -type f -name 'youtubeUnblock*.ipk') ./youtubeUnblock-$VERSION-$RELEASE-$SHA-${{ matrix.arch }}-${{ matrix.branch }}.ipk
+          mv $(find ./bin -type f -name "youtubeUnblock*.${{ matrix.package_extension }}") ./youtubeUnblock-$VERSION-$RELEASE-$SHA-${{ matrix.arch }}-${{ matrix.branch }}.${{ matrix.package_extension }}
 
       - name: Upload packages
         if: steps.build.outcome == 'success'
         uses: actions/upload-artifact@v4
         with:
           name: youtubeUnblock-${{ matrix.branch }}-${{ matrix.arch }}
-          path: /builder/youtubeUnblock*.ipk
+          path: /builder/youtubeUnblock*.${{ matrix.package_extension }}
           if-no-files-found: error
 
   build-openwrt-luci:
@@ -257,14 +277,6 @@ jobs:
         uses: actions/checkout@v4
         with:
           ref: 'openwrt'
-
-      - name: Prepare build
-        env:
-          VERSION: ${{ needs.prepare.outputs.version }}
-          RELEASE: ${{ needs.prepare.outputs.release }}
-          SHA: ${{ needs.prepare.outputs.sha }}
-        run: |
-          sed -i "s/PKG_REV:=.*$/PKG_REV:=$SHA/;s/PKG_VERSION:=.*$/PKG_VERSION:=$VERSION-$RELEASE-$SHA/" youtubeUnblock/Makefile
 
       - name: Initilalize SDK
         id: init_sdk
@@ -328,7 +340,7 @@ jobs:
           RELEASE: ${{ needs.prepare.outputs.release }}
           SHA: ${{ needs.prepare.outputs.sha }}
         run: |
-          sed -i "s/PKG_REV:=.*$/PKG_REV:=$SHA/;s/PKG_VERSION:=.*$/PKG_VERSION:=$VERSION-$RELEASE-$SHA/" youtubeUnblockEntware/Makefile
+          sed -i "s/PKG_REV:=.*$/PKG_REV:=$SHA/;s/PKG_VERSION:=.*$/PKG_VERSION:=$VERSION/;s/PKG_RELEASE:=.*$/PKG_RELEASE:=$RELEASE/;" youtubeUnblockEntware/Makefile
 
       - name: Build packages
         id: build
