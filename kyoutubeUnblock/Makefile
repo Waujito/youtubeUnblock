@@ -19,7 +19,7 @@ define KernelPackage/youtubeUnblock
 	SECTION:=net
 	CATEGORY:=Networking
 	TITLE:=kmod youtubeUnblock
-	VERSION:=$(LINUX_VERSION)+$(PKG_VERSION)-$(BOARD)-$(PKG_RELEASE)
+	VERSION:=$(LINUX_VERSION)$(if $(PKG_VERSION),.$(PKG_VERSION))~$(shell echo $(PKG_REV) | cut -c 1-7)-r$(if $(PKG_RELEASE),$(PKG_RELEASE),$(LINUX_RELEASE))
 	FILES:=$(PKG_BUILD_DIR)/kyoutubeUnblock.$(LINUX_KMOD_SUFFIX)
 	URL:=https://github.com/Waujito/youtubeUnblock
 	MAINTAINER:=Vadim Vetrov <vetrovvd@gmail.com>
