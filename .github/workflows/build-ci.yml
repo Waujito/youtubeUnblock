@@ -319,7 +319,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          ref: 'entware'
+          ref: 'openwrt'
 
       - name: Prepare build
         env:
@@ -341,10 +341,10 @@ jobs:
           cat feeds.conf
           ./scripts/feeds update youtubeUnblock
           ./scripts/feeds install -a -p youtubeUnblock
-          echo "CONFIG_PACKAGE_youtubeUnblock=m" | tee -a .config
-          make package/youtubeUnblock/compile V=s
+          echo "CONFIG_PACKAGE_youtubeUnblockEntware=m" | tee -a .config
+          make package/youtubeUnblockEntware/compile V=s
 
-          mv $(find ./bin -type f -name 'youtubeUnblock*.ipk') ./youtubeUnblock-$VERSION-$RELEASE-$SHA-entware-${{ matrix.arch }}.ipk
+          mv $(find ./bin -type f -name 'youtubeUnblockEntware*.ipk') ./youtubeUnblock-$VERSION-$RELEASE-$SHA-entware-${{ matrix.arch }}.ipk
 
       - name: Upload packages
         if: steps.build.outcome == 'success'
