@@ -10,14 +10,12 @@ CCLD:=$(CC)
 LD:=ld
 
 ifeq ($(USE_SYS_LIBS), no)
-	override CFLAGS += -Wall -Wpedantic -Wno-unused-variable -I$(DEPSDIR)/include -std=gnu11
+	override CFLAGS += -I$(DEPSDIR)/include
 	override LDFLAGS += -L$(DEPSDIR)/lib
 	REQ = $(LIBNETFILTER_QUEUE) $(LIBMNL) $(LIBCRYPTO)
-else
-	override CFLAGS += -Wall -Wpedantic -Wno-unused-variable -std=gnu11
 endif
 
-override CFLAGS += -DPKG_VERSION=\"$(PKG_FULLVERSION)\"
+override CFLAGS += -DPKG_VERSION=\"$(PKG_FULLVERSION)\" -Wall -Wpedantic -Wno-unused-variable -std=gnu99
 
 LIBNFNETLINK_CFLAGS := -I$(DEPSDIR)/include
 LIBNFNETLINK_LIBS := -L$(DEPSDIR)/lib
