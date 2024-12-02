@@ -2,7 +2,7 @@ USPACE_TARGETS := default all install uninstall dev run_dev
 KMAKE_TARGETS := kmake kload kunload kreload xmod xtclean
 
 PKG_VERSION := 1.0.0
-PKG_RELEASE := 4
+PKG_RELEASE := 5
 
 PKG_FULLVERSION := $(PKG_VERSION)-$(PKG_RELEASE)
 
