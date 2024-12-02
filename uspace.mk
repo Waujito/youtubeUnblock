@@ -4,6 +4,7 @@ USE_SYS_LIBS := no
 #Userspace app makes here
 BUILD_DIR := $(CURDIR)/build
 DEPSDIR := $(BUILD_DIR)/deps
+INCLUDE_DIR := $(CURDIR)/include
 
 CC:=gcc
 CCLD:=$(CC)
@@ -15,7 +16,7 @@ ifeq ($(USE_SYS_LIBS), no)
 	REQ = $(LIBNETFILTER_QUEUE) $(LIBMNL) $(LIBCRYPTO)
 endif
 
-override CFLAGS += -DPKG_VERSION=\"$(PKG_FULLVERSION)\" -Wall -Wpedantic -Wno-unused-variable -std=gnu99
+override CFLAGS += -DPKG_VERSION=\"$(PKG_FULLVERSION)\" -I$(INCLUDE_DIR) -Wall -Wpedantic -Wno-unused-variable -std=gnu99
 
 LIBNFNETLINK_CFLAGS := -I$(DEPSDIR)/include
 LIBNFNETLINK_LIBS := -L$(DEPSDIR)/lib
@@ -37,7 +38,6 @@ OBJS := $(SRCS:%.c=$(BUILD_DIR)/%.o)
 LIBNFNETLINK := $(DEPSDIR)/lib/libnfnetlink.la
 LIBMNL := $(DEPSDIR)/lib/libmnl.la
 LIBNETFILTER_QUEUE := $(DEPSDIR)/lib/libnetfilter_queue.la
-#LIBCRYPTO := $(DEPSDIR)/lib64/libcrypto.a
 
 .PHONY: default all dev dev_attrs prepare_dirs
 default: all
@@ -55,11 +55,6 @@ all: prepare_dirs $(APP)
 prepare_dirs:
 	mkdir -p $(BUILD_DIR)
 	mkdir -p $(DEPSDIR)
-
-$(LIBCRYPTO):
-	cd deps/openssl && ./Configure --prefix=$(DEPSDIR) $(if $(CROSS_COMPILE_PLATFORM),--cross-compile-prefix=$(CROSS_COMPILE_PLATFORM)-,) --no-shared
-	$(MAKE) -C deps/openssl
-	$(MAKE) install_sw -C deps/openssl
 
 $(LIBNFNETLINK):
 	cd deps/libnfnetlink && ./autogen.sh && ./configure --prefix=$(DEPSDIR) $(if $(CROSS_COMPILE_PLATFORM),--host=$(CROSS_COMPILE_PLATFORM),) --enable-static --disable-shared
@@ -80,7 +75,7 @@ $(APP): $(OBJS) $(REQ)
 	@echo 'CCLD $(APP)'
 	$(CCLD) $(OBJS) -o $(APP) $(LDFLAGS) -lmnl -lnetfilter_queue -lpthread
 
-$(BUILD_DIR)/%.o: %.c $(REQ) config.h
+$(BUILD_DIR)/%.o: %.c $(REQ) $(INCLUDE_DIR)/config.h
 	@echo 'CC $@'
 	$(CC) -c $(CFLAGS) $(LDFLAGS) $< -o $@
 
@@ -106,5 +101,4 @@ ifeq ($(USE_SYS_LIBS), no)
 	$(MAKE) distclean -C deps/libnetfilter_queue || true
 	$(MAKE) distclean -C deps/libmnl || true
 	$(MAKE) distclean -C deps/libnfnetlink || true
-	#$(MAKE) distclean -C deps/openssl || true
 endif
