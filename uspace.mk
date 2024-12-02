@@ -16,7 +16,7 @@ ifeq ($(USE_SYS_LIBS), no)
 	REQ = $(LIBNETFILTER_QUEUE) $(LIBMNL) $(LIBCRYPTO)
 endif
 
-override CFLAGS += -DPKG_VERSION=\"$(PKG_FULLVERSION)\" -Wall -Wpedantic -Wno-unused-variable -std=gnu99
+override CFLAGS += -DPKG_VERSION=\"$(PKG_FULLVERSION)\" -I$(INCLUDE_DIR) -Wall -Wpedantic -Wno-unused-variable -std=gnu99
 
 LIBNFNETLINK_CFLAGS := -I$(DEPSDIR)/include
 LIBNFNETLINK_LIBS := -L$(DEPSDIR)/lib
@@ -77,7 +77,7 @@ $(APP): $(OBJS) $(REQ)
 
 $(BUILD_DIR)/%.o: %.c $(REQ) $(INCLUDE_DIR)/config.h
 	@echo 'CC $@'
-	$(CC) -c $(CFLAGS) -I$(INCLUDE_DIR) $(LDFLAGS) $< -o $@
+	$(CC) -c $(CFLAGS) $(LDFLAGS) $< -o $@
 
 install: all
 	install -d $(DESTDIR)$(PREFIX)/bin/
