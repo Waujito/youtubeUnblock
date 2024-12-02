@@ -81,20 +81,20 @@ int ip4_payload_split(uint8_t *pkt, uint32_t buflen,
 		       struct iphdr **iph, uint32_t *iph_len, 
 		       uint8_t **payload, uint32_t *plen) {
 	if (pkt == NULL || buflen < sizeof(struct iphdr)) {
-		lgerror("ip4_payload_split: pkt|buflen", -EINVAL);
+		lgerror(-EINVAL, "ip4_payload_split: pkt|buflen");
 		return -EINVAL;
 	}
 
 	struct iphdr *hdr = (struct iphdr *)pkt;
 	if (netproto_version(pkt, buflen) != IP4VERSION) {
-		lgerror("ip4_payload_split: ipversion", -EINVAL);
+		lgerror(-EINVAL, "ip4_payload_split: ipversion");
 		return -EINVAL;
 	}
 
 	uint32_t hdr_len = hdr->ihl * 4;
 	uint32_t pktlen = ntohs(hdr->tot_len);
 	if (buflen < pktlen || hdr_len > pktlen) {
-		lgerror("ip4_payload_split: buflen cmp pktlen", -EINVAL);
+		lgerror(-EINVAL, "ip4_payload_split: buflen cmp pktlen");
 		return -EINVAL;
 	}
 
@@ -156,20 +156,20 @@ int ip6_payload_split(uint8_t *pkt, uint32_t buflen,
 		       struct ip6_hdr **iph, uint32_t *iph_len, 
 		       uint8_t **payload, uint32_t *plen) {
 	if (pkt == NULL || buflen < sizeof(struct ip6_hdr)) {
-		lgerror("ip6_payload_split: pkt|buflen", -EINVAL);
+		lgerror(-EINVAL, "ip6_payload_split: pkt|buflen");
 		return -EINVAL;
 	}
 
 	struct ip6_hdr *hdr = (struct ip6_hdr *)pkt;
 	if (netproto_version(pkt, buflen) != 6) {
-		lgerror("ip6_payload_split: ip6version", -EINVAL);
+		lgerror(-EINVAL, "ip6_payload_split: ip6version");
 		return -EINVAL;
 	}
 
 	uint32_t hdr_len = sizeof(struct ip6_hdr);
 	uint32_t pktlen = ntohs(hdr->ip6_plen);
 	if (buflen < pktlen) {
-		lgerror("ip6_payload_split: buflen cmp pktlen: %d %d", -EINVAL, buflen, pktlen);
+		lgerror(-EINVAL, "ip6_payload_split: buflen cmp pktlen: %d %d", buflen, pktlen);
 		return -EINVAL;
 	}
 
@@ -237,7 +237,7 @@ int tcp_payload_split(uint8_t *pkt, uint32_t buflen,
 	} else if (netvers == IP6VERSION) {
 		return tcp6_payload_split(pkt, buflen, (struct ip6_hdr **)iph, iph_len, tcph, tcph_len, payload, plen);
 	} else {
-		lgerror("Internet Protocol version is unsupported", -EINVAL);
+		lgerror(-EINVAL, "Internet Protocol version is unsupported");
 		return -EINVAL;
 	}
 }
@@ -329,7 +329,7 @@ int udp_payload_split(uint8_t *pkt, uint32_t buflen,
 	} else if (netvers == IP6VERSION) {
 		return udp6_payload_split(pkt, buflen, (struct ip6_hdr **)iph, iph_len, udph, payload, plen);
 	} else {
-		lgerror("Internet Protocol version is unsupported", -EINVAL);
+		lgerror(-EINVAL, "Internet Protocol version is unsupported");
 		return -EINVAL;
 	}
 }
@@ -351,7 +351,7 @@ int ip4_frag(const uint8_t *pkt, uint32_t buflen, uint32_t payload_offset,
 	if ((ret = ip4_payload_split(
 		(uint8_t *)pkt, buflen, 
 		&hdr, &hdr_len, (uint8_t **)&payload, &plen)) < 0) {
-		lgerror("ipv4_frag: TCP Header extract error", ret);
+		lgerror(ret, "ipv4_frag: TCP Header extract error");
 		return -EINVAL;
 	}
 
@@ -360,7 +360,7 @@ int ip4_frag(const uint8_t *pkt, uint32_t buflen, uint32_t payload_offset,
 	}
 
 	if (payload_offset & ((1 << 3) - 1)) {
-		lgerror("ipv4_frag: Payload offset MUST be a multiply of 8!", -EINVAL);
+		lgerror(-EINVAL, "ipv4_frag: Payload offset MUST be a multiply of 8!");
 
 		return -EINVAL;
 	}
@@ -433,7 +433,7 @@ int tcp_frag(const uint8_t *pkt, uint32_t buflen, uint32_t payload_offset,
 				&hdr, &hdr_len,
 				&tcph, &tcph_len,
 				(uint8_t **)&payload, &plen)) < 0) {
-		lgerror("tcp_frag: tcp_payload_split", ret);
+		lgerror(ret, "tcp_frag: tcp_payload_split");
 
 		return -EINVAL;
 	}
@@ -448,7 +448,7 @@ int tcp_frag(const uint8_t *pkt, uint32_t buflen, uint32_t payload_offset,
 			ntohs(iphdr->frag_off) & IP_OFFMASK) {
 			lgdebugmsg("tcp_frag: ip4: frag value: %d",
 				ntohs(iphdr->frag_off));
-			lgerror("tcp_frag: ip4: ip fragmentation is set", -EINVAL);
+			lgerror(-EINVAL, "tcp_frag: ip4: ip fragmentation is set");
 			return -EINVAL;
 		}
 	}
@@ -590,7 +590,7 @@ int fail_packet(struct failing_strategy strategy, uint8_t *payload, uint32_t *pl
 		} else if (ipxv == IP6VERSION) {
 			((struct ip6_hdr *)iph)->ip6_hops = strategy.faking_ttl;
 		} else {
-			lgerror("fail_packet: IP version is unsupported", -EINVAL);
+			lgerror(-EINVAL, "fail_packet: IP version is unsupported");
 			return -EINVAL;
 		}
 	} else if (strategy.strategy == FAKE_STRAT_TCP_MD5SUM) {
@@ -612,7 +612,7 @@ int fail_packet(struct failing_strategy strategy, uint8_t *payload, uint32_t *pl
 			} else if (ipxv == IP6VERSION) {
 				((struct ip6_hdr *)iph)->ip6_plen = htons(ntohs(((struct ip6_hdr *)iph)->ip6_plen) + delta);
 			} else {
-				lgerror("fail_packet: IP version is unsupported", -EINVAL);
+				lgerror(-EINVAL, "fail_packet: IP version is unsupported");
 				return -EINVAL;
 			}
 			optp_len += delta;

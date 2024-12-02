@@ -21,8 +21,11 @@
 #include "utils.h"
 #include "logging.h"
 
+#if defined(PKG_VERSION)
+MODULE_VERSION(PKG_VERSION);
+#endif
+
 MODULE_LICENSE("GPL");
-MODULE_VERSION("0.3.2");
 MODULE_AUTHOR("Vadim Vetrov <vetrovvd@gmail.com>");
 MODULE_DESCRIPTION("Linux kernel module for youtubeUnblock");
 
@@ -35,7 +38,7 @@ static int open_raw_socket(void) {
 	ret = sock_create(AF_INET, SOCK_RAW, IPPROTO_RAW, &rawsocket);
 
 	if (ret < 0) {
-		pr_alert("Unable to create raw socket\n");
+		lgerror(ret, "Unable to create raw socket\n");
 		goto err;
 	}
 
@@ -80,7 +83,7 @@ static int send_raw_ipv4(const uint8_t *pkt, uint32_t pktlen) {
 	iov.iov_base = (__u8 *)pkt;
 	iov.iov_len = pktlen;
 
-	msg.msg_flags = 0;
+	msg.msg_flags = MSG_DONTWAIT;
 	msg.msg_name = &daddr;
 	msg.msg_namelen = sizeof(struct sockaddr_in);
 	msg.msg_control = NULL;
@@ -97,7 +100,7 @@ static int open_raw6_socket(void) {
 	ret = sock_create(AF_INET6, SOCK_RAW, IPPROTO_RAW, &raw6socket);
 
 	if (ret < 0) {
-		pr_alert("Unable to create raw socket\n");
+		lgerror(ret, "Unable to create raw socket\n");
 		goto err;
 	}
 
@@ -140,7 +143,7 @@ static int send_raw_ipv6(const uint8_t *pkt, uint32_t pktlen) {
 	iov.iov_base = (__u8 *)pkt;
 	iov.iov_len = pktlen;
 
-	msg.msg_flags = 0;
+	msg.msg_flags = MSG_DONTWAIT;
 	msg.msg_name = &daddr;
 	msg.msg_namelen = sizeof(struct sockaddr_in6);
 	msg.msg_control = NULL;
@@ -159,37 +162,22 @@ static int send_raw_socket(const uint8_t *pkt, uint32_t pktlen) {
 
 		NETBUF_ALLOC(buff1, MAX_PACKET_SIZE);
 		if (!NETBUF_CHECK(buff1)) {
-			lgerror("Allocation error", -ENOMEM);
+			lgerror(-ENOMEM, "Allocation error");
 			return -ENOMEM;
 		}
 		NETBUF_ALLOC(buff2, MAX_PACKET_SIZE);
 		if (!NETBUF_CHECK(buff2)) {
-			lgerror("Allocation error", -ENOMEM);
+			lgerror(-ENOMEM, "Allocation error");
 			NETBUF_FREE(buff2);
 			return -ENOMEM;
 		}
 		uint32_t buff1_size = MAX_PACKET_SIZE;
 		uint32_t buff2_size = MAX_PACKET_SIZE;
 
-		switch (config.fragmentation_strategy) {
-			case FRAG_STRAT_TCP:
-				if ((ret = tcp_frag(pkt, pktlen, AVAILABLE_MTU-128,
-					buff1, &buff1_size, buff2, &buff2_size)) < 0) {
+		if ((ret = tcp_frag(pkt, pktlen, AVAILABLE_MTU-128,
+			buff1, &buff1_size, buff2, &buff2_size)) < 0) {
 
-					goto erret_lc;
-				}
-				break;
-			case FRAG_STRAT_IP:
-				if ((ret = ip4_frag(pkt, pktlen, AVAILABLE_MTU-128,
-					buff1, &buff1_size, buff2, &buff2_size)) < 0) {
-
-					goto erret_lc;
-				}
-				break;
-			default:
-				pr_info("send_raw_socket: Packet is too big but fragmentation is disabled!");
-				ret = -EINVAL;
-				goto erret_lc;
+			goto erret_lc;
 		}
 
 		int sent = 0;
@@ -231,7 +219,7 @@ erret_lc:
 }
 
 static int delay_packet_send(const unsigned char *data, unsigned int data_len, unsigned int delay_ms) {
-	pr_info("delay_packet_send won't work on current youtubeUnblock version");
+	lginfo("delay_packet_send won't work on current youtubeUnblock version");
 	return send_raw_socket(data, data_len);
 }
 
@@ -321,7 +309,7 @@ static NF_CALLBACK(ykb_nf_hook, skb) {
 
 	ret = skb_linearize(skb);
 	if (ret < 0) {
-		lgerror("Cannot linearize", ret);
+		lgerror(ret, "Cannot linearize");
 		goto accept;
 	}
 
@@ -362,41 +350,51 @@ static int __init ykb_init(void) {
 	ret = open_raw_socket();
 	if (ret < 0) goto err;
 
-
-	if (config.use_ipv6) {
-		ret = open_raw6_socket();
-		if (ret < 0) goto close_rawsocket;
-
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(4,13,0)
-		struct net *n;
-		for_each_net(n) {
-			ret = nf_register_net_hook(n, &ykb6_nf_reg);
-			if (ret < 0) 
-				lgerror("bad rat",ret);
-		}
-#else
-		nf_register_hook(&ykb6_nf_reg);
-#endif
-	}
-
-
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4,13,0)
 	struct net *n;
 
 	for_each_net(n) {
 		ret = nf_register_net_hook(n, &ykb_nf_reg);
-		if (ret < 0) 
-			lgerror("bad rat",ret);
+		if (ret < 0) { 
+			lgerror(ret, "register net_hook");
+		}
 	}
 #else
-	nf_register_hook(&ykb_nf_reg);
+	ret = nf_register_hook(&ykb_nf_reg);
+	if (ret < 0) {
+		lgerror(ret, "register net_hook");
+	}
 #endif
 
-	pr_info("youtubeUnblock kernel module started.\n");
+
+	if (config.use_ipv6) {
+		ret = open_raw6_socket();
+		if (ret < 0) {
+			config.use_ipv6 = 0;
+			lgwarning("ipv6 disabled!");
+			goto ipv6_fallback;
+		}
+
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4,13,0)
+		struct net *n;
+		for_each_net(n) {
+			ret = nf_register_net_hook(n, &ykb6_nf_reg);
+			if (ret < 0) {
+				lgerror(ret, "register net6_hook");
+			}
+		}
+#else
+		ret = nf_register_hook(&ykb6_nf_reg);
+		if (ret < 0) {
+			lgerror(ret, "register net6_hook");
+		}
+#endif
+	}
+
+ipv6_fallback:
+	lginfo("youtubeUnblock kernel module started.\n");
 	return 0;
 
-close_rawsocket:
-	close_raw_socket();
 err:
 	return ret;
 }
@@ -422,7 +420,7 @@ static void __exit ykb_destroy(void) {
 #endif
 
 	close_raw_socket();
-	pr_info("youtubeUnblock kernel module destroyed.\n");
+	lginfo("youtubeUnblock kernel module destroyed.\n");
 }
 
 module_init(ykb_init);

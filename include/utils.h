@@ -157,34 +157,34 @@ int seqovl_packet(uint8_t *payload, uint32_t *plen, uint32_t seq_delta);
 
 
 
-static inline struct failing_strategy args_default_failing_strategy(void) {
+static inline struct failing_strategy args_default_failing_strategy(const struct section_config_t *section) {
 	struct failing_strategy fl_strat = {
-		.strategy = (unsigned int)config.faking_strategy,
-		.faking_ttl = config.faking_ttl,
-		.randseq_offset = (uint32_t)config.fakeseq_offset
+		.strategy = (unsigned int)section->faking_strategy,
+		.faking_ttl = section->faking_ttl,
+		.randseq_offset = (uint32_t)section->fakeseq_offset
 	};
 	return fl_strat;
 }
 
-static inline struct fake_type args_default_fake_type(void) {
+static inline struct fake_type args_default_fake_type(const struct section_config_t *section) {
 	struct fake_type f_type = {
-		.sequence_len = config.fake_sni_seq_len,
-		.strategy = args_default_failing_strategy(),
+		.sequence_len = section->fake_sni_seq_len,
+		.strategy = args_default_failing_strategy(section),
 	};
 
-	switch (config.fake_sni_type) {
+	switch (section->fake_sni_type) {
 		case FAKE_PAYLOAD_RANDOM:
 			f_type.type = FAKE_PAYLOAD_RANDOM;
 			break;
 		case FAKE_PAYLOAD_CUSTOM:
 			f_type.type = FAKE_PAYLOAD_CUSTOM;
-			f_type.fake_data = config.fake_custom_pkt;
-			f_type.fake_len = config.fake_custom_pkt_sz;
+			f_type.fake_data = section->fake_custom_pkt;
+			f_type.fake_len = section->fake_custom_pkt_sz;
 			break;
 		default:
 			f_type.type = FAKE_PAYLOAD_CUSTOM;
-			f_type.fake_data = config.fake_sni_pkt;
-			f_type.fake_len = config.fake_sni_pkt_sz;
+			f_type.fake_data = section->fake_sni_pkt;
+			f_type.fake_len = section->fake_sni_pkt_sz;
 	}
 
 	return f_type;

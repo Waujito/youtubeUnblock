@@ -21,6 +21,7 @@
       - [Building on host system](#building-on-host-system)
       - [Building on any kernel](#building-on-any-kernel)
       - [Building with openwrt SDK](#building-with-openwrt-sdk)
+  - [Padavan](#padavan)
 
 
 # youtubeUnblock
@@ -42,7 +43,7 @@ GNU General Public License for more details.
 
 The program is distributed in two version:
 - A userspace application works on top of nfnetlink queue which requires nfnetlink modules in the kernel and firewall rules. This approach is default and normally should be used but it has some limitations on embedded devices which may have no nfnetlink support. Also this solution may break down the internet speed and CPU load on your device because of jumps between userspace and kernelspace for each packet (this behavior may be fixed with connbytes but it also requires conntrack kernel module).
-- A kernel module which integrates deeply within the netfilter stack and does not interact with the userspace firewall. The module requires only netfilter kernel support but it definetly present on every device connected to the Internet. The only difficulity is how to build it. I cannot provide modules within Github Actions for each single one kernel, even if we talk only about OpenWRT versions. If you want to learn more about the module, jump on [its section in the README](#kernel-module)
+- A kernel module which integrates deeply within the netfilter stack and does not interact with the userspace firewall. The module requires only netfilter kernel support but it definetly present on every device connected to the Internet. The only difficulity is how to build it. I cannot provide modules within Github Actions for each single one kernel, even if we talk only about OpenWRT versions. If you want to learn more about the module, jump on [its section in the README](#kernel-module). Whats the benefits of the kernel module? The benefits come for some specific cases: the kernel module is the fastest thing that allows us to process every single packet sent to the linux network stack, while the normal youtubeUnblock requires connbytes to keep the internet speed. Speaking about connbytes, it also requires conntrack to operate, which may be a limitation on some transit-traffic machines. Also userspace youtubeUnblock requires modules for netlink queue, userspace firewall application and modules for it. The kernel module is much simpler and requires only the linux kernel with netfilter built in.
 
 The program is compatible with routers based on OpenWRT, Entware(Keenetic/ASUS) and host machines. The program offers binaries via Github Actions. The binaries are also available via [github releases](https://github.com/Waujito/youtubeUnblock/releases). Use the latest pre-release for the most up to date build. Check out [Github Actions](https://github.com/Waujito/youtubeUnblock/actions/workflows/build-ci.yml) if you want to see all the binaries compiled ever. You should know the arcitecture of your hardware to use binaries. On OpenWRT you can check it with command `grep ARCH /etc/openwrt_release`.
 
@@ -54,9 +55,9 @@ For Windows use [GoodbyeDPI by ValdikSS](https://github.com/ValdikSS/GoodbyeDPI)
 
 ### OpenWRT pre configuration
 
-When you got the release package, you should install it. Go to your router interface and put it in via *System-Software-install_package* menu. Go to *System-Startup* menu, restart firewall and start **youtubeUnblock**. 
+When you got the release package, you should install it. Go to your router interface, to *System->Software*, do *Update lists* and install youtubeUnblock via *install_package* button. Then, you should go to *System-Startup* menu and reload the firewall (You may also do it within *Services->youtubeUnblock* menu). 
 
-To make it work you should register an iptables rule and install required kernel modules. The list of modules depends on the version of OpenWRT and which firewall do you use (iptables or nftables). 
+To make it work you should register an iptables rule and install required kernel modules. The list of modules depends on the version of OpenWRT and which firewall do you use (iptables or nftables). For most modern versions of OpenWRT (v23.x, v22.x) you should use nftables rules, for older ones it depends, but typically iptables.
 
 The common dependency is
  ```text
@@ -87,6 +88,8 @@ Now we go to the configuration. For OpenWRT here is configuration via [UCI](http
 
 For **LuCI** aka **GUI** aka **web-interface of router** you should install **luci-app-youtubeUnblock** package like you did it with the normal youtubeUnblock package. Note, that lists of official opkg feeds should be loaded (**Do it with Update lists option**).
 
+If you got ` * pkg_hash_check_unresolved: cannot find dependency luci-lua-runtime for luci-app-youtubeUnblock` error, you are using old openwrt. Install [this dummy package](https://github.com/xiaorouji/openwrt-passwall/files/12605732/luci-lua-runtime_all_fake.zip). [Check this comment](https://github.com/Waujito/youtubeUnblock/issues/168#issuecomment-2449227547) for more details.
+
 LuCI configuration lives in **Services->youtubeUnblock** section. It is self descriptive, with description for each flag. Note, that after you push `Save & Apply` button, the configuration is applied automatically and the service is restarted.
 
 UCI configuration is available in /etc/config/youtubeUnblock file, in section `youtubeUnblock.youtubeUnblock`. The configuration is done with [flags](#flags). Note, that names of flags are not the same: you should replace `-` with `_`, you shouldn't use leading `--` for flag. Also you will enable toggle flags (without parameters) with `1`. 
@@ -105,9 +108,18 @@ for example, you can enable it with `/etc/init.d/youtubeUnblock enable`.
 
 ### Entware
 
-For Entware on Keenetic here is an [installation guide (russian)](https://help.keenetic.com/hc/ru/articles/360021214160-%D0%A3%D1%81%D1%82%D0%B0%D0%BD%D0%BE%D0%B2%D0%BA%D0%B0-%D1%81%D0%B8%D1%81%D1%82%D0%B5%D0%BC%D1%8B-%D0%BF%D0%B0%D0%BA%D0%B5%D1%82%D0%BE%D0%B2-%D1%80%D0%B5%D0%BF%D0%BE%D0%B7%D0%B8%D1%82%D0%BE%D1%80%D0%B8%D1%8F-Entware-%D0%BD%D0%B0-USB-%D0%BD%D0%B0%D0%BA%D0%BE%D0%BF%D0%B8%D1%82%D0%B5%D0%BB%D1%8C). Note that if your Entware router is missing netfilter queue kernel modules, here is no way to deal with it since Entware does not offer kernel modules. 
+For Entware on Keenetic here is an [installation guide (russian)](https://help.keenetic.com/hc/ru/articles/360021214160-%D0%A3%D1%81%D1%82%D0%B0%D0%BD%D0%BE%D0%B2%D0%BA%D0%B0-%D1%81%D0%B8%D1%81%D1%82%D0%B5%D0%BC%D1%8B-%D0%BF%D0%B0%D0%BA%D0%B5%D1%82%D0%BE%D0%B2-%D1%80%D0%B5%D0%BF%D0%BE%D0%B7%D0%B8%D1%82%D0%BE%D1%80%D0%B8%D1%8F-Entware-%D0%BD%D0%B0-USB-%D0%BD%D0%B0%D0%BA%D0%BE%D0%BF%D0%B8%D1%82%D0%B5%D0%BB%D1%8C).
 
 Install the binary with `opkg install youtubeUnblock-*.ipk`. After installation, the binary in /opt/bin and the init script in /opt/etc/init.d/S51youtubeUnblock will be available. To run the youtubeUnblock, simply run `/opt/etc/init.d/S51youtubeUnblock start`
+
+### NFNETLINK_QUEUE kernel modules
+
+Note, that you should feed the target kernel with nfnetlink_queue kernel module. The module may be disabled or even not present. Entware S51youtubeUnblock will try to insert kmods any way but if they are not provided by software, you should install them manually. AFAIK on keenetics here is a repository with modules compiled by customer. You can find them somewhere in the web interface of your device. On other routers you may want to do deeper research in that case and find your kmods. If you can't find anything, you may ask the customer for GPL codes of linux kernel (and may be even OpenWRT) and compile kmods manually.
+
+You should insert the module with (this step may be omitted on Entware and OpenWRT):
+```sh
+modprobe nfnetlink_queue
+```
 
 ### PC configuration
 On local host make sure to change **FORWARD** to **OUTPUT** chain in the following Firewall rulesets.
@@ -175,7 +187,7 @@ Available flags:
 
 - `--sni-domains=<comma separated domain list>|all` List of domains you want to be handled by SNI. Use this string if you want to change default domain list. Defaults to `googlevideo.com,ggpht.com,ytimg.com,youtube.com,play.google.com,youtu.be,googleapis.com,googleusercontent.com,gstatic.com,l.google.com`. You can pass **all** if you want for every *ClientHello* to be handled. You can exclude some domains with `--exclude-domains` flag.
 
-- `--exclude-domains=<comma separated domain list>` List of domains to be excluded from targetting.
+- `--exclude-domains=<comma separated domain list>` List of domains to be excluded from targeting.
 
 - `--queue-num=<number of netfilter queue>` The number of netfilter queue **youtubeUnblock** will be linked to. Defaults to **537**.
 
@@ -187,7 +199,7 @@ Available flags:
 - `--fake-custom-payload=<payload>` Useful with `--fake-sni-type=custom`. You should specify the payload for fake message manually. Use hex format: `--fake-custom-payload=0001020304` mean that 5 bytes sequence: `0x00`, `0x01`, `0x02`, `0x03`, `0x04` used as fake.
 
 - `--faking-strategy={randseq|ttl|tcp_check|pastseq|md5sum}` This flag determines the strategy of fake packets invalidation. Defaults to `randseq`
-  - `randseq` specifies that random sequence/acknowledgemend random will be set. This option may be handled by provider which uses *conntrack* with drop on invalid *conntrack* state firewall rule enabled. 
+  - `randseq` specifies that random sequence/acknowledgment random will be set. This option may be handled by provider which uses *conntrack* with drop on invalid *conntrack* state firewall rule enabled. 
   - `ttl` specifies that packet will be invalidated after `--faking-ttl=n` hops. `ttl` is better but may cause issues if unconfigured. 
   - `pastseq` is like `randseq` but sequence number is not random but references the packet sent in the past (before current).
   - `tcp_check` will invalidate faking packet with invalid checksum. May be handled and dropped by some providers/TSPUs.
@@ -227,16 +239,28 @@ Available flags:
 
 - `--no-ipv6` Disables support for ipv6. May be useful if you don't want for ipv6 socket to be opened.
 
-- `--threads=<threads number>` Specifies the amount of threads you want to be running for your program. This defaults to **1** and shouldn't be edited for normal use. If you have performance issues, consult [performance chaptr](https://github.com/Waujito/youtubeUnblock?tab=readme-ov-file#performance)
+- `--threads=<threads number>` Specifies the amount of threads you want to be running for your program. This defaults to **1** and shouldn't be edited for normal use. But if you really want multiple queue instances of youtubeUnblock, note that you should change --queue-num to --queue balance. For example, with 4 threads, use `--queue-balance 537:540` on iptables and `queue num 537-540` on nftables.
+
+- `--daemonize` Daemonizes the youtubeUnblock (forks and detaches it from the shell). Terminate the program with `killall youtubeUnblock`. If you want to track the logs of youtubeUnblock in logread or journalctl, use **--syslog** flag.
+
+- `--syslog` Redirects logs to the system log. You can read it with `journalctl` or `logread`.
+
+- `--noclose` Usable only with `--daemonize`. Will not redirect io streams to /dev/null.
 
 - `--packet-mark=<mark>` Use this option if youtubeUnblock conflicts with other systems rely on packet mark. Note that you may want to change accept rule for iptables to follow the mark.
 
+- `--fbegin` and `--fend` flags: youtubeUnblock supports multiple sets of strategies for specific filters. You may want to initiate a new set after the default one, like: `--sni-domains=googlevideo.com --faking-strategy=md5sum --fbegin --sni-domains=youtube.com --faking-strategy=tcp_check --fend --fbegin --sni-domains=l.google.com --faking-strategy=pastseq --fend`. Note, that the priority of these sets goes backwards: last is first, default (one that does not start with --fbegin) is last. If you start the new section, the default settings are implemented just like youtubeUnblock without any parameters. Note that the config above is just an example and won't work for you.
+
 ## Troubleshooting
+
+Check up [this issue](https://github.com/Waujito/youtubeUnblock/issues/148) for useful configs.
 
 If you got troubles with some sites and you sure that they are blocked by SNI (youtube for example), use may play around with [flags](#flags) and their combinations. At first it is recommended to try `--faking-strategy` flag and `--frag-sni-faked=1`.
 If you have troubles with some sites being proxied, you can play with flags values. For example, for someone `--faking-strategy=ttl` works. You should specify proper `--fake-sni-ttl=<ttl value>` where ttl is the amount of hops between you and DPI.
 
 If you are on Chromium you may have to disable *kyber* (the feature that makes the TLS *ClientHello* very big). I've got the problem with it on router, so to escape possible errors, so it is better to disable it: in `chrome://flags` search for kyber and switch it to disabled state. Alternatively you may set `--sni-detection=brute` and probably adjust `--sni-domains` flag.
+
+*Kyber* on firefox disables with `security.tls.enable_kyber` in `about:config`.
 
 If your browser is using QUIC it may not work properly. Disable it in Chrome in `chrome://flags` and in Firefox `network.http.http{2,3}.enable(d)` in `about:config` option.
 
@@ -377,4 +401,11 @@ make package/kyoutubeUnblock/compile V=s
 
 When the commands finish, the module is ready. Find it with `find bin -name "kmod-youtubeUnblock*.ipk"`, copy to your host and install to the router via gui software interface. The module should start immediately. If not, do `modprobe kyoutubeUnblock`.
 
+
+## Padavan
+YoutubeUnblock may also run on Padavan. [Check the manual here\[rus\]](Padavan.md)
+
+
  >If you have any questions/suggestions/problems feel free to open an [issue](https://github.com/Waujito/youtubeUnblock/issues).
+
+

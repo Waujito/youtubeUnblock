@@ -135,6 +135,6 @@ int quic_parse_initial_message(uint8_t *inpayload, uint32_t inplen,
 	return 0;
 
 invalid_packet:
-	lgerror("QUIC invalid Initial packet", -EINVAL);
+	lgerror(-EINVAL, "QUIC invalid Initial packet");
 	return -EINVAL;
 }

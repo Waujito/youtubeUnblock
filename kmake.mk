@@ -13,7 +13,7 @@ KERNEL_BUILDER_MAKEDIR:=/lib/modules/$(shell uname -r)/build
 kmake: kmod
 
 kmod:
-	$(MAKE) -C $(KERNEL_BUILDER_MAKEDIR) M=$(PWD) modules
+	$(MAKE) -C $(KERNEL_BUILDER_MAKEDIR) M=$(PWD) EXTRA_CFLAGS='-DPKG_VERSION=\"$(PKG_FULLVERSION)\"' modules
 
 kload:
 	insmod kyoutubeUnblock.ko

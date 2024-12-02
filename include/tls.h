@@ -20,7 +20,7 @@ struct tls_verdict {
  * Processes the packet and finds TLS Client Hello information inside it.
  * data pointer points to start of TLS Message (TCP Payload)
  */
-struct tls_verdict analyze_tls_data(const uint8_t *data, uint32_t dlen);
+struct tls_verdict analyze_tls_data(const struct section_config_t *section, const uint8_t *data, uint32_t dlen);
 
 
 /**

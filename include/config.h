@@ -5,6 +5,8 @@
 #define USER_SPACE
 #endif
 
+#include "raw_replacements.h"
+
 typedef int (*raw_send_t)(const unsigned char *data, unsigned int data_len);
 /**
  * Sends the packet after delay_ms. The function should schedule send and return immediately
@@ -18,11 +20,10 @@ struct instance_config_t {
 };
 extern struct instance_config_t instance_config;
 
-struct config_t {
-	unsigned int queue_start_num;
-	int threads;
-	int use_gso;
-	int use_ipv6;
+struct section_config_t {
+	const char *domains_str;
+	unsigned int domains_strlen;
+
 	int fragmentation_strategy;
 	int frag_sni_reverse;
 	int frag_sni_faked;
@@ -39,18 +40,13 @@ struct config_t {
 #define FAKE_PAYLOAD_DEFAULT	2
 	int fake_sni_type;
 
-#define VERBOSE_INFO	0
-#define VERBOSE_DEBUG	1
-#define VERBOSE_TRACE	2
-	int verbose;
 	int quic_drop;
-#define SNI_DETECTION_PARSE 0
-#define SNI_DETECTION_BRUTE 1
-	int sni_detection;
+
 	/* In milliseconds */
 	unsigned int seg2_delay;
-	const char *domains_str;
-	unsigned int domains_strlen;
+	int synfake;
+	unsigned int synfake_len;
+
 	const char *exclude_domains_str;
 	unsigned int exclude_domains_strlen;
 	unsigned int all_domains;
@@ -61,15 +57,75 @@ struct config_t {
 	const char *fake_custom_pkt;
 	unsigned int fake_custom_pkt_sz;
 
-
 	unsigned int fk_winsize;
 	int fakeseq_offset;
+
+#define SNI_DETECTION_PARSE 0
+#define SNI_DETECTION_BRUTE 1
+	int sni_detection;
+
+};
+
+#define MAX_CONFIGLIST_LEN 64
+
+struct config_t {
+	unsigned int queue_start_num;
+	int threads;
+	int use_gso;
+	int use_ipv6;
 	unsigned int mark;
-	int synfake;
-	unsigned int synfake_len;
+	int daemonize;
+	// Same as daemon() noclose
+	int noclose;
+	int syslog;
+
+#define VERBOSE_INFO	0
+#define VERBOSE_DEBUG	1
+#define VERBOSE_TRACE	2
+	int verbose;
+
+	struct section_config_t default_config;
+	struct section_config_t custom_configs[MAX_CONFIGLIST_LEN];
+	int custom_configs_len;
 };
 
 extern struct config_t config;
+
+#define ITER_CONFIG_SECTIONS(section) \
+for (struct section_config_t *section = &config.default_config + config.custom_configs_len; section >= &config.default_config; section--)
+
+#define CONFIG_SECTION_NUMBER(section) (int)((section) - &config.default_config)
+
+#define default_section_config {				\
+	.frag_sni_reverse = 1,                                  \
+	.frag_sni_faked = 0,                                    \
+	.fragmentation_strategy = FRAGMENTATION_STRATEGY,       \
+	.faking_strategy = FAKING_STRATEGY,                     \
+	.faking_ttl = FAKE_TTL,                                 \
+	.fake_sni = 1,                                          \
+	.fake_sni_seq_len = 1,                                  \
+	.fake_sni_type = FAKE_PAYLOAD_DEFAULT,                  \
+	.frag_middle_sni = 1,                                   \
+	.frag_sni_pos = 1,                                      \
+	.fakeseq_offset = 10000,                                \
+	.synfake = 0,                                           \
+	.synfake_len = 0,                                       \
+	.quic_drop = 0,                                         \
+                                                                \
+	.seg2_delay = 0,                                        \
+                                                                \
+	.domains_str = defaul_snistr,                           \
+	.domains_strlen = sizeof(defaul_snistr),                \
+                                                                \
+	.exclude_domains_str = "",                              \
+	.exclude_domains_strlen = 0,                            \
+                                                                \
+	.fake_sni_pkt = fake_sni_old,                           \
+	.fake_sni_pkt_sz = sizeof(fake_sni_old) - 1,		\
+	.fake_custom_pkt = custom_fake_buf,                     \
+	.fake_custom_pkt_sz = 0,                                \
+	.sni_detection = SNI_DETECTION_PARSE,                   \
+}
 
 #define MAX_THREADS 16
 
@@ -132,7 +188,7 @@ if ((fake_bitmask) & strategy)
 
 // The Maximum Transmission Unit size for rawsocket
 // Larger packets will be fragmented. Applicable for Chrome's kyber.
-#define AVAILABLE_MTU 1500
+#define AVAILABLE_MTU 1400
 
 #define DEFAULT_QUEUE_NUM 537
 

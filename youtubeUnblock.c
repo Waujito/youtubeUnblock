@@ -45,12 +45,12 @@ static int open_socket(struct mnl_socket **_nl) {
 	nl = mnl_socket_open(NETLINK_NETFILTER);
 
 	if (nl == NULL) {
-		perror("mnl_socket_open");
+		lgerror(errno, "mnl_socket_open");
 		return -1;
 	}
 
 	if (mnl_socket_bind(nl, 0, MNL_SOCKET_AUTOPID) < 0) {
-		perror("mnl_socket_bind");
+		lgerror(errno, "mnl_socket_bind");
 		mnl_socket_close(nl);
 		return -1;
 	}
@@ -65,7 +65,7 @@ static int close_socket(struct mnl_socket **_nl) {
 	struct mnl_socket *nl = *_nl;
 	if (nl == NULL) return 1;
 	if (mnl_socket_close(nl) < 0) {
-		perror("mnl_socket_close");
+		lgerror(errno, "mnl_socket_close");
 		return -1;
 	}
 
@@ -77,26 +77,26 @@ static int close_socket(struct mnl_socket **_nl) {
 static int open_raw_socket(void) {
 	if (rawsocket != -2) {
 		errno = EALREADY;
-		perror("Raw socket is already opened");
+		lgerror(errno, "Raw socket is already opened");
 		return -1;
 	}
 	
 	rawsocket = socket(AF_INET, SOCK_RAW, IPPROTO_RAW);
 	if (rawsocket == -1) {
-		perror("Unable to create raw socket");
+		lgerror(errno, "Unable to create raw socket");
 		return -1;
 	}
 
 	int mark = config.mark;
 	if (setsockopt(rawsocket, SOL_SOCKET, SO_MARK, &mark, sizeof(mark)) < 0)
 	{
-		fprintf(stderr, "setsockopt(SO_MARK, %d) failed\n", mark);
+		lgerror(errno, "setsockopt(SO_MARK, %d) failed\n", mark);
 		return -1;
 	}
 
 	int mst = pthread_mutex_init(&rawsocket_lock, NULL);
 	if (mst) {
-		fprintf(stderr, "Mutex err: %d\n", mst);
+		lgerror(errno, "Mutex err: %d\n", mst);
 		close(rawsocket);
 		errno = mst;
 
@@ -110,12 +110,12 @@ static int open_raw_socket(void) {
 static int close_raw_socket(void) {
 	if (rawsocket < 0) {
 		errno = EALREADY;
-		perror("Raw socket is not set");
+		lgerror(errno, "Raw socket is not set");
 		return -1;
 	}
 
 	if (close(rawsocket)) {
-		perror("Unable to close raw socket");
+		lgerror(errno, "Unable to close raw socket");
 		pthread_mutex_destroy(&rawsocket_lock);
 		return -1;
 	}
@@ -129,26 +129,26 @@ static int close_raw_socket(void) {
 static int open_raw6_socket(void) {
 	if (raw6socket != -2) {
 		errno = EALREADY;
-		perror("Raw socket is already opened");
+		lgerror(errno, "Raw socket is already opened");
 		return -1;
 	}
 	
 	raw6socket = socket(AF_INET6, SOCK_RAW, IPPROTO_RAW);
 	if (rawsocket == -1) {
-		perror("Unable to create raw socket");
+		lgerror(errno, "Unable to create raw socket");
 		return -1;
 	}
 
 	int mark = config.mark;
 	if (setsockopt(raw6socket, SOL_SOCKET, SO_MARK, &mark, sizeof(mark)) < 0)
 	{
-		fprintf(stderr, "setsockopt(SO_MARK, %d) failed\n", mark);
+		lgerror(errno, "setsockopt(SO_MARK, %d) failed\n", mark);
 		return -1;
 	}
 
 	int mst = pthread_mutex_init(&raw6socket_lock, NULL);
 	if (mst) {
-		fprintf(stderr, "Mutex err: %d\n", mst);
+		lgerror(mst, "Mutex err: %d\n", mst);
 		close(raw6socket);
 		errno = mst;
 
@@ -162,12 +162,12 @@ static int open_raw6_socket(void) {
 static int close_raw6_socket(void) {
 	if (raw6socket < 0) {
 		errno = EALREADY;
-		perror("Raw socket is not set");
+		lgerror(errno, "Raw socket is not set");
 		return -1;
 	}
 
 	if (close(raw6socket)) {
-		perror("Unable to close raw socket");
+		lgerror(errno, "Unable to close raw socket");
 		pthread_mutex_destroy(&rawsocket_lock);
 		return -1;
 	}
@@ -203,7 +203,7 @@ static int send_raw_ipv4(const uint8_t *pkt, uint32_t pktlen) {
 		pthread_mutex_lock(&rawsocket_lock);
 
 	int sent = sendto(rawsocket, 
-	    pkt, pktlen, 0, 
+	    pkt, pktlen, MSG_DONTWAIT, 
 	    (struct sockaddr *)&daddr, sizeof(daddr));
 
 	if (config.threads != 1)
@@ -238,7 +238,7 @@ static int send_raw_ipv6(const uint8_t *pkt, uint32_t pktlen) {
 		pthread_mutex_lock(&rawsocket_lock);
 
 	int sent = sendto(raw6socket, 
-	    pkt, pktlen, 0, 
+	    pkt, pktlen, MSG_DONTWAIT, 
 	    (struct sockaddr *)&daddr, sizeof(daddr));
 
 	lgtrace_addp("rawsocket sent %d", sent);
@@ -256,35 +256,29 @@ static int send_raw_socket(const uint8_t *pkt, uint32_t pktlen) {
 	int ret;
 
 	if (pktlen > AVAILABLE_MTU) {
-		if (config.verbose)
-			printf("Split packet!\n");
+		lgtrace("Split packet!\n");
 
-		uint8_t buff1[MNL_SOCKET_BUFFER_SIZE];
+		NETBUF_ALLOC(buff1, MNL_SOCKET_BUFFER_SIZE);
+		if (!NETBUF_CHECK(buff1)) {
+			lgerror(-ENOMEM, "Allocation error");
+			return -ENOMEM;
+		}
+
+		NETBUF_ALLOC(buff2, MNL_SOCKET_BUFFER_SIZE);
+		if (!NETBUF_CHECK(buff2)) {
+			lgerror(-ENOMEM, "Allocation error");
+			NETBUF_FREE(buff1);
+			return -ENOMEM;
+		}
+
 		uint32_t buff1_size = MNL_SOCKET_BUFFER_SIZE;
-		uint8_t buff2[MNL_SOCKET_BUFFER_SIZE];
 		uint32_t buff2_size = MNL_SOCKET_BUFFER_SIZE;
 
-		switch (config.fragmentation_strategy) {
-			case FRAG_STRAT_TCP:
-				if ((ret = tcp_frag(pkt, pktlen, AVAILABLE_MTU-128,
-					buff1, &buff1_size, buff2, &buff2_size)) < 0) {
+		if ((ret = tcp_frag(pkt, pktlen, AVAILABLE_MTU-128,
+			buff1, &buff1_size, buff2, &buff2_size)) < 0) {
 
-					errno = -ret;
-					return ret;
-				}
-				break;
-			case FRAG_STRAT_IP:
-				if ((ret = ip4_frag(pkt, pktlen, AVAILABLE_MTU-128,
-					buff1, &buff1_size, buff2, &buff2_size)) < 0) {
-
-					errno = -ret;
-					return ret;
-				}
-				break;
-			default:
-				errno = EINVAL;
-				printf("send_raw_socket: Packet is too big but fragmentation is disabled!\n");
-				return -EINVAL;
+			errno = -ret;
+			goto free_buffs;
 		}
 
 		int sent = 0;
@@ -292,16 +286,23 @@ static int send_raw_socket(const uint8_t *pkt, uint32_t pktlen) {
 
 		if (status >= 0) sent += status;
 		else {
-			return status;
+			ret = status;
+			goto free_buffs;
 		}
 
 		status = send_raw_socket(buff2, buff2_size);
 		if (status >= 0) sent += status;
 		else {
-			return status;
+			ret = status;
+			goto free_buffs;
 		}
 
-		return sent;
+		ret = sent;
+
+free_buffs:
+		NETBUF_FREE(buff1)
+		NETBUF_FREE(buff2)
+		return ret;
 	}
 	
 	int ipvx = netproto_version(pkt, pktlen);
@@ -311,7 +312,7 @@ static int send_raw_socket(const uint8_t *pkt, uint32_t pktlen) {
 	} else if (ipvx == IP6VERSION) {
 		ret = send_raw_ipv6(pkt, pktlen);
 	} else {
-		printf("proto version %d is unsupported\n", ipvx);
+		lginfo("proto version %d is unsupported\n", ipvx);
 		return -EINVAL;
 	}
 
@@ -344,7 +345,7 @@ static int fallback_accept_packet(uint32_t id, struct queue_data qdata) {
         nfq_nlmsg_verdict_put(verdnlh, id, NF_ACCEPT);
 
         if (mnl_socket_sendto(*qdata._nl, verdnlh, verdnlh->nlmsg_len) < 0) {
-                perror("mnl_socket_send");
+                lgerror(errno, "mnl_socket_send");
                 return MNL_CB_ERROR;
         }
 
@@ -369,7 +370,7 @@ void *delay_packet_send_fn(void *data) {
 	int ret = send_raw_socket(pkt, pktlen);
 	if (ret < 0) {
 		errno = -ret;
-		perror("send delayed raw packet");
+		lgerror(errno, "send delayed raw packet");
 	}
 
 	free(pkt);
@@ -401,13 +402,13 @@ static int queue_cb(const struct nlmsghdr *nlh, void *data) {
 	struct packet_data packet = {0};
 
         if (nfq_nlmsg_parse(nlh, attr) < 0) {
-                perror("Attr parse");
+                lgerror(errno, "Attr parse");
                 return MNL_CB_ERROR;
         }
  
         if (attr[NFQA_PACKET_HDR] == NULL) {
 		errno = ENODATA;
-                perror("Metaheader not set");
+                lgerror(errno, "Metaheader not set");
                 return MNL_CB_ERROR;
         }
 
@@ -420,7 +421,7 @@ static int queue_cb(const struct nlmsghdr *nlh, void *data) {
         packet.payload = mnl_attr_get_payload(attr[NFQA_PAYLOAD]);
 
 	if (attr[NFQA_CAP_LEN] != NULL && ntohl(mnl_attr_get_u32(attr[NFQA_CAP_LEN])) != packet.payload_len) {
-		fprintf(stderr, "The packet was truncated! Skip!\n");
+		lgerr("The packet was truncated! Skip!\n");
 		return fallback_accept_packet(packet.id, *qdata);
 	}
 
@@ -448,7 +449,7 @@ static int queue_cb(const struct nlmsghdr *nlh, void *data) {
 	}
 
         if (mnl_socket_sendto(*qdata->_nl, verdnlh, verdnlh->nlmsg_len) < 0) {
-                perror("mnl_socket_send");
+                lgerror(errno, "mnl_socket_send");
                 return MNL_CB_ERROR;
         }
 	
@@ -461,20 +462,64 @@ int init_queue(int queue_num) {
 	struct mnl_socket *nl;
 
 	if (open_socket(&nl)) {
-		perror("Unable to open socket");
+		lgerror(errno, "Unable to open socket");
 		return -1;
 	}
 
 	uint32_t portid = mnl_socket_get_portid(nl);
 
 	struct nlmsghdr *nlh;
-	char buf[BUF_SIZE];
+	NETBUF_ALLOC(bbuf, BUF_SIZE);
+	if (!NETBUF_CHECK(bbuf)) {
+		lgerror(-ENOMEM, "Allocation error");
+		goto die_alloc;
+	}
+	char *buf = (char *)bbuf;
+
+	/* Support for kernels versions < 3.8 */
+	// Obsolete and ignored in kernel version 3.8
+	// https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/commit/?id=0360ae412d09bc6f4864c801effcb20bfd84520e
+
+	nlh = nfq_nlmsg_put(buf, NFQNL_MSG_CONFIG, queue_num);
+	nfq_nlmsg_cfg_put_cmd(nlh, PF_INET, NFQNL_CFG_CMD_PF_UNBIND);
+
+	if (mnl_socket_sendto(nl, nlh, nlh->nlmsg_len) < 0) {
+		lgerror(errno, "mnl_socket_send");
+		goto die;
+	}
+
+	nlh = nfq_nlmsg_put(buf, NFQNL_MSG_CONFIG, queue_num);
+	nfq_nlmsg_cfg_put_cmd(nlh, PF_INET, NFQNL_CFG_CMD_PF_BIND);
+
+	if (mnl_socket_sendto(nl, nlh, nlh->nlmsg_len) < 0) {
+		lgerror(errno, "mnl_socket_send");
+		goto die;
+	}
+
+	if (config.use_ipv6) {
+		nlh = nfq_nlmsg_put(buf, NFQNL_MSG_CONFIG, queue_num);
+		nfq_nlmsg_cfg_put_cmd(nlh, PF_INET6, NFQNL_CFG_CMD_PF_UNBIND);
+
+		if (mnl_socket_sendto(nl, nlh, nlh->nlmsg_len) < 0) {
+			lgerror(errno, "mnl_socket_send");
+			goto die;
+		}
+
+		nlh = nfq_nlmsg_put(buf, NFQNL_MSG_CONFIG, queue_num);
+		nfq_nlmsg_cfg_put_cmd(nlh, PF_INET6, NFQNL_CFG_CMD_PF_BIND);
+
+		if (mnl_socket_sendto(nl, nlh, nlh->nlmsg_len) < 0) {
+			lgerror(errno, "mnl_socket_send");
+			goto die;
+		}
+	}
+	/* End of support for kernel versions < 3.8 */
 
 	nlh = nfq_nlmsg_put(buf, NFQNL_MSG_CONFIG, queue_num);
 	nfq_nlmsg_cfg_put_cmd(nlh, AF_INET, NFQNL_CFG_CMD_BIND);
 
 	if (mnl_socket_sendto(nl, nlh, nlh->nlmsg_len) < 0) {
-		perror("mnl_socket_send");
+		lgerror(errno, "mnl_socket_send");
 		goto die;
 	}
 
@@ -487,7 +532,7 @@ int init_queue(int queue_num) {
 	}
 
 	if (mnl_socket_sendto(nl, nlh, nlh->nlmsg_len) < 0) {
-		perror("mnl_socket_send");
+		lgerror(errno, "mnl_socket_send");
 		goto die;
 	}
 
@@ -504,32 +549,35 @@ int init_queue(int queue_num) {
 		.queue_num = queue_num
 	};
 
-	printf("Queue %d started\n", qdata.queue_num);
+	lginfo("Queue %d started\n", qdata.queue_num);
 
 	while (1) {
 		ret = mnl_socket_recvfrom(nl, buf, BUF_SIZE);
 		if (ret == -1) {
-			perror("mnl_socket_recvfrom");
+			lgerror(errno, "mnl_socket_recvfrom");
 			goto die;
 		}
 
 		ret = mnl_cb_run(buf, ret, 0, portid, queue_cb, &qdata);
 		if (ret < 0) {
-			lgerror("mnl_cb_run", -EPERM);
+			lgerror(-EPERM, "mnl_cb_run");
 			if (errno == EPERM) {
-				printf("Probably another instance of youtubeUnblock with the same queue number is running\n");
+				lgerror(errno, "Probably another instance of youtubeUnblock with the same queue number is running\n");
 			} else {
-				printf("Make sure the nfnetlink_queue kernel module is loaded\n");
+				lgerror(errno, "Make sure the nfnetlink_queue kernel module is loaded\n");
 			}
 			goto die;
 		}
 	}
 
 
+	NETBUF_FREE(bbuf)
 	close_socket(&nl);
 	return 0;
 
 die:
+	NETBUF_FREE(bbuf)
+die_alloc:
 	close_socket(&nl);
 	return -1;
 }
@@ -553,7 +601,7 @@ void *init_queue_wrapper(void *qdconf) {
 	
 	thres->status = init_queue(qconf->queue_num);
 
-	fprintf(stderr, "Thread %d exited with status %d\n", qconf->i, thres->status);
+	lgerror(thres->status, "Thread %d exited with status %d\n", qconf->i, thres->status);
 
 	return thres;
 }
@@ -567,7 +615,7 @@ int main(int argc, char *argv[]) {
 	int ret;
 	if ((ret = parse_args(argc, argv)) != 0) {
 		if (ret < 0) {
-			perror("Unable to parse args");
+			lgerror(errno, "Unable to parse args");
 			exit(EXIT_FAILURE);
 		}
 		exit(EXIT_SUCCESS);
@@ -576,17 +624,22 @@ int main(int argc, char *argv[]) {
 	print_version();
 	print_welcome();
 
+
 	if (open_raw_socket() < 0) {
-		perror("Unable to open raw socket");
+		lgerror(errno, "Unable to open raw socket");
 		exit(EXIT_FAILURE);
 	}
 
 	if (config.use_ipv6) {
 		if (open_raw6_socket() < 0) {
-			perror("Unable to open raw socket for ipv6");
+			lgerror(errno, "Unable to open raw socket for ipv6");
 			close_raw_socket();
 			exit(EXIT_FAILURE);
 		}
+	}
+
+	if (config.daemonize) {
+		daemon(0, config.noclose);
 	}
 
 	struct queue_res *qres = &defqres;
@@ -599,7 +652,7 @@ int main(int argc, char *argv[]) {
 
 		qres = init_queue_wrapper(&tconf);
 	} else {
-		printf("%d threads wil be used\n", config.threads);
+		lginfo("%d threads wil be used\n", config.threads);
 
 		struct queue_conf thread_confs[MAX_THREADS];
 		pthread_t threads[MAX_THREADS];
