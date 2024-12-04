@@ -142,6 +142,20 @@ struct fake_type {
 	struct failing_strategy strategy;
 };
 
+struct udp_failing_strategy {
+	unsigned int strategy;
+	uint8_t faking_ttl;
+};
+
+struct udp_fake_type {
+	uint16_t fake_len;
+
+	// faking strategy of the fake packet.
+	// Does not support bitmask, pass standalone strategy.
+	// Pass 0 if you don't want any faking procedures.
+	struct udp_failing_strategy strategy;
+};
+
 /**
  * Invalidates the raw packet. The function aims to invalid the packet
  * in such way as it will be accepted by DPI, but dropped by target server

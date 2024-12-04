@@ -138,3 +138,112 @@ invalid_packet:
 	lgerror(-EINVAL, "QUIC invalid Initial packet");
 	return -EINVAL;
 }
+
+int udp_fail_packet(struct udp_failing_strategy strategy, uint8_t *payload, uint32_t *plen, uint32_t avail_buflen) {
+	void *iph;
+	uint32_t iph_len;
+	struct udphdr *udph;
+	uint8_t *data;
+	uint32_t dlen;
+	int ret;
+
+	ret = udp_payload_split(payload, *plen, 
+			&iph, &iph_len, &udph,
+			&data, &dlen);
+
+	uint32_t ipxv = netproto_version(payload, *plen);
+
+	if (ret < 0) {
+		return ret;
+	}
+
+
+	if (strategy.strategy == FAKE_STRAT_TTL) {
+		lgtrace_addp("set fake ttl to %d", strategy.faking_ttl);
+
+		if (ipxv == IP4VERSION) {
+			((struct iphdr *)iph)->ttl = strategy.faking_ttl;
+		} else if (ipxv == IP6VERSION) {
+			((struct ip6_hdr *)iph)->ip6_hops = strategy.faking_ttl;
+		} else {
+			lgerror(-EINVAL, "fail_packet: IP version is unsupported");
+			return -EINVAL;
+		}
+	}
+
+	if (ipxv == IP4VERSION) {
+		((struct iphdr *)iph)->frag_off = 0;
+	}
+
+
+	set_ip_checksum(iph, iph_len);
+
+	if (strategy.strategy == FAKE_STRAT_UDP_CHECK) {
+		lgtrace_addp("break fake tcp checksum");
+		udph->check += 1;
+	}
+
+	return 0;
+}
+
+int gen_fake_udp(struct udp_fake_type type,
+		const void *ipxh, uint32_t iph_len, 
+		const struct udphdr *udph,
+		uint8_t *buf, uint32_t *buflen) {
+	uint32_t data_len = type.fake_len;
+	int ret;
+
+
+	if (!ipxh || !udph || !buf || !buflen)
+		return -EINVAL;
+
+	int ipxv = netproto_version(ipxh, iph_len);
+
+	if (ipxv == IP4VERSION) {
+		const struct iphdr *iph = ipxh;
+
+		memcpy(buf, iph, iph_len);
+		struct iphdr *niph = (struct iphdr *)buf;
+
+		niph->protocol = IPPROTO_UDP;
+	} else if (ipxv == IP6VERSION) {
+		const struct ip6_hdr *iph = ipxh;
+
+		iph_len = sizeof(struct ip6_hdr);
+		memcpy(buf, iph, iph_len);
+		struct ip6_hdr *niph = (struct ip6_hdr *)buf;
+
+		niph->ip6_nxt = IPPROTO_UDP;
+	} else {
+		return -EINVAL;
+	}
+
+	uint32_t dlen = iph_len + sizeof(struct udphdr) + data_len;
+
+	if (*buflen < dlen) 
+		return -ENOMEM;
+
+	memcpy(buf + iph_len, udph, sizeof(struct udphdr));
+	uint8_t *bfdptr = buf + iph_len + sizeof(struct udphdr);
+
+	memset(bfdptr, 0, data_len);
+
+	if (ipxv == IP4VERSION) {
+		struct iphdr *niph = (struct iphdr *)buf;
+		niph->tot_len = htons(dlen);
+		niph->id = randint();
+	} else if (ipxv == IP6VERSION) {
+		struct ip6_hdr *niph = (struct ip6_hdr *)buf;
+		niph->ip6_plen = htons(dlen - iph_len);
+	}
+
+	struct udphdr *nudph = (struct udphdr *)(buf + iph_len);
+	nudph->len = htons(sizeof(struct udphdr) + data_len);
+
+
+	udp_fail_packet(type.strategy, buf, &dlen, *buflen);
+
+	*buflen = dlen;
+	
+	return 0;
+}

@@ -1,6 +1,7 @@
 #ifndef QUIC_H
 #define QUIC_H
 #include "types.h"
+#include "utils.h"
 
 
 /**
@@ -124,5 +125,14 @@ int quic_parse_initial_message(uint8_t *inpayload, uint32_t inplen,
 			const struct quic_lhdr *qch,
 			struct quici_hdr *qhdr,
 			uint8_t **payload, uint32_t *plen);
+
+// Like fail_packet for TCP
+int udp_fail_packet(struct udp_failing_strategy strategy, uint8_t *payload, uint32_t *plen, uint32_t avail_buflen);
+
+// Like gen_fake_sni for TCP
+int gen_fake_udp(struct udp_fake_type type,
+		const void *ipxh, uint32_t iph_len, 
+		const struct udphdr *udph,
+		uint8_t *buf, uint32_t *buflen);
 
 #endif /* QUIC_H */

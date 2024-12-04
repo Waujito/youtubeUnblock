@@ -165,8 +165,9 @@ for (struct section_config_t *section = &config.default_config + config.custom_c
 #define FAKE_STRAT_PAST_SEQ	(1 << 2)
 #define FAKE_STRAT_TCP_CHECK	(1 << 3)
 #define FAKE_STRAT_TCP_MD5SUM	(1 << 4)
+#define FAKE_STRAT_UDP_CHECK	(1 << 5)
 
-#define FAKE_STRAT_COUNT	5
+#define FAKE_STRAT_COUNT	6
 
 /**
  * This macros iterates through all faking strategies and executes code under it.
