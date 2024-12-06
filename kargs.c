@@ -161,7 +161,38 @@ static const struct kernel_param_ops exclude_domains_ops = {
 module_param_cb(exclude_domains, &exclude_domains_ops, &def_section->exclude_domains_str, 0664);
 
 module_param_cb(no_ipv6, &inverse_boolean_ops, &config.use_ipv6, 0664);
-// module_param_cb(quic_drop, &boolean_parameter_ops, &def_section->quic_drop, 0664);
+
+static int quic_drop_set(const char *val, const struct kernel_param *kp) {
+	int n = 0, ret;
+	ret = kstrtoint(val, 10, &n);
+	if (ret != 0 || (n != 0 && n != 1))
+		return -EINVAL;
+
+	if (n) {
+		def_section->udp_mode = UDP_MODE_DROP;
+		def_section->udp_filter_quic = UDP_FILTER_QUIC_ALL;
+	} else {
+		def_section->udp_filter_quic = UDP_FILTER_QUIC_DISABLED;
+	}
+
+	return 0;
+}
+
+static int quic_drop_get(char *buffer, const struct kernel_param *kp) {
+	if (def_section->udp_mode == UDP_MODE_DROP &&
+		def_section->udp_filter_quic == UDP_FILTER_QUIC_ALL) {
+		return sprintf(buffer, "%d\n", 1);
+	} else {
+		return sprintf(buffer, "%d\n", 0);
+	}
+}
+
+static const struct kernel_param_ops quic_drop_ops = {
+	.set = quic_drop_set,
+	.get = quic_drop_get
+};
+
+module_param_cb(quic_drop, &quic_drop_ops, NULL, 0664);
 
 static int verbosity_set(const char *val, const struct kernel_param *kp) {
 	size_t len;
