@@ -30,6 +30,8 @@ struct section_config_t {
 	const char *domains_str;
 	unsigned int domains_strlen;
 
+	int tls_enabled;
+
 	int fragmentation_strategy;
 	int frag_sni_reverse;
 	int frag_sni_faked;
@@ -191,6 +193,7 @@ enum {
 };
 
 #define default_section_config {				\
+	.tls_enabled = 1,					\
 	.frag_sni_reverse = 1,                                  \
 	.frag_sni_faked = 0,                                    \
 	.fragmentation_strategy = FRAGMENTATION_STRATEGY,       \

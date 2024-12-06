@@ -242,6 +242,8 @@ Available flags:
 
 - `--quic-drop` Drop all QUIC packets which goes to youtubeUnblock. Won't affect any other UDP packets. Just an alias for `--udp-filter-quic=all --udp-mode=drop`.
 
+- `--tls={enabled|disabled}` Set it if you want not to process TLS traffic in current section. May be used if you want to set only UDP-based section. (Here section is a unit between `--fbegin` and `--fend` flags).
+
 - `--silent` Disables verbose mode.
 
 - `--trace` Maximum verbosity for debugging purposes.

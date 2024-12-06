@@ -68,6 +68,7 @@ enum {
 	OPT_UDP_FAKING_STRATEGY,
 	OPT_UDP_DPORT_FILTER,
 	OPT_UDP_FILTER_QUIC,
+	OPT_TLS_ENABLED,
 };
 
 static struct option long_opt[] = {
@@ -78,6 +79,7 @@ static struct option long_opt[] = {
 	{"fake-sni",		1, 0, OPT_FAKE_SNI},
 	{"synfake",		1, 0, OPT_SYNFAKE},
 	{"synfake-len",		1, 0, OPT_SYNFAKE_LEN},
+	{"tls",			1, 0, OPT_TLS_ENABLED},
 	{"fake-sni-seq-len",	1, 0, OPT_FAKE_SNI_SEQ_LEN},
 	{"fake-sni-type",	1, 0, OPT_FAKE_SNI_TYPE},
 	{"fake-custom-payload", 1, 0, OPT_FAKE_CUSTOM_PAYLOAD},
@@ -132,7 +134,7 @@ static long parse_numeric_option(const char* value) {
 	return result;
 }
 
-void print_version() {
+void print_version(void) {
   	printf("youtubeUnblock" 
 #if defined(PKG_VERSION)
 	" " PKG_VERSION
@@ -151,6 +153,7 @@ void print_usage(const char *argv0) {
 	printf("\t--queue-num=<number of netfilter queue>\n");
 	printf("\t--sni-domains=<comma separated domain list>|all\n");
 	printf("\t--exclude-domains=<comma separated domain list>\n");
+	printf("\t--tls={enabled|disabled}\n");
 	printf("\t--fake-sni={1|0}\n");
 	printf("\t--fake-sni-seq-len=<length>\n");
 	printf("\t--fake-sni-type={default|random|custom}\n");
@@ -375,6 +378,16 @@ int parse_args(int argc, char *argv[]) {
 			break;
 
 /* section_config_t scoped configs */
+		case OPT_TLS_ENABLED:
+			if (strcmp(optarg, "enabled") == 0) {
+				sect_config->tls_enabled = 1;
+			} else if (strcmp(optarg, "disabled") == 0) {
+				sect_config->tls_enabled = 0;
+			} else {
+				goto invalid_opt;
+			}
+
+			break;
 		case OPT_SNI_DOMAINS:
 			if (!strcmp(optarg, "all")) {
 				sect_config->all_domains = 1;
@@ -650,7 +663,7 @@ error:
 	return -errno;
 }
 
-void print_welcome() {
+void print_welcome(void) {
 	if (config.syslog) {
 		printf("Logging to system log\n");
 	}
@@ -671,6 +684,9 @@ void print_welcome() {
 		int section_number = CONFIG_SECTION_NUMBER(section);
 		lginfo("Section #%d\n", section_number);
 
+		if (!section->tls_enabled) {
+			lginfo("TCP TLS is disabled for section!\n");
+		}
 		switch (section->fragmentation_strategy) {
 			case FRAG_STRAT_TCP:
 				lginfo("Using TCP segmentation\n");

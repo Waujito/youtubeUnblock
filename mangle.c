@@ -170,6 +170,9 @@ int process_tcp_packet(const struct section_config_t *section, const uint8_t *ra
 
 	if (tcph->syn) goto continue_flow;
 
+	if (!section->tls_enabled)
+		goto continue_flow;
+
 	struct tls_verdict vrd = analyze_tls_data(section, data, dlen);
 	lgtrace_addp("TLS analyzed");
 
