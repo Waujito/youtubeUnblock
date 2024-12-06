@@ -62,6 +62,12 @@ enum {
 	OPT_SILENT,
 	OPT_NO_GSO,
 	OPT_QUEUE_NUM,
+	OPT_UDP_MODE,
+	OPT_UDP_FAKE_SEQ_LEN,
+	OPT_UDP_FAKE_PAYLOAD_LEN,
+	OPT_UDP_FAKING_STRATEGY,
+	OPT_UDP_DPORT_FILTER,
+	OPT_UDP_FILTER_QUIC,
 };
 
 static struct option long_opt[] = {
@@ -87,6 +93,12 @@ static struct option long_opt[] = {
 	{"quic-drop",		0, 0, OPT_QUIC_DROP},
 	{"sni-detection",	1, 0, OPT_SNI_DETECTION},
 	{"seg2delay",		1, 0, OPT_SEG2DELAY},
+	{"udp-mode",		1, 0, OPT_UDP_MODE},
+	{"udp-fake-seq-len",	1, 0, OPT_UDP_FAKE_SEQ_LEN},
+	{"udp-fake-len",	1, 0, OPT_UDP_FAKE_PAYLOAD_LEN},
+	{"udp-faking-strategy",	1, 0, OPT_UDP_FAKING_STRATEGY},
+	{"udp-dport-filter",	1, 0, OPT_UDP_DPORT_FILTER},
+	{"udp-filter-quic",	1, 0, OPT_UDP_FILTER_QUIC},
 	{"threads",		1, 0, OPT_THREADS},
 	{"silent",		0, 0, OPT_SILENT},
 	{"trace",		0, 0, OPT_TRACE},
@@ -157,6 +169,12 @@ void print_usage(const char *argv0) {
 	printf("\t--quic-drop\n");
 	printf("\t--sni-detection={parse|brute}\n");
 	printf("\t--seg2delay=<delay>\n");
+	printf("\t--udp-mode={drop|fake}\n");
+	printf("\t--udp-fake-seq-len=<amount of faking packets sent>\n");
+	printf("\t--udp-fake-len=<size of upd fake>\n");
+	printf("\t--udp-faking-strategy={checksum|ttl}\n");
+	printf("\t--udp-dport-filter=<5,6,200-500>\n");
+	printf("\t--udp-filter-quic={disabled|all}\n");
 	printf("\t--threads=<threads number>\n");
 	printf("\t--packet-mark=<mark>\n");
 	printf("\t--silent\n");
@@ -169,6 +187,87 @@ void print_usage(const char *argv0) {
 	printf("\t--fbegin\n");
 	printf("\t--fend\n");
 	printf("\n");
+}
+
+int parse_udp_dport_range(char *str, struct udp_dport_range **udpr, int *udpr_len) {
+	int ret = 0;
+	int seclen = 1;
+	int strlen = 0;
+	const char *p = optarg;
+	while (*p != '\0') {
+		if (*p == ',')
+			seclen++;
+		p++;
+	}
+	strlen = p - optarg;
+	
+	struct udp_dport_range *udp_dport_ranges = malloc(
+		seclen * sizeof(struct udp_dport_range));
+
+	int i = 0;
+
+
+	p = optarg;
+	const char *ep = p;
+	while (1) {
+		if (*ep == '\0' || *ep == ',') {
+			if (ep == p) {
+				if (*ep == '\0')
+					break;
+
+				p++, ep++;
+				continue;
+			}
+
+			char *endp;
+			long num1 = strtol(p, &endp, 10);
+			long num2 = num1;
+			if (errno) 
+				goto erret;
+			
+			if (endp != ep) {
+				if (*endp == '-') {
+					endp++;
+					num2 = strtol(endp, &endp, 10);
+
+					if (endp != ep || errno)
+						goto erret;
+				} else {
+					goto erret;
+				}
+			}
+
+			if (
+				!(num1 > 0 && num1 < (1 << 16)) || 
+				!(num2 > 0 && num2 < (1 << 16)) ||
+				num2 < num1
+			) 
+				goto erret;
+				
+			udp_dport_ranges[i] = (struct udp_dport_range){
+				.start = num1,
+				.end = num2
+			};
+			i++;
+
+			if (*ep == '\0') {
+				break;
+			} else {
+				p = ep + 1;
+				ep = p;
+			}
+		} else {
+			ep++;
+		}
+	}
+
+	*udpr = udp_dport_ranges;
+	*udpr_len = seclen;
+	return 0;
+
+erret:
+	free(udp_dport_ranges);
+	return -1;
 }
 
 int parse_args(int argc, char *argv[]) {
@@ -443,7 +542,8 @@ int parse_args(int argc, char *argv[]) {
 			sect_config->seg2_delay = num;
 			break;
 		case OPT_QUIC_DROP:
-			sect_config->quic_drop = 1;
+			sect_config->udp_filter_quic = UDP_FILTER_QUIC_ALL;
+			sect_config->udp_mode = UDP_MODE_DROP;
 			break;
 		case OPT_SNI_DETECTION:
 			if (strcmp(optarg, "parse") == 0) {
@@ -472,6 +572,63 @@ int parse_args(int argc, char *argv[]) {
 			}
 			sect_config->synfake_len = num;
 			break;
+		case OPT_UDP_MODE:
+			if (strcmp(optarg, "drop") == 0) {
+				sect_config->udp_mode = UDP_MODE_DROP;
+			} else if (strcmp(optarg, "fake") == 0) {
+				sect_config->udp_mode = UDP_MODE_FAKE;
+			} else {
+				goto invalid_opt;
+			}
+
+			break;
+		case OPT_UDP_FAKING_STRATEGY:
+			if (strcmp(optarg, "checksum") == 0) {
+				sect_config->udp_faking_strategy = FAKE_STRAT_UDP_CHECK;
+			} else if (strcmp(optarg, "ttl") == 0) {
+				sect_config->udp_faking_strategy = FAKE_STRAT_TTL;
+			} else {
+				goto invalid_opt;
+			}
+
+			break;
+		case OPT_UDP_FAKE_SEQ_LEN:
+			num = parse_numeric_option(optarg);
+			if (errno != 0 || num < 0) {
+				goto invalid_opt;
+			}
+
+			sect_config->udp_fake_seq_len = num;
+			break;
+		case OPT_UDP_FAKE_PAYLOAD_LEN:
+			num = parse_numeric_option(optarg);
+			if (errno != 0 || num < 0 || num > 1300) {
+				goto invalid_opt;
+			}
+
+			sect_config->udp_fake_len = num;
+			break;
+		case OPT_UDP_DPORT_FILTER: 
+		{
+			struct udp_dport_range *udp_dport_range;
+			int udp_range_len = 0;
+			if (parse_udp_dport_range(optarg, &udp_dport_range, &udp_range_len) < 0) {
+				goto invalid_opt;
+			}
+			sect_config->udp_dport_range = udp_dport_range;
+			sect_config->udp_dport_range_len = udp_range_len;
+			break;
+		}
+		case OPT_UDP_FILTER_QUIC:
+			if (strcmp(optarg, "disabled") == 0) {
+				sect_config->udp_filter_quic = UDP_FILTER_QUIC_DISABLED;
+			} else if (strcmp(optarg, "all") == 0) {
+				sect_config->udp_filter_quic = UDP_FILTER_QUIC_ALL;
+			} else {
+				goto invalid_opt;
+			}
+
+			break;
 		default:
 			goto error;
 		}
@@ -490,7 +647,7 @@ invalid_opt:
 error:
 	print_usage(argv[0]);
 	errno = EINVAL;
-	return -1;
+	return -errno;
 }
 
 void print_welcome() {
@@ -575,7 +732,7 @@ void print_welcome() {
 			lginfo("Fake SYN payload will be sent with each TCP request SYN packet\n");
 		}
 
-		if (section->quic_drop) {
+		if (section->udp_filter_quic && section->udp_mode == UDP_MODE_DROP) {
 			lginfo("All QUIC packets will be dropped\n");
 		}
 

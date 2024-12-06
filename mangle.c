@@ -363,43 +363,13 @@ int process_udp_packet(const struct section_config_t *section, const uint8_t *pk
 	}
 
 
+	if (!detect_udp_filtered(section, pkt, pktlen)) 
+		goto continue_flow;
 
-	if (section->quic_drop) {
-		lgtrace_addp("QUIC probe");
-		const struct quic_lhdr *qch;
-		uint32_t qch_len;
-		struct quic_cids qci;
-		uint8_t *quic_raw_payload;
-		uint32_t quic_raw_plen;
-		ret = quic_parse_data((uint8_t *)data, dlen, 
-			 (struct quic_lhdr **)&qch, &qch_len, &qci, 
-			 &quic_raw_payload, &quic_raw_plen);
-
-		if (ret < 0) {
-			lgtrace_addp("undefined type");
-			goto accept_quic;
-		}
-
-		lgtrace_addp("QUIC detected");
-		uint8_t qtype = qch->type;
-
+	if (section->udp_mode == UDP_MODE_DROP)
 		goto drop;
-
-		if (qch->version == QUIC_V1)
-			qtype = quic_convtype_v1(qtype);
-		else if (qch->version == QUIC_V2) 
-			qtype = quic_convtype_v2(qtype);
-
-		if (qtype != QUIC_INITIAL_TYPE) {
-			lgtrace_addp("quic message type: %d", qtype);
-			goto accept_quic;
-		}
-		
-		lgtrace_addp("quic initial message");
-	}
-
-	if (1) {
-		for (int i = 0; i < 6; i++) {
+	else if (section->udp_mode == UDP_MODE_FAKE) {
+		for (int i = 0; i < section->udp_fake_seq_len; i++) {
 			NETBUF_ALLOC(fake_udp, MAX_PACKET_SIZE);
 			if (!NETBUF_CHECK(fake_udp)) {
 				lgerror(-ENOMEM, "Allocation error");
@@ -408,9 +378,9 @@ int process_udp_packet(const struct section_config_t *section, const uint8_t *pk
 			uint32_t fsn_len = MAX_PACKET_SIZE;
 
 			struct udp_fake_type fake_type = {
-				.fake_len = 64,
+				.fake_len = section->udp_fake_len,
 				.strategy = {
-					.strategy = FAKE_STRAT_UDP_CHECK,
+					.strategy = section->udp_faking_strategy,
 				},
 			};
 			ret = gen_fake_udp(fake_type, iph, iph_len, udph, fake_udp, &fsn_len);

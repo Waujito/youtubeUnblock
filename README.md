@@ -133,7 +133,8 @@ Copy `youtubeUnblock.service` to `/usr/lib/systemd/system` (you should change th
 On nftables you should put next nftables rules:
 ```sh
 nft add chain inet fw4 youtubeUnblock '{ type filter hook postrouting priority mangle - 1; policy accept; }'
-nft add rule inet fw4 youtubeUnblock 'meta l4proto { tcp, udp } th dport 443 ct original packets < 20 counter queue num 537 bypass'
+nft add rule inet fw4 youtubeUnblock 'tcp dport 443 ct original packets < 20 counter queue num 537 bypass'
+nft add rule inet fw4 youtubeUnblock 'meta l4proto udp ct original packets < 9 counter queue num 537 bypass'
 nft insert rule inet fw4 output 'mark and 0x8000 == 0x8000 counter accept'
 ```
 
@@ -143,7 +144,7 @@ On iptables you should put next iptables rules:
 ```sh
 iptables -t mangle -N YOUTUBEUNBLOCK
 iptables -t mangle -A YOUTUBEUNBLOCK -p tcp --dport 443 -m connbytes --connbytes-dir original --connbytes-mode packets --connbytes 0:19 -j NFQUEUE --queue-num 537 --queue-bypass
-iptables -t mangle -A YOUTUBEUNBLOCK -p udp --dport 443 -m connbytes --connbytes-dir original --connbytes-mode packets --connbytes 0:19 -j NFQUEUE --queue-num 537 --queue-bypass
+iptables -t mangle -A YOUTUBEUNBLOCK -p udp -m connbytes --connbytes-dir original --connbytes-mode packets --connbytes 0:8 -j NFQUEUE --queue-num 537 --queue-bypass
 iptables -t mangle -A POSTROUTING -j YOUTUBEUNBLOCK
 iptables -I OUTPUT -m mark --mark 32768/32768 -j ACCEPT
 ```
@@ -154,7 +155,7 @@ For IPv6 on iptables you need to duplicate rules above for ip6tables:
 ```sh
 ip6tables -t mangle -N YOUTUBEUNBLOCK
 ip6tables -t mangle -A YOUTUBEUNBLOCK -p tcp --dport 443 -m connbytes --connbytes-dir original --connbytes-mode packets --connbytes 0:19 -j NFQUEUE --queue-num 537 --queue-bypass
-ip6tables -t mangle -A YOUTUBEUNBLOCK -p udp --dport 443 -m connbytes --connbytes-dir original --connbytes-mode packets --connbytes 0:19 -j NFQUEUE --queue-num 537 --queue-bypass
+ip6tables -t mangle -A YOUTUBEUNBLOCK -p udp -m connbytes --connbytes-dir original --connbytes-mode packets --connbytes 0:8 -j NFQUEUE --queue-num 537 --queue-bypass
 ip6tables -t mangle -A POSTROUTING -j YOUTUBEUNBLOCK
 ip6tables -I OUTPUT -m mark --mark 32768/32768 -j ACCEPT
 ```
@@ -219,8 +220,6 @@ Available flags:
 
 - `--frag-sni-pos=<pos>` With this option **youtubeUnblock** will split the packet at the position pos. Defaults to 1.
 
-- `--quic-drop` Drop all QUIC packets which goes to youtubeUnblock. Won't affect any other UDP packets. Suitable for some TVs. Note, that for this option to work you should also add proxy udp to youtubeUnblock in firewall. `connbytes` may also be used with udp.
-
 - `--fk-winsize=<winsize>` Specifies window size for the fragmented TCP packet. Applicable if you want for response to be fragmented. May slowdown connection initialization.
 
 - `--synfake={1|0}` If 1, syn payload will be sent before each request. The idea is taken from syndata from zapret project. Syn payload will normally be discarded by endpoint but may be handled by TSPU. This option sends normal fake in that payload. Please note, that the option works for all the sites, so --sni-domains won't change anything.
@@ -230,6 +229,18 @@ Available flags:
 - `--sni-detection={parse|brute}` Specifies how to detect SNI. Parse will normally detect it by parsing the Client Hello message. Brute will go through the entire message and check possibility of SNI occurrence. Please note, that when `--sni-domains` option is not all brute will be O(nm) time complexity where n stands for length of the message and m is number of domains. Defaults to parse.
 
 - `--seg2delay=<delay>` This flag forces **youtubeUnblock** to wait a little bit before send the 2nd part of the split packet.
+
+- `--udp-mode={drop|fake}` This flag specifies udp handling strategy. If drop udp packets will be dropped (useful for quic when browser can fallback to tcp), if fake udp will be faked. Defaults to fake.
+
+- `--udp-fake-seq-len=<amount of faking packets sent>` Specifies how much faking packets will be sent over the network. Defaults to 6.
+
+- `--udp-fake-len=<size of udp fake>` Size of udp fake payload (typically payload is zeroes). Defaults to 64.
+
+- `--udp-dport-filter=<5,6,200-500>` Filter the UDP destination ports. Defaults to no ports. Specifie the ports you want to be handled by youtubeUnblock.
+
+- `--udp-filter-quic={disabled|all}` Enables QUIC filtering for UDP handler. If disabled, quic won't be processed, if all all quic initial packets will be handled. Defaults to disabled.
+
+- `--quic-drop` Drop all QUIC packets which goes to youtubeUnblock. Won't affect any other UDP packets. Just an alias for `--udp-filter-quic=all --udp-mode=drop`.
 
 - `--silent` Disables verbose mode.
 

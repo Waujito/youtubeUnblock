@@ -179,7 +179,7 @@ int udp_fail_packet(struct udp_failing_strategy strategy, uint8_t *payload, uint
 	set_ip_checksum(iph, iph_len);
 
 	if (strategy.strategy == FAKE_STRAT_UDP_CHECK) {
-		lgtrace_addp("break fake tcp checksum");
+		lgtrace_addp("break fake udp checksum");
 		udph->check += 1;
 	}
 
@@ -246,4 +246,78 @@ int gen_fake_udp(struct udp_fake_type type,
 	*buflen = dlen;
 	
 	return 0;
+}
+
+int detect_udp_filtered(const struct section_config_t *section,
+			const uint8_t *payload, uint32_t plen) {
+	const void *iph;
+	uint32_t iph_len;
+	const struct udphdr *udph;
+	const uint8_t *data;
+	uint32_t dlen;
+	int ret;
+	int ipver;
+
+	ipver = netproto_version(payload, plen);
+
+	ret = udp_payload_split((uint8_t *)payload, plen,
+			      (void **)&iph, &iph_len, 
+			      (struct udphdr **)&udph,
+			      (uint8_t **)&data, &dlen);
+	int udp_dport = ntohs(udph->dest);
+	lgtrace_addp("UDP dport: %d", udp_dport);
+
+	
+	if (ret < 0) {
+		goto skip;
+	}
+	
+	if (section->udp_filter_quic) {
+		const struct quic_lhdr *qch;
+		uint32_t qch_len;
+		struct quic_cids qci;
+		uint8_t *quic_raw_payload;
+		uint32_t quic_raw_plen;
+
+		lgtrace_addp("QUIC probe");
+
+		ret = quic_parse_data((uint8_t *)data, dlen, 
+			 (struct quic_lhdr **)&qch, &qch_len, &qci, 
+			 &quic_raw_payload, &quic_raw_plen);
+
+		if (ret < 0) {
+			lgtrace_addp("undefined type");
+			goto skip;
+		}
+
+		lgtrace_addp("QUIC detected");
+		uint8_t qtype = qch->type;
+
+		goto approve;
+
+		// if (qch->version == QUIC_V1)
+		// 	qtype = quic_convtype_v1(qtype);
+		// else if (qch->version == QUIC_V2) 
+		// 	qtype = quic_convtype_v2(qtype);
+		//
+		// if (qtype != QUIC_INITIAL_TYPE) {
+		// 	lgtrace_addp("quic message type: %d", qtype);
+		// 	goto accept_quic;
+		// }
+		// 
+		// lgtrace_addp("quic initial message");
+	}
+
+	for (int i = 0; i < section->udp_dport_range_len; i++) {
+		struct udp_dport_range crange = section->udp_dport_range[i];
+		if (udp_dport >= crange.start && udp_dport <= crange.end) {
+			lgtrace_addp("matched to %d-%d", crange.start, crange.end);
+			goto approve;
+		}
+	}
+
+skip:
+	return 0;
+approve:
+	return 1;
 }

@@ -161,7 +161,7 @@ static const struct kernel_param_ops exclude_domains_ops = {
 module_param_cb(exclude_domains, &exclude_domains_ops, &def_section->exclude_domains_str, 0664);
 
 module_param_cb(no_ipv6, &inverse_boolean_ops, &config.use_ipv6, 0664);
-module_param_cb(quic_drop, &boolean_parameter_ops, &def_section->quic_drop, 0664);
+// module_param_cb(quic_drop, &boolean_parameter_ops, &def_section->quic_drop, 0664);
 
 static int verbosity_set(const char *val, const struct kernel_param *kp) {
 	size_t len;

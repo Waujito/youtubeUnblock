@@ -135,4 +135,7 @@ int gen_fake_udp(struct udp_fake_type type,
 		const struct udphdr *udph,
 		uint8_t *buf, uint32_t *buflen);
 
+int detect_udp_filtered(const struct section_config_t *section,
+			const uint8_t *payload, uint32_t plen);
+
 #endif /* QUIC_H */
