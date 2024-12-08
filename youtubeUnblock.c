@@ -612,7 +612,7 @@ struct instance_config_t instance_config = {
 
 int main(int argc, char *argv[]) {
 	int ret;
-	if ((ret = parse_args(argc, argv)) != 0) {
+	if ((ret = yparse_args(argc, argv)) != 0) {
 		if (ret < 0) {
 			lgerror(-errno, "Unable to parse args");
 			exit(EXIT_FAILURE);

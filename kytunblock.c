@@ -20,6 +20,7 @@
 #include "config.h"
 #include "utils.h"
 #include "logging.h"
+#include "args.h"
 
 #if defined(PKG_VERSION)
 MODULE_VERSION(PKG_VERSION);
@@ -206,9 +207,9 @@ erret_lc:
 	int ipvx = netproto_version(pkt, pktlen);
 
 	if (ipvx == IP4VERSION) {
-		return send_raw_ipv4(pkt, pktlen);
+		ret = send_raw_ipv4(pkt, pktlen);
 	} else if (ipvx == IP6VERSION) {
-		return send_raw_ipv6(pkt, pktlen);
+		ret = send_raw_ipv6(pkt, pktlen);
 	} else {
 		printf("proto version %d is unsupported\n", ipvx);
 		return -EINVAL;
@@ -346,6 +347,8 @@ static struct nf_hook_ops ykb6_nf_reg __read_mostly = {
 
 static int __init ykb_init(void) {
 	int ret = 0;
+	ret = init_config(&config);
+	if (ret < 0) goto err;
 
 	ret = open_raw_socket();
 	if (ret < 0) goto err;
@@ -420,6 +423,8 @@ static void __exit ykb_destroy(void) {
 #endif
 
 	close_raw_socket();
+
+	free_config(config);
 	lginfo("youtubeUnblock kernel module destroyed.\n");
 }
 

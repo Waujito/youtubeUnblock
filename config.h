@@ -5,7 +5,6 @@
 #define USER_SPACE
 #endif
 
-#include "raw_replacements.h"
 #include "types.h"
 
 typedef int (*raw_send_t)(const unsigned char *data, unsigned int data_len);
@@ -26,9 +25,21 @@ struct udp_dport_range {
 	uint16_t end;
 };
 
+struct domains_list {
+	char *domain_name;
+	uint16_t domain_len;
+
+	struct domains_list *next;
+};
+
 struct section_config_t {
-	const char *domains_str;
-	unsigned int domains_strlen;
+	int id;
+	struct section_config_t *next;
+	struct section_config_t *prev;
+
+	struct domains_list *sni_domains;
+	struct domains_list *exclude_sni_domains;
+	unsigned int all_domains;
 
 	int tls_enabled;
 
@@ -53,14 +64,10 @@ struct section_config_t {
 	int synfake;
 	unsigned int synfake_len;
 
-	const char *exclude_domains_str;
-	unsigned int exclude_domains_strlen;
-	unsigned int all_domains;
-
 	const char *fake_sni_pkt;
 	unsigned int fake_sni_pkt_sz;
 
-	const char *fake_custom_pkt;
+	char *fake_custom_pkt;
 	unsigned int fake_custom_pkt_sz;
 
 	unsigned int fk_winsize;
@@ -98,17 +105,16 @@ struct config_t {
 #define VERBOSE_TRACE	2
 	int verbose;
 
-	struct section_config_t default_config;
-	struct section_config_t custom_configs[MAX_CONFIGLIST_LEN];
-	int custom_configs_len;
+	struct section_config_t *first_section;
+	struct section_config_t *last_section;
 };
 
 extern struct config_t config;
 
-#define ITER_CONFIG_SECTIONS(section) \
-for (struct section_config_t *section = &config.default_config + config.custom_configs_len; section >= &config.default_config; section--)
+#define ITER_CONFIG_SECTIONS(config, section) \
+for (struct section_config_t *section = (config)->last_section; section != NULL; section = section->prev)
 
-#define CONFIG_SECTION_NUMBER(section) (int)((section) - &config.default_config)
+#define CONFIG_SECTION_NUMBER(section) ((section)->id)
 
 #define MAX_THREADS 16
 
@@ -180,7 +186,7 @@ if ((fake_bitmask) & strategy)
 
 #define DEFAULT_SNISTR "googlevideo.com,ggpht.com,ytimg.com,youtube.com,play.google.com,youtu.be,googleapis.com,googleusercontent.com,gstatic.com,l.google.com"
 
-static const char defaul_snistr[] = DEFAULT_SNISTR;
+static const char default_snistr[] = DEFAULT_SNISTR;
 
 enum {
 	UDP_MODE_DROP,
@@ -193,6 +199,9 @@ enum {
 };
 
 #define default_section_config {				\
+	.sni_domains = NULL,					\
+	.exclude_sni_domains = NULL,				\
+	.all_domains = 0,					\
 	.tls_enabled = 1,					\
 	.frag_sni_reverse = 1,                                  \
 	.frag_sni_faked = 0,                                    \
@@ -202,6 +211,8 @@ enum {
 	.fake_sni = 1,                                          \
 	.fake_sni_seq_len = 1,                                  \
 	.fake_sni_type = FAKE_PAYLOAD_DEFAULT,                  \
+	.fake_custom_pkt = NULL,				\
+	.fake_custom_pkt_sz = 0,				\
 	.frag_middle_sni = 1,                                   \
 	.frag_sni_pos = 1,                                      \
 	.fakeseq_offset = 10000,                                \
@@ -210,16 +221,6 @@ enum {
                                                                 \
 	.seg2_delay = 0,                                        \
                                                                 \
-	.domains_str = defaul_snistr,                           \
-	.domains_strlen = sizeof(defaul_snistr),                \
-                                                                \
-	.exclude_domains_str = "",                              \
-	.exclude_domains_strlen = 0,                            \
-                                                                \
-	.fake_sni_pkt = fake_sni_old,                           \
-	.fake_sni_pkt_sz = sizeof(fake_sni_old) - 1,		\
-	.fake_custom_pkt = custom_fake_buf,                     \
-	.fake_custom_pkt_sz = 0,                                \
 	.sni_detection = SNI_DETECTION_PARSE,                   \
 								\
 	.udp_mode = UDP_MODE_FAKE,				\
@@ -229,6 +230,32 @@ enum {
 	.udp_dport_range = NULL,				\
 	.udp_dport_range_len = 0,				\
 	.udp_filter_quic = UDP_FILTER_QUIC_DISABLED,		\
+								\
+	.prev	= NULL,						\
+	.next	= NULL,						\
+	.id	= 0,						\
 }
+
+#define default_config_set {					\
+	.threads = THREADS_NUM,					\
+	.queue_start_num = DEFAULT_QUEUE_NUM,                   \
+	.mark = DEFAULT_RAWSOCKET_MARK,                         \
+	.use_ipv6 = 1,                                          \
+                                                                \
+	.verbose = VERBOSE_DEBUG,                               \
+	.use_gso = 1,                                           \
+                                                                \
+	.first_section = NULL,					\
+	.last_section = NULL,					\
+                                                                \
+	.daemonize = 0,                                         \
+	.noclose = 0,                                           \
+	.syslog = 0,                                            \
+}
+
+#define CONFIG_SET(config)			\
+struct config_t config = default_config_set;	\
+config->last_section = &(config.default_config) \
+
 
 #endif /* YTB_CONFIG_H */

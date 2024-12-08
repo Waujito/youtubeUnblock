@@ -1,33 +1,219 @@
 #include "config.h"
-#include <stdbool.h>
-#include <errno.h>
-#include <stdio.h>
-#include <unistd.h>
-#include <getopt.h>
-#include <stdlib.h>
-#include <string.h>
+#include "types.h"
+
 #include "types.h"
 #include "args.h"
 #include "logging.h"
+#include "getopt.h"
+#include "raw_replacements.h"
 
-static char custom_fake_buf[MAX_FAKE_SIZE];
+#ifdef KERNEL_SPACE
+static int errno = 0;
+#define strtol kstrtol
+#endif
 
-struct config_t config = {
-	.threads = THREADS_NUM,
-	.queue_start_num = DEFAULT_QUEUE_NUM,
-	.mark = DEFAULT_RAWSOCKET_MARK,
-	.use_ipv6 = 1,
+struct config_t config = default_config_set; 
 
-	.verbose = VERBOSE_DEBUG,
-	.use_gso = true,
+static int parse_sni_domains(struct domains_list **dlist, const char *domains_str, size_t domains_strlen) {
+	// Empty and shouldn't be used
+	struct domains_list ndomain = {0};
+	struct domains_list *cdomain = &ndomain;
 
-	.default_config = default_section_config,
-	.custom_configs_len = 0,
+	unsigned int j = 0;
+	for (unsigned int i = 0; i <= domains_strlen; i++) {
+		if ((	i == domains_strlen	||	
+			domains_str[i] == '\0'	||
+			domains_str[i] == ','	|| 
+			domains_str[i] == '\n'	)) {
 
-	.daemonize = 0,
-	.noclose = 0,
-	.syslog = 0,
-};
+			if (i == j) {
+				j++;
+				continue;
+			}
+
+			unsigned int domain_len = (i - j);
+			const char *domain_startp = domains_str + j;
+			struct domains_list *edomain = malloc(sizeof(struct domains_list));
+			*edomain = (struct domains_list){0};
+			if (edomain == NULL) {
+				return -ENOMEM;
+			}
+
+			edomain->domain_len = domain_len;
+			edomain->domain_name = malloc(domain_len + 1);
+			if (edomain->domain_name == NULL) {
+				return -ENOMEM;
+			}
+
+			strncpy(edomain->domain_name, domain_startp, domain_len);
+			edomain->domain_name[domain_len] = '\0';
+			cdomain->next = edomain;
+			cdomain = edomain;
+
+			j = i + 1;
+		}
+	}
+
+	*dlist = ndomain.next;
+	return 0;
+}
+
+static void free_sni_domains(struct domains_list *dlist) {
+	for (struct domains_list *ldl = dlist; ldl != NULL;) {
+		struct domains_list *ndl = ldl->next;
+		printf("freeing domains\n");
+		SFREE(ldl->domain_name);
+		SFREE(ldl);
+		ldl = ndl;
+	}
+}
+
+static long parse_numeric_option(const char* value) {
+	errno = 0;
+
+	if (*value == '\0') {
+		errno = EINVAL;
+		return 0;
+	}
+
+	long result;
+	int len;
+	sscanf(value, "%ld%n", &result, &len);
+	if (*(value + len) != '\0') {
+		errno = EINVAL;
+		return 0;
+	}
+
+	return result;
+}
+
+static int parse_udp_dport_range(char *str, struct udp_dport_range **udpr, int *udpr_len) {
+	int ret = 0;
+	int seclen = 1;
+	const char *p = str;
+	while (*p != '\0') {
+		if (*p == ',')
+			seclen++;
+		p++;
+	}
+	
+#ifdef KERNEL_SPACE
+	struct udp_dport_range *udp_dport_ranges = kmalloc(
+		seclen * sizeof(struct udp_dport_range), GFP_KERNEL);
+
+#else
+	struct udp_dport_range *udp_dport_ranges = malloc(
+		seclen * sizeof(struct udp_dport_range));
+#endif
+	if (udp_dport_ranges == NULL) {
+		return -ENOMEM;
+	}
+
+	int i = 0;
+
+
+	p = str;
+	const char *ep = p;
+	while (1) {
+		if (*ep == '\0' || *ep == ',') {
+			if (ep == p) {
+				if (*ep == '\0')
+					break;
+
+				p++, ep++;
+				continue;
+			}
+
+			const char *endp;
+			long num1;
+			int len;
+			sscanf(p, "%ld%n", &num1, &len);
+			endp = p + len;
+			long num2 = num1;
+			
+			if (endp != ep) {
+				if (*endp == '-') {
+					endp++;
+					int len;
+					sscanf(endp, "%ld%n", &num2, &len);
+					endp = endp + len;
+
+					if (endp != ep)
+						goto erret;
+				} else {
+					goto erret;
+				}
+			}
+
+			if (
+				!(num1 > 0 && num1 < (1 << 16)) || 
+				!(num2 > 0 && num2 < (1 << 16)) ||
+				num2 < num1
+			) 
+				goto erret;
+				
+			udp_dport_ranges[i] = (struct udp_dport_range){
+				.start = num1,
+				.end = num2
+			};
+			i++;
+
+			if (*ep == '\0') {
+				break;
+			} else {
+				p = ep + 1;
+				ep = p;
+			}
+		} else {
+			ep++;
+		}
+	}
+
+	if (i == 0) {
+		free(udp_dport_ranges);
+	}
+
+	*udpr = udp_dport_ranges;
+	*udpr_len = i;
+	return 0;
+
+erret:
+	free(udp_dport_ranges);
+
+	return -1;
+}
+
+// Allocates and fills custom fake buffer
+static int parse_fake_custom_payload(
+	const char *custom_hex_fake,
+	char **custom_fake_buf, unsigned int *custom_fake_len) {
+	int ret;
+
+	size_t custom_hlen = strlen(custom_hex_fake);
+	if ((custom_hlen & 1) == 1) {
+		printf("Custom fake hex should be divisible by two\n");
+		return -EINVAL;
+	}
+
+	size_t custom_len = custom_hlen >> 1;
+	if (custom_len > MAX_FAKE_SIZE) {
+		printf("Custom fake is too large\n");
+		return -EINVAL;
+	}
+	unsigned char *custom_buf = malloc(custom_len);
+
+	for (int i = 0; i < custom_len; i++) {
+		ret = sscanf(custom_hex_fake + (i << 1), "%2hhx", custom_buf + i);
+		if (ret != 1) {
+			free(custom_buf);
+			return -EINVAL;
+		}
+	}
+
+	*custom_fake_buf = (char *)custom_buf;
+	*custom_fake_len = custom_len;
+	return 0;
+}
 
 enum {
 	OPT_SNI_DOMAINS,
@@ -69,11 +255,14 @@ enum {
 	OPT_UDP_DPORT_FILTER,
 	OPT_UDP_FILTER_QUIC,
 	OPT_TLS_ENABLED,
+	OPT_CLS,
+	OPT_HELP,
+	OPT_VERSION,
 };
 
 static struct option long_opt[] = {
-	{"help",		0, 0, 'h'},
-	{"version",		0, 0, 'v'},
+	{"help",		0, 0, OPT_HELP},
+	{"version",		0, 0, OPT_VERSION},
 	{"sni-domains",		1, 0, OPT_SNI_DOMAINS},
 	{"exclude-domains",	1, 0, OPT_EXCLUDE_DOMAINS},
 	{"fake-sni",		1, 0, OPT_FAKE_SNI},
@@ -113,26 +302,9 @@ static struct option long_opt[] = {
 	{"packet-mark",		1, 0, OPT_PACKET_MARK},
 	{"fbegin",		0, 0, OPT_START_SECTION},
 	{"fend",		0, 0, OPT_END_SECTION},
-	{0,0,0,0}
+	{"cls",			0, 0, OPT_CLS},
+	{0,			0, 0, 0},
 };
-
-static long parse_numeric_option(const char* value) {
-	errno = 0;
-
-	if (*value == '\0') {
-		errno = EINVAL;
-		return 0;
-	}
-
-	char* end;
-	long result = strtol(value, &end, 10);
-	if (*end != '\0') {
-		errno = EINVAL;
-		return 0;
-	}
-
-	return result;
-}
 
 void print_version(void) {
   	printf("youtubeUnblock" 
@@ -192,93 +364,22 @@ void print_usage(const char *argv0) {
 	printf("\n");
 }
 
-int parse_udp_dport_range(char *str, struct udp_dport_range **udpr, int *udpr_len) {
-	int ret = 0;
-	int seclen = 1;
-	int strlen = 0;
-	const char *p = optarg;
-	while (*p != '\0') {
-		if (*p == ',')
-			seclen++;
-		p++;
-	}
-	strlen = p - optarg;
-	
-	struct udp_dport_range *udp_dport_ranges = malloc(
-		seclen * sizeof(struct udp_dport_range));
-
-	int i = 0;
-
-
-	p = optarg;
-	const char *ep = p;
-	while (1) {
-		if (*ep == '\0' || *ep == ',') {
-			if (ep == p) {
-				if (*ep == '\0')
-					break;
-
-				p++, ep++;
-				continue;
-			}
-
-			char *endp;
-			long num1 = strtol(p, &endp, 10);
-			long num2 = num1;
-			if (errno) 
-				goto erret;
-			
-			if (endp != ep) {
-				if (*endp == '-') {
-					endp++;
-					num2 = strtol(endp, &endp, 10);
-
-					if (endp != ep || errno)
-						goto erret;
-				} else {
-					goto erret;
-				}
-			}
-
-			if (
-				!(num1 > 0 && num1 < (1 << 16)) || 
-				!(num2 > 0 && num2 < (1 << 16)) ||
-				num2 < num1
-			) 
-				goto erret;
-				
-			udp_dport_ranges[i] = (struct udp_dport_range){
-				.start = num1,
-				.end = num2
-			};
-			i++;
-
-			if (*ep == '\0') {
-				break;
-			} else {
-				p = ep + 1;
-				ep = p;
-			}
-		} else {
-			ep++;
-		}
-	}
-
-	*udpr = udp_dport_ranges;
-	*udpr_len = seclen;
-	return 0;
-
-erret:
-	free(udp_dport_ranges);
-	return -1;
-}
-
-int parse_args(int argc, char *argv[]) {
+int yparse_args(int argc, char *argv[]) {
   	int opt;
 	int optIdx = 0;
+	optind=1, opterr=1, optreset=0;
 	long num;
+	int ret;
 
-	struct section_config_t *sect_config = &config.default_config;
+	struct config_t rep_config;
+	ret = init_config(&rep_config);
+	if (ret < 0) 
+		return ret;
+	struct section_config_t *default_section = rep_config.last_section;
+
+	struct section_config_t *sect_config = rep_config.last_section;
+	int sect_i = 0;
+	sect_config->id = sect_i++;
 	
 #define SECT_ITER_DEFAULT	1
 #define SECT_ITER_INSIDE	2
@@ -286,86 +387,95 @@ int parse_args(int argc, char *argv[]) {
 
 	int section_iter = SECT_ITER_DEFAULT;
 
-	while ((opt = getopt_long(argc, argv, "hv", long_opt, &optIdx)) != -1) {
+	while ((opt = getopt_long(argc, argv, "", long_opt, &optIdx)) != -1) {
 		switch (opt) {
+		case OPT_CLS:
+			free_config(rep_config);
+			ret = init_config(&rep_config);
+			if (ret < 0) 
+				return ret;
+			default_section = rep_config.last_section;
+
+			sect_config = rep_config.last_section;
+			sect_i = 0;
+			sect_config->id = sect_i++;
+			section_iter = SECT_ITER_DEFAULT;
+
+			break;
+
 /* config_t scoped configs */
-		case 'h':
+		case OPT_HELP:
 			print_usage(argv[0]);
+#ifndef KERNEL_SPACE
 			goto stop_exec;
-		case 'v':
+#else 
+			break;
+#endif
+		case OPT_VERSION:
 			print_version();
+#ifndef KERNEL_SPACE
 			goto stop_exec;
+#else 
+			break;
+#endif
 		case OPT_TRACE:
-			if (section_iter != SECT_ITER_DEFAULT)
-				goto invalid_opt;
-			config.verbose = 2;
+			rep_config.verbose = 2;
 			break;
 		case OPT_SILENT:
-			if (section_iter != SECT_ITER_DEFAULT)
-				goto invalid_opt;
-
-			config.verbose = 0;
+			rep_config.verbose = 0;
 			break;
 		case OPT_NO_GSO:
-			if (section_iter != SECT_ITER_DEFAULT)
-				goto invalid_opt;
-
-			config.use_gso = 0;
+			rep_config.use_gso = 0;
 			break;
 		case OPT_NO_IPV6:
-			if (section_iter != SECT_ITER_DEFAULT)
-				goto invalid_opt;
-
-			config.use_ipv6 = 0;
+			rep_config.use_ipv6 = 0;
 			break;
 		case OPT_DAEMONIZE:
-			config.daemonize = 1;
+			rep_config.daemonize = 1;
 			break;
 		case OPT_NOCLOSE:
-			config.noclose = 1;
+			rep_config.noclose = 1;
 			break;
 		case OPT_SYSLOG:
-			config.syslog = 1;
+			rep_config.syslog = 1;
 			break;
 		case OPT_THREADS:
-			if (section_iter != SECT_ITER_DEFAULT)
-				goto invalid_opt;
-
 			num = parse_numeric_option(optarg);
 			if (errno != 0 || num < 0 || num > MAX_THREADS) {
 				goto invalid_opt;
 			}
 
-			config.threads = num;
+			rep_config.threads = num;
 			break;
 		case OPT_QUEUE_NUM:
-			if (section_iter != SECT_ITER_DEFAULT)
-				goto invalid_opt;
-
 			num = parse_numeric_option(optarg);
 			if (errno != 0 || num < 0) {
 				goto invalid_opt;
 			}
 
-			config.queue_start_num = num;
+			rep_config.queue_start_num = num;
 			break;
 		case OPT_PACKET_MARK:
-			if (section_iter != SECT_ITER_DEFAULT)
-				goto invalid_opt;
-
 			num = parse_numeric_option(optarg);
 			if (errno != 0 || num < 0) {
 				goto invalid_opt;
 			}
 
-			config.mark = num;
+			rep_config.mark = num;
 			break;
 		case OPT_START_SECTION:
 			if (section_iter != SECT_ITER_DEFAULT && section_iter != SECT_ITER_OUTSIDE)
 				goto invalid_opt;
 
-			sect_config = &config.custom_configs[config.custom_configs_len++];
-			*sect_config = (struct section_config_t)default_section_config;
+			struct section_config_t *nsect;
+			ret = init_section_config(&nsect, rep_config.last_section);
+			if (ret < 0) {
+				goto error;
+			}
+			rep_config.last_section->next = nsect;
+			rep_config.last_section = nsect;
+			sect_config = nsect;
+			sect_config->id = sect_i++;
 			section_iter = SECT_ITER_INSIDE;
 
 			break;
@@ -374,7 +484,7 @@ int parse_args(int argc, char *argv[]) {
 				goto invalid_opt;
 
 			section_iter = SECT_ITER_OUTSIDE;
-			sect_config = &config.default_config;
+			sect_config = default_section;
 			break;
 
 /* section_config_t scoped configs */
@@ -389,16 +499,20 @@ int parse_args(int argc, char *argv[]) {
 
 			break;
 		case OPT_SNI_DOMAINS:
+			sect_config->all_domains = 0;
 			if (!strcmp(optarg, "all")) {
 				sect_config->all_domains = 1;
 			}
 
-			sect_config->domains_str = optarg;
-			sect_config->domains_strlen = strlen(sect_config->domains_str);
+			ret = parse_sni_domains(&sect_config->sni_domains, optarg, strlen(optarg));
+			if (ret < 0)
+				goto error;
 			break;
 		case OPT_EXCLUDE_DOMAINS:
-			sect_config->exclude_domains_str = optarg;
-			sect_config->exclude_domains_strlen = strlen(sect_config->exclude_domains_str);
+			ret = parse_sni_domains(&sect_config->exclude_sni_domains, optarg, strlen(optarg));
+			if (ret < 0)
+				goto error;
+
 			break;
 		case OPT_FRAG:
 			if (strcmp(optarg, "tcp") == 0) {
@@ -512,30 +626,16 @@ int parse_args(int argc, char *argv[]) {
 			}
 
 			break;
-		case OPT_FAKE_CUSTOM_PAYLOAD: {
-				uint8_t *const custom_buf = (uint8_t *)custom_fake_buf;
+		case OPT_FAKE_CUSTOM_PAYLOAD: 			
+			SFREE(sect_config->udp_dport_range);
 
-				const char *custom_hex_fake = optarg;
-				size_t custom_hlen = strlen(custom_hex_fake);
-				if ((custom_hlen & 1) == 1) {
-					printf("Custom fake hex should be divisible by two\n");
-					goto invalid_opt;
-				}
-
-
-				size_t custom_len = custom_hlen >> 1;
-				if (custom_len > MAX_FAKE_SIZE) {
-					printf("Custom fake is too large\n");
-					goto invalid_opt;
-				}
-
-				for (int i = 0; i < custom_len; i++) {
-					sscanf(custom_hex_fake + (i << 1), "%2hhx", custom_buf + i);
-				}
-
-				sect_config->fake_custom_pkt_sz = custom_len;
-				sect_config->fake_custom_pkt = (char *)custom_buf;
+			ret = parse_fake_custom_payload(optarg, &sect_config->fake_custom_pkt, &sect_config->fake_custom_pkt_sz);
+			if (ret == -EINVAL) {
+				goto invalid_opt;
+			} else if (ret < 0) {
+				goto error;
 			}
+
 			break;
 		case OPT_FK_WINSIZE:
 			num = parse_numeric_option(optarg);
@@ -623,13 +723,10 @@ int parse_args(int argc, char *argv[]) {
 			break;
 		case OPT_UDP_DPORT_FILTER: 
 		{
-			struct udp_dport_range *udp_dport_range;
-			int udp_range_len = 0;
-			if (parse_udp_dport_range(optarg, &udp_dport_range, &udp_range_len) < 0) {
+			SFREE(sect_config->udp_dport_range);
+			if (parse_udp_dport_range(optarg, &sect_config->udp_dport_range, &sect_config->udp_dport_range_len) < 0) {
 				goto invalid_opt;
 			}
-			sect_config->udp_dport_range = udp_dport_range;
-			sect_config->udp_dport_range_len = udp_range_len;
 			break;
 		}
 		case OPT_UDP_FILTER_QUIC:
@@ -648,22 +745,248 @@ int parse_args(int argc, char *argv[]) {
 
 	}
 
+	struct config_t old_config = config;
+	config = rep_config;
+	free_config(old_config);
 
 	errno = 0;
 	return 0;
+
 stop_exec:
+	free_config(rep_config);
 	errno = 0;
 	return 1;
 
 invalid_opt:
 	printf("Invalid option %s\n", long_opt[optIdx].name);
+	ret = -EINVAL;
 error:
+#ifndef KERNEL_SPACE
 	print_usage(argv[0]);
-	errno = EINVAL;
+#endif
+	if (ret != -EINVAL) {
+		lgerror(ret, "Error thrown in %s\n", long_opt[optIdx].name);
+	}
+
+	errno = -ret;
+	free_config(rep_config);
 	return -errno;
 }
 
+#define print_cnf_raw(fmt, ...) do {				\
+	sz = snprintf(buf_ptr, buf_sz, fmt, ##__VA_ARGS__);	\
+	if (sz > buf_sz) { buf_sz = 0; }			\
+	else { buf_sz -= sz; }					\
+	buf_ptr += sz;						\
+} while(0)
+
+#define print_cnf_buf(fmt, ...) print_cnf_raw(fmt " ", ##__VA_ARGS__)
+// Returns written buffer size
+static size_t print_config_section(const struct section_config_t *section, char *buffer, size_t buffer_size) {
+	char *buf_ptr = buffer;
+	size_t buf_sz = buffer_size;
+	size_t sz;
+
+	if (section->tls_enabled) {
+		print_cnf_buf("--tls=enabled");
+		if (section->sni_domains != NULL) {
+			print_cnf_raw("--sni-domains=");
+			for (struct domains_list *sne = section->sni_domains; sne != NULL; sne = sne->next) {
+				print_cnf_raw("%s,", sne->domain_name);
+			}
+			print_cnf_raw(" ");
+		}
+		if (section->exclude_sni_domains != NULL) {
+			print_cnf_raw("--exclude-domains=");
+			for (struct domains_list *sne = section->exclude_sni_domains; sne != NULL; sne = sne->next) {
+				print_cnf_raw("%s,", sne->domain_name);
+			}
+			print_cnf_raw(" ");
+		}
+
+		switch(section->fragmentation_strategy) {
+		case FRAG_STRAT_IP:
+			print_cnf_buf("--frag=ip");
+			break;
+		case FRAG_STRAT_TCP:
+			print_cnf_buf("--frag=tcp");
+			break;
+		case FRAG_STRAT_NONE:
+			print_cnf_buf("--frag=none");
+			break;
+		}
+
+		print_cnf_buf("frag-sni-reverse=%d", section->frag_sni_reverse);
+		print_cnf_buf("frag-sni-faked=%d", section->frag_sni_faked);
+		print_cnf_buf("frag-middle-sni=%d", section->frag_middle_sni);
+		print_cnf_buf("frag-sni-pos=%d", section->frag_sni_pos);
+		print_cnf_buf("fk-winsize=%d", section->fk_winsize);
+
+		if (section->fake_sni) {
+			print_cnf_buf("--fake-sni=1");
+			print_cnf_buf("--fake-sni-seq-len=%d", section->fake_sni_seq_len);
+			switch(section->fake_sni_type) {
+			case FAKE_PAYLOAD_CUSTOM:
+				print_cnf_buf("--fake-sni-type=custom");
+				print_cnf_buf("--fake-custom-payload=<hidden>");
+				break;
+			case FAKE_PAYLOAD_RANDOM:
+				print_cnf_buf("--fake-sni-type=random");
+				break;
+			case FAKE_PAYLOAD_DEFAULT:
+				print_cnf_buf("--fake-sni-type=default");
+				break;
+			}
+
+			switch(section->faking_strategy) {
+			case FAKE_STRAT_TTL:
+				print_cnf_buf("--faking-strategy=ttl");
+				print_cnf_buf("--faking-ttl=%d", section->faking_ttl);
+				break;
+			case FAKE_STRAT_RAND_SEQ:
+				print_cnf_buf("--faking-strategy=randseq");
+				break;
+			case FAKE_STRAT_TCP_CHECK:
+				print_cnf_buf("--faking-strategy=tcp_check");
+				break;
+			case FAKE_STRAT_TCP_MD5SUM:
+				print_cnf_buf("--faking-strategy=md5sum");
+				break;
+			case FAKE_STRAT_PAST_SEQ:
+				print_cnf_buf("--faking-strategy=pastseq");
+				print_cnf_buf("--fake-seq-offset=%d", section->fakeseq_offset);
+				break;
+
+			}
+
+			switch(section->sni_detection) {
+			case SNI_DETECTION_BRUTE:
+				print_cnf_buf("--sni_detection=brute");
+				break;
+			case SNI_DETECTION_PARSE:
+				print_cnf_buf("--sni_detection=parse");
+				break;
+
+			}
+
+			print_cnf_buf("--seg2delay=%d", section->seg2_delay);
+		}
+	} else {
+		print_cnf_buf("--tls=disabled");
+	}
+
+	if (section->synfake) {
+		print_cnf_buf("--synfake=1");
+		print_cnf_buf("--synfake-len=%d", section->synfake_len);
+	} else {
+		print_cnf_buf("--synfake=0");
+	}
+
+
+	if (section->udp_filter_quic == UDP_FILTER_QUIC_ALL && section->udp_mode == UDP_MODE_DROP) {
+		print_cnf_buf("--drop-quic");
+	}
+
+	switch(section->udp_filter_quic) {
+	case UDP_FILTER_QUIC_ALL:
+		print_cnf_buf("--udp-filter-quic=all");
+		break;
+	case UDP_FILTER_QUIC_DISABLED:
+		print_cnf_buf("--udp-filter-quic=disabled");
+		break;
+	}
+
+	if (section->udp_dport_range_len != 0)
+		print_cnf_raw("--udp-dport-filter=");
+	for (int i = 0; i < section->udp_dport_range_len; i++) {
+		struct udp_dport_range range = section->udp_dport_range[i];
+		print_cnf_raw("%d-%d,", range.start, range.end);
+	}
+	print_cnf_raw(" ");
+
+
+	if (section->udp_filter_quic != UDP_FILTER_QUIC_DISABLED || section->udp_dport_range_len != 0) {
+		switch(section->udp_mode) {
+		case UDP_MODE_DROP:
+			print_cnf_buf("--udp-mode=drop");
+			break;
+		case UDP_MODE_FAKE:
+			print_cnf_buf("--udp-mode=fake");
+			print_cnf_buf("--udp-fake-seq-len=%d", section->udp_fake_seq_len);
+			{
+				switch(section->udp_faking_strategy) {
+				case FAKE_STRAT_UDP_CHECK:
+					print_cnf_buf("--udp-faking-strategy=checksum");
+					break;
+				case FAKE_STRAT_TTL:
+					print_cnf_buf("--udp-faking-strategy=ttl");
+				}
+			}
+			break;
+		}
+	}
+
+	return buffer_size - buf_sz;
+}
+// Returns written buffer length
+size_t print_config(char *buffer, size_t buffer_size) {
+	char *buf_ptr = buffer;
+	size_t buf_sz = buffer_size;
+	size_t sz;
+
+#ifndef KERNEL_SPACE
+	print_cnf_buf("--queue-num=%d", config.queue_start_num);
+	print_cnf_buf("--threads=%d", config.threads);
+#endif
+	print_cnf_buf("--mark=%d", config.mark);
+
+#ifndef KERNEL_SPACE
+	if (config.daemonize) {
+		print_cnf_buf("--daemonize");
+	}
+	if (config.syslog) {
+		print_cnf_buf("--syslog");
+	}
+	if (config.noclose) {
+		print_cnf_buf("--noclose");
+	}
+	if (!config.use_gso) {
+		print_cnf_buf("--no-gso");
+	}
+#endif
+	if (!config.use_ipv6) {
+		print_cnf_buf("--no-ipv6");
+	}
+	if (config.verbose == VERBOSE_TRACE) {
+		print_cnf_buf("--trace");
+	}
+	if (config.verbose == VERBOSE_INFO) {
+		print_cnf_buf("--silent");
+	}
+	
+	size_t wbuf_len = print_config_section(config.first_section, buf_ptr, buf_sz);
+	buf_ptr += wbuf_len;
+	buf_sz -= wbuf_len;
+
+	for (struct section_config_t *section = config.first_section->next; 
+		section != NULL; section = section->next) {
+		print_cnf_buf("--fbegin");
+		wbuf_len = print_config_section(section, buf_ptr, buf_sz);
+		buf_ptr += wbuf_len;
+		buf_sz -= wbuf_len;
+		print_cnf_buf("--fend");
+	}
+
+	return buffer_size - buf_sz;
+}
+
 void print_welcome(void) {
+	char welcome_message[4000];
+	
+	size_t sz = print_config(welcome_message, 4000);
+	printf("Running with flags: %.*s\n", (int)sz, welcome_message);
+	return;
+/**
 	if (config.syslog) {
 		printf("Logging to system log\n");
 	}
@@ -762,5 +1085,73 @@ void print_welcome(void) {
 			lginfo("Target sni domains: %s\n", section->domains_str);
 		}
 	}
+*/
 }
 
+int init_section_config(struct section_config_t **section, struct section_config_t *prev) {
+	struct section_config_t *def_section = NULL;
+	int ret;
+#ifdef KERNEL_SPACE
+	def_section = kmalloc(sizeof(struct section_config_t), GFP_KERNEL);
+#else
+	def_section = malloc(sizeof(struct section_config_t));
+#endif
+	*def_section = (struct section_config_t)default_section_config;
+	def_section->prev = prev;
+
+	if (def_section == NULL) 
+		return -ENOMEM;
+
+	ret = parse_sni_domains(&def_section->sni_domains, default_snistr, sizeof(default_snistr));
+	if (ret < 0) {
+		free(def_section);
+		return ret;
+	}
+
+	def_section->fake_sni_pkt = fake_sni_old; 
+	def_section->fake_sni_pkt_sz = sizeof(fake_sni_old) - 1;
+
+	*section = def_section;
+	return 0;
+}
+
+int init_config(struct config_t *config) {
+	struct config_t def_config = default_config_set;
+	int ret = 0;
+	struct section_config_t *def_section = NULL;
+	ret = init_section_config(&def_section, NULL);
+	if (ret < 0)
+		return ret;
+	def_config.last_section = def_section;
+	def_config.first_section = def_section;
+
+	*config = def_config;
+
+	return 0;
+}
+
+void free_config_section(struct section_config_t *section) {
+	lginfo("freeing %d\n", section->id);
+	if (section->udp_dport_range_len != 0) {
+		SFREE(section->udp_dport_range);
+	}
+
+	free_sni_domains(section->sni_domains);
+	section->sni_domains = NULL;
+	free_sni_domains(section->exclude_sni_domains);
+	section->exclude_sni_domains = NULL;
+
+	section->fake_custom_pkt_sz = 0;
+	SFREE(section->fake_custom_pkt);
+
+	free(section);
+}
+
+void free_config(struct config_t config) {
+	lginfo("freeing config\n");
+	for (struct section_config_t *sct = config.last_section; sct != NULL;) {
+		struct section_config_t *psct = sct->prev;
+		free_config_section(sct);
+		sct = psct;
+	}
+}

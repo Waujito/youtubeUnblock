@@ -62,7 +62,7 @@ int process_packet(const uint8_t *raw_payload, uint32_t raw_payload_len) {
 		lgtrace_addp("UDP");
 
 	
-	ITER_CONFIG_SECTIONS(section) {
+	ITER_CONFIG_SECTIONS(&config, section) {
 		lgtrace_addp("Section #%d", CONFIG_SECTION_NUMBER(section));
 
 		switch (transport_proto) {
