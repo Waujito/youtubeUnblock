@@ -358,24 +358,20 @@ When compilation is done, the binary file will be in build directory. Copy it to
 
 This section describes the kernel module version of youtubeUnblock. The kernel module operates as a normal module inside the kernel and integrates within the netfilter stack to statelessly mangle the packets sent over the Internet.
 
-You can configure the module with its flags in insmod:
-```
-insmod kyoutubeUnblock.ko fake_sni=1 exclude_domains=.ru quic_drop=1
-```
+You can configure the module with its flags:
 
-Note that the flags names are different from ones used for the regular youtubeUnblock(right like in UCI configuration for OpenWRT): replace `-` with `_` and no leading `--`. Also to configure togglers you should set them to `1` (`quic_drop=1`)
-
-Also a good thig to mention is verbosity. The kernel module combines --trace and --silent option to the one parameter `verbosity`. This parameter accepts 3 arguments: `trace`, `debug` and `silent`. I highly don't recommend to enable `trace` mod on router because it may cause huge problems with performance and even freeze your device. 
-
-Also a drop in replacement is supported for all the parameters excluding packet mark. A drop in replacement does not require module restart if you want to change the parameters. You can specify and check the parameters within module's directory inside the sysfs: `/sys/module/kyoutubeUnblock/parameters/`. For example, to set quic_drop to true you may use next command:
 ```sh
-echo 1 | sudo tee /sys/module/kyoutubeUnblock/parameters/quic_drop
+insmod kyoutubeUnblock.ko 
+echo "--fake_sni=1 --exclude_domains=.ru --quic_drop" | sudo tee /sys/module/kyoutubeUnblock/parameters/parameters
 ```
-and 
+
+You can also do 
+
 ```sh
-cat /sys/module/kyoutubeUnblock/parameters/quic_drop
+cat /sys/module/kyoutubeUnblock/parameters/parameters
 ```
-to check the parameter.
+
+and check all the parameters configured.
 
 ### Building kernel module
 
