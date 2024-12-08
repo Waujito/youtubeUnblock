@@ -508,6 +508,7 @@ int yparse_args(int argc, char *argv[]) {
 
 			break;
 		case OPT_SNI_DOMAINS:
+			free_sni_domains(sect_config->sni_domains);
 			sect_config->all_domains = 0;
 			if (!strcmp(optarg, "all")) {
 				sect_config->all_domains = 1;
@@ -518,6 +519,7 @@ int yparse_args(int argc, char *argv[]) {
 				goto error;
 			break;
 		case OPT_EXCLUDE_DOMAINS:
+			free_sni_domains(sect_config->exclude_sni_domains);
 			ret = parse_sni_domains(&sect_config->exclude_sni_domains, optarg, strlen(optarg));
 			if (ret < 0)
 				goto error;
@@ -636,7 +638,7 @@ int yparse_args(int argc, char *argv[]) {
 
 			break;
 		case OPT_FAKE_CUSTOM_PAYLOAD: 			
-			SFREE(sect_config->udp_dport_range);
+			SFREE(sect_config->fake_custom_pkt);
 
 			ret = parse_fake_custom_payload(optarg, &sect_config->fake_custom_pkt, &sect_config->fake_custom_pkt_sz);
 			if (ret == -EINVAL) {
