@@ -34,6 +34,9 @@
 #include <linux/tcp.h> // IWYU pragma: export
 #include <linux/version.h>
 
+#define free kfree
+#define malloc(size) kmalloc((size), GFP_KERNEL)
+
 #define ip6_hdr ipv6hdr
 
 /* from <netinet/ip.h> */
@@ -66,6 +69,11 @@
 #include <netinet/tcp.h>	// IWYU pragma: export
 #include <netinet/udp.h>	// IWYU pragma: export
 #endif
+
+#define SFREE(item) do {	\
+free((item));			\
+(item) = NULL;			\
+} while (0)
 
 #ifndef KERNEL_SPACE
 

@@ -514,7 +514,9 @@ void z_function(const char *str, int *zbuf, size_t len) {
 	for (int i = 1; i < (int)len; i++) {
 		zbuf[i] = 0;
 		if (i < rh) {
-			zbuf[i] = min(zbuf[i - lh], rh - i);
+			zbuf[i] = zbuf[i - lh];
+			if (rh - i < zbuf[i])
+				zbuf[i] = rh - i;
 		}
 
 		while (i + zbuf[i] < len && str[zbuf[i]] == str[i + zbuf[i]])
