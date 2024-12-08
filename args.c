@@ -258,6 +258,7 @@ enum {
 	OPT_CLS,
 	OPT_HELP,
 	OPT_VERSION,
+	OPT_CONNBYTES_LIMIT,
 };
 
 static struct option long_opt[] = {
@@ -300,6 +301,7 @@ static struct option long_opt[] = {
 	{"syslog",		0, 0, OPT_SYSLOG},
 	{"queue-num",		1, 0, OPT_QUEUE_NUM},
 	{"packet-mark",		1, 0, OPT_PACKET_MARK},
+	{"connbytes-limit",	1, 0, OPT_CONNBYTES_LIMIT},
 	{"fbegin",		0, 0, OPT_START_SECTION},
 	{"fend",		0, 0, OPT_END_SECTION},
 	{"cls",			0, 0, OPT_CLS},
@@ -352,6 +354,7 @@ void print_usage(const char *argv0) {
 	printf("\t--udp-filter-quic={disabled|all}\n");
 	printf("\t--threads=<threads number>\n");
 	printf("\t--packet-mark=<mark>\n");
+	printf("\t--connbytes-limit=<pkts>\n");
 	printf("\t--silent\n");
 	printf("\t--trace\n");
 	printf("\t--no-gso\n");
@@ -462,6 +465,13 @@ int yparse_args(int argc, char *argv[]) {
 			}
 
 			rep_config.mark = num;
+			break;
+		case OPT_CONNBYTES_LIMIT:
+			num = parse_numeric_option(optarg);
+			if (errno != 0 || num < 0) {
+				goto invalid_opt;
+			}
+			rep_config.connbytes_limit = num;
 			break;
 		case OPT_START_SECTION:
 			if (section_iter != SECT_ITER_DEFAULT && section_iter != SECT_ITER_OUTSIDE)
@@ -953,6 +963,10 @@ size_t print_config(char *buffer, size_t buffer_size) {
 	if (!config.use_gso) {
 		print_cnf_buf("--no-gso");
 	}
+#endif
+
+#ifdef KERNEL_SPACE
+	print_cnf_buf("--connbytes-limit=%d", config.connbytes_limit);
 #endif
 	if (!config.use_ipv6) {
 		print_cnf_buf("--no-ipv6");

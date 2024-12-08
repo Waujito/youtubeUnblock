@@ -100,6 +100,8 @@ struct config_t {
 	int noclose;
 	int syslog;
 
+	int connbytes_limit;
+
 #define VERBOSE_INFO	0
 #define VERBOSE_DEBUG	1
 #define VERBOSE_TRACE	2
@@ -241,6 +243,7 @@ enum {
 	.queue_start_num = DEFAULT_QUEUE_NUM,                   \
 	.mark = DEFAULT_RAWSOCKET_MARK,                         \
 	.use_ipv6 = 1,                                          \
+	.connbytes_limit = 8,                                   \
                                                                 \
 	.verbose = VERBOSE_DEBUG,                               \
 	.use_gso = 1,                                           \

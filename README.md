@@ -254,6 +254,8 @@ Available flags:
 
 - `--threads=<threads number>` Specifies the amount of threads you want to be running for your program. This defaults to **1** and shouldn't be edited for normal use. But if you really want multiple queue instances of youtubeUnblock, note that you should change --queue-num to --queue balance. For example, with 4 threads, use `--queue-balance 537:540` on iptables and `queue num 537-540` on nftables.
 
+- `--connbytes-limit=<pkts>` **Kernel module only!** Specify how much packets of connection should be processed by kyoutubeUnblock. Pass 0 if you want for each packet to be processed. This flag may be useful for UDP traffic since unlimited youtubeUnblock may lead to traffic flood and unexpected bans. Defaults to 5. In most cases you don't want to change it.
+
 - `--daemonize` Daemonizes the youtubeUnblock (forks and detaches it from the shell). Terminate the program with `killall youtubeUnblock`. If you want to track the logs of youtubeUnblock in logread or journalctl, use **--syslog** flag.
 
 - `--syslog` Redirects logs to the system log. You can read it with `journalctl` or `logread`.
