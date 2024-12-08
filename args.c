@@ -61,7 +61,6 @@ static int parse_sni_domains(struct domains_list **dlist, const char *domains_st
 static void free_sni_domains(struct domains_list *dlist) {
 	for (struct domains_list *ldl = dlist; ldl != NULL;) {
 		struct domains_list *ndl = ldl->next;
-		printf("freeing domains\n");
 		SFREE(ldl->domain_name);
 		SFREE(ldl);
 		ldl = ndl;
@@ -1151,7 +1150,6 @@ int init_config(struct config_t *config) {
 }
 
 void free_config_section(struct section_config_t *section) {
-	lginfo("freeing %d\n", section->id);
 	if (section->udp_dport_range_len != 0) {
 		SFREE(section->udp_dport_range);
 	}
@@ -1168,7 +1166,6 @@ void free_config_section(struct section_config_t *section) {
 }
 
 void free_config(struct config_t config) {
-	lginfo("freeing config\n");
 	for (struct section_config_t *sct = config.last_section; sct != NULL;) {
 		struct section_config_t *psct = sct->prev;
 		free_config_section(sct);

@@ -39,10 +39,6 @@ static int params_set(const char *cval, const struct kernel_param *kp) {
 		}
 	}
 
-	for (int i = 0; i < argc; i++) {
-		lginfo("%s %lu\n", argv[i], strlen(argv[i]));
-	}
-
 	ret = yparse_args(argc, argv);
 	kfree(val);
 	return ret;
