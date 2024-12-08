@@ -191,8 +191,6 @@ int gen_fake_udp(struct udp_fake_type type,
 		const struct udphdr *udph,
 		uint8_t *buf, uint32_t *buflen) {
 	uint32_t data_len = type.fake_len;
-	int ret;
-
 
 	if (!ipxh || !udph || !buf || !buflen)
 		return -EINVAL;
@@ -256,9 +254,6 @@ int detect_udp_filtered(const struct section_config_t *section,
 	const uint8_t *data;
 	uint32_t dlen;
 	int ret;
-	int ipver;
-
-	ipver = netproto_version(payload, plen);
 
 	ret = udp_payload_split((uint8_t *)payload, plen,
 			      (void **)&iph, &iph_len, 
@@ -291,10 +286,10 @@ int detect_udp_filtered(const struct section_config_t *section,
 		}
 
 		lgtrace_addp("QUIC detected");
-		uint8_t qtype = qch->type;
 
 		goto approve;
 
+		// uint8_t qtype = qch->type;
 		// if (qch->version == QUIC_V1)
 		// 	qtype = quic_convtype_v1(qtype);
 		// else if (qch->version == QUIC_V2) 

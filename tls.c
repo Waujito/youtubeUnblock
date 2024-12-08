@@ -134,13 +134,12 @@ struct tls_verdict analyze_tls_data(
 	uint32_t dlen) 
 {
 	struct tls_verdict vrd = {0};
-	int ret;
 
 	size_t i = 0;
 	const uint8_t *data_end = data + dlen;
 
 	if (section->sni_detection == SNI_DETECTION_BRUTE) {
-		ret = bruteforce_analyze_sni_str(section, data, dlen, &vrd);
+		bruteforce_analyze_sni_str(section, data, dlen, &vrd);
 		goto out;
 	}
 
@@ -237,7 +236,7 @@ struct tls_verdict analyze_tls_data(
 			vrd.sni_len = sni_len;
 			vrd.sni_target_len = vrd.sni_len;
 
-			ret = analyze_sni_str(section, sni_name, sni_len, data, &vrd);
+			analyze_sni_str(section, sni_name, sni_len, data, &vrd);
 			goto out;
 
 nextExtension:
@@ -256,7 +255,6 @@ int gen_fake_sni(struct fake_type type,
 		const struct tcphdr *tcph, uint32_t tcph_len,
 		uint8_t *buf, uint32_t *buflen) {
 	uint32_t data_len = type.fake_len;
-	int ret;
 
 	if (type.type == FAKE_PAYLOAD_RANDOM && data_len == 0) {
 		data_len = (uint32_t)randint() % 1200;
@@ -303,7 +301,8 @@ int gen_fake_sni(struct fake_type type,
 			get_random_bytes(bfdptr, data_len);
 #else /* KERNEL_SPACE */
 #if _NO_GETRANDOM
-			ret = open("/dev/urandom", O_RDONLY);
+		{
+			int ret = open("/dev/urandom", O_RDONLY);
 			if (ret < 0) {
 				lgerror(ret, "Unable to open /dev/urandom");
 				return ret;
@@ -311,7 +310,7 @@ int gen_fake_sni(struct fake_type type,
 			
 			read(ret, bfdptr, data_len);
 			close(ret);
-			
+		}
 #else /* _NO_GETRANDOM */
 			getrandom(bfdptr, data_len, 0);
 #endif /* _NO_GETRANDOM */

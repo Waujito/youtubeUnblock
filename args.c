@@ -88,7 +88,6 @@ static long parse_numeric_option(const char* value) {
 }
 
 static int parse_udp_dport_range(char *str, struct udp_dport_range **udpr, int *udpr_len) {
-	int ret = 0;
 	int seclen = 1;
 	const char *p = str;
 	while (*p != '\0') {
@@ -762,10 +761,12 @@ int yparse_args(int argc, char *argv[]) {
 	errno = 0;
 	return 0;
 
+#ifndef KERNEL_SPACE
 stop_exec:
 	free_config(rep_config);
 	errno = 0;
 	return 1;
+#endif
 
 invalid_opt:
 	printf("Invalid option %s\n", long_opt[optIdx].name);
@@ -995,10 +996,13 @@ size_t print_config(char *buffer, size_t buffer_size) {
 }
 
 void print_welcome(void) {
-	char welcome_message[4000];
-	
+	char *welcome_message = malloc(4000);
+	if (welcome_message == NULL) 
+		return;
+
 	size_t sz = print_config(welcome_message, 4000);
 	printf("Running with flags: %.*s\n", (int)sz, welcome_message);
+	free(welcome_message);
 	return;
 /**
 	if (config.syslog) {

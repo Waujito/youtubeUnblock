@@ -341,7 +341,6 @@ int process_udp_packet(const struct section_config_t *section, const uint8_t *pk
 	const struct udphdr *udph;
 	const uint8_t *data;
 	uint32_t dlen;
-	int ipver = netproto_version(pkt, pktlen);
 
 	int ret = udp_payload_split((uint8_t *)pkt, pktlen,
 			      (void **)&iph, &iph_len, 
@@ -414,7 +413,6 @@ erret_lc:
 
 continue_flow:
 	return PKT_CONTINUE;
-accept_quic:
 accept:
 	return PKT_ACCEPT;
 drop:
@@ -452,6 +450,7 @@ int send_ip4_frags(const struct section_config_t *section, const uint8_t *packet
 			return -ENOMEM;
 		}
 
+/*
 		NETBUF_ALLOC(fake_pad, MAX_PACKET_SIZE);
 		if (!NETBUF_CHECK(fake_pad)) {
 			lgerror(-ENOMEM, "Allocation error");
@@ -459,10 +458,11 @@ int send_ip4_frags(const struct section_config_t *section, const uint8_t *packet
 			NETBUF_FREE(frag2);
 			return -ENOMEM;
 		}
+*/
 
 		uint32_t f1len = MAX_PACKET_SIZE;
 		uint32_t f2len = MAX_PACKET_SIZE;
-		uint32_t fake_pad_len = MAX_PACKET_SIZE;
+		// uint32_t fake_pad_len = MAX_PACKET_SIZE;
 
 		int ret;
 
@@ -538,12 +538,12 @@ send_frag2:
 out_lc:
 		NETBUF_FREE(frag1);
 		NETBUF_FREE(frag2);
-		NETBUF_FREE(fake_pad);
+		// NETBUF_FREE(fake_pad);
 		goto out;
 erret_lc:
 		NETBUF_FREE(frag1);
 		NETBUF_FREE(frag2);
-		NETBUF_FREE(fake_pad);
+		// NETBUF_FREE(fake_pad);
 		return ret;
 	}
 
