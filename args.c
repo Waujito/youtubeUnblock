@@ -471,10 +471,8 @@ int yparse_args(int argc, char *argv[]) {
 			}
 			rep_config.connbytes_limit = num;
 			break;
-		case OPT_START_SECTION:
-			if (section_iter != SECT_ITER_DEFAULT && section_iter != SECT_ITER_OUTSIDE)
-				goto invalid_opt;
-
+		case OPT_START_SECTION: 
+		{
 			struct section_config_t *nsect;
 			ret = init_section_config(&nsect, rep_config.last_section);
 			if (ret < 0) {
@@ -487,6 +485,7 @@ int yparse_args(int argc, char *argv[]) {
 			section_iter = SECT_ITER_INSIDE;
 
 			break;
+		}
 		case OPT_END_SECTION:
 			if (section_iter != SECT_ITER_INSIDE)
 				goto invalid_opt;
