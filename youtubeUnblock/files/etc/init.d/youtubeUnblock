@@ -8,78 +8,15 @@ USE_PROCD=1
 # PROCD_DEBUG=1
 PROG=/usr/bin/youtubeUnblock
 
-# You should use uci for configuration
-OPTS=""
+UCI_ARGS=""
 
-# If you prefer to pass args as cmdline arguments, pass them here
+# If you have troubles with uci, pass args here
 POST_ARGS=""
 
-xappend() {
-	local name="$1" value="$2"
-	OPTS="$OPTS --${name//_/-}=$value"
-}
-
-xappend_toggler() {
-	local name="$1"
-	OPTS="$OPTS --${name//_/-}"
-}
-
-append_opts() {
-	local name value cfg="$1"; shift
-	for name in $*; do
-		config_get value "$cfg" "$name"
-		[ -n "$value" ] && xappend "$name" "$value"
-	done
-}
-
-append_commasep_list() {
-	local name cfg="$1"; shift
-	for name in $*; do
-		local res=""
-		_handle_list() {
-			res="$res$1,"
-		}
-		config_list_foreach "$cfg" "$name" _handle_list
-		[ -n "$res" ] && xappend "$name" "$res"
-	done
-}
-
-append_opts_boolean() {
-	local name value cfg="$1"; shift
-	for name in $*; do
-		config_get_bool value "$cfg" "$name" 0
-		xappend "$name" "$value"
-	done
-}
-
-append_opts_btoggler() {
-	local name value cfg="$1"; shift
-	for name in $*; do
-		config_get_bool value "$cfg" "$name" 0
-		[ $value -gt 0 ] && xappend_toggler "$name"
-	done
-}
-
-parse_options() {
-	local config="$1"
+read_uci_args() {
 	local value
-	config_get_bool value "$config" all_domains 0
-
-	if [ $value -gt 0 ]; then
-		xappend "sni_domains" "all"
-	else
-		append_commasep_list "$config" sni_domains
-	fi
-
-	append_opts "$config" queue_num fake_sni_seq_len faking_strategy faking_ttl fake_seq_offset frag frag_sni_pos fk_winsize synfake_len seg2delay packet_mark fake_sni_ty
-        append_commasep_list "$config" exclude_domains
-        append_opts_boolean "$config" fake_sni frag_sni_reverse frag_sni_faked frag_middle_sni synfake
-        append_opts_btoggler "$config" quic_drop silent trace no_gso no_ipv6
-
-        config_get value "$config" post_args
-        if [ -n "$value" ]; then
-                OPTS="$OPTS $value"
-        fi
+	config_get value "$1" "args"
+	UCI_ARGS="$value" 
 }
 
 # Openwrt procd script: https://openwrt.org/docs/guide-developer/procd-init-script-example
@@ -88,12 +25,12 @@ parse_options() {
 
 start_service() {
 	config_load youtubeUnblock
-	config_foreach parse_options youtubeUnblock
+	read_uci_args youtubeUnblock
 
-	echo "youtubeUnblock is running as: '$PROG $OPTS $POST_ARGS'"
+	echo "youtubeUnblock is running as: '$PROG $UCI_ARGS $POST_ARGS'"
 
 	procd_open_instance 'youtubeUnblock'
-	procd_set_param command $PROG $OPTS $POST_ARGS
+	procd_set_param command $PROG $UCI_ARGS $POST_ARGS
 	procd_set_param stdout 1
 	procd_set_param stderr 1
 	procd_close_instance
