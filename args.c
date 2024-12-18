@@ -908,13 +908,16 @@ static size_t print_config_section(const struct section_config_t *section, char 
 		break;
 	}
 
-	if (section->udp_dport_range_len != 0)
+	if (section->udp_dport_range_len != 0) {
+
 		print_cnf_raw("--udp-dport-filter=");
-	for (int i = 0; i < section->udp_dport_range_len; i++) {
-		struct udp_dport_range range = section->udp_dport_range[i];
-		print_cnf_raw("%d-%d,", range.start, range.end);
+		for (int i = 0; i < section->udp_dport_range_len; i++) {
+			struct udp_dport_range range = section->udp_dport_range[i];
+			print_cnf_raw("%d-%d,", range.start, range.end);
+		}
+		print_cnf_raw(" ");
+
 	}
-	print_cnf_raw(" ");
 
 
 	if (section->udp_filter_quic != UDP_FILTER_QUIC_DISABLED || section->udp_dport_range_len != 0) {
@@ -1004,107 +1007,6 @@ void print_welcome(void) {
 	size_t sz = print_config(welcome_message, 4000);
 	printf("Running with flags: %.*s\n", (int)sz, welcome_message);
 	free(welcome_message);
-	return;
-/**
-	if (config.syslog) {
-		printf("Logging to system log\n");
-	}
-	if (config.use_gso) {
-		lginfo("GSO is enabled\n");
-	}
-
-	if (config.use_ipv6) {
-		lginfo("IPv6 is enabled\n");
-	} else {
-		lginfo("IPv6 is disabled\n");
-	}
-	
-	lginfo("Detected %d config sections\n", config.custom_configs_len + 1);
-	lginfo("The sections will be processed in order they goes in this output\n");
-
-	ITER_CONFIG_SECTIONS(section) {
-		int section_number = CONFIG_SECTION_NUMBER(section);
-		lginfo("Section #%d\n", section_number);
-
-		if (!section->tls_enabled) {
-			lginfo("TCP TLS is disabled for section!\n");
-		}
-		switch (section->fragmentation_strategy) {
-			case FRAG_STRAT_TCP:
-				lginfo("Using TCP segmentation\n");
-				break;
-			case FRAG_STRAT_IP:
-				lginfo("Using IP fragmentation\n");
-				break;
-			default:
-				lginfo("SNI fragmentation is disabled\n");
-				break;
-		}
-
-		if (section->seg2_delay) {
-			lginfo("Some outgoing googlevideo request segments will be delayed for %d ms as of seg2_delay define\n", section->seg2_delay);
-		}
-
-		if (section->fake_sni) {
-			lginfo("Fake SNI will be sent before each target client hello\n");
-		} else {
-			lginfo("Fake SNI is disabled\n");
-		}
-
-		if (section->frag_sni_reverse) {
-			lginfo("Fragmentation Client Hello will be reversed\n");
-		}
-
-		if (section->frag_sni_faked) {
-			lginfo("Fooling packets will be sent near the original Client Hello\n");
-		}
-
-		if (section->fake_sni_seq_len > 1) {
-			lginfo("Faking sequence of length %d will be built as fake sni\n", section->fake_sni_seq_len);
-		}
-
-		switch (section->faking_strategy) {
-			case FAKE_STRAT_TTL:
-				lginfo("TTL faking strategy will be used with TTL %d\n", section->faking_ttl);
-				break;
-			case FAKE_STRAT_RAND_SEQ:
-				lginfo("Random seq faking strategy will be used\n");
-				lginfo("Fake seq offset set to %u\n", section->fakeseq_offset);
-				break;
-			case FAKE_STRAT_TCP_CHECK:
-				lginfo("TCP checksum faking strategy will be used\n");
-				break;
-			case FAKE_STRAT_PAST_SEQ:
-				lginfo("Past seq faking strategy will be used\n");
-				break;
-			case FAKE_STRAT_TCP_MD5SUM:
-				lginfo("md5sum faking strategy will be used\n");
-				break;
-		}
-
-		if (section->fk_winsize) {
-			lginfo("Response TCP window will be set to %d with the appropriate scale\n", section->fk_winsize);
-		}
-
-		if (section->synfake) {
-			lginfo("Fake SYN payload will be sent with each TCP request SYN packet\n");
-		}
-
-		if (section->udp_filter_quic && section->udp_mode == UDP_MODE_DROP) {
-			lginfo("All QUIC packets will be dropped\n");
-		}
-
-		if (section->sni_detection == SNI_DETECTION_BRUTE) {
-			lginfo("Server Name Extension will be parsed in the bruteforce mode\n");
-		}
-
-		if (section->all_domains) {
-			lginfo("All Client Hello will be targeted by youtubeUnblock!\n");
-		} else {
-			lginfo("Target sni domains: %s\n", section->domains_str);
-		}
-	}
-*/
 }
 
 int init_section_config(struct section_config_t **section, struct section_config_t *prev) {
