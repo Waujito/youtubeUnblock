@@ -269,8 +269,20 @@ jobs:
   build-openwrt-luci:
     needs: prepare
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        branch:
+          - openwrt-23.05
+          - SNAPSHOT
+        arch:
+          - x86_64
+        include:
+          - branch: SNAPSHOT
+            package_extension: apk
+          - branch: openwrt-23.05
+            package_extension: ipk
     container:
-      image: openwrt/sdk:x86_64-openwrt-23.05
+      image: openwrt/sdk:${{ matrix.arch }}-${{ matrix.branch }}
       options: --user root
     steps:
       - name: Checkout
@@ -288,6 +300,15 @@ jobs:
         run: |
           HOME=/builder ./setup.sh
 
+      - name: Add signing key
+        if: matrix.package_extension == 'apk'
+        id: signing_key
+        env:
+          SIGNING_KEY: ${{ secrets.EC_PRIVATE_KEY }}
+        working-directory: /builder
+        run: |
+          ([ -n "$SIGNING_KEY" ] && echo "$SIGNING_KEY" > private-key.pem) || true
+
       - name: Build packages
         id: build
         env:
@@ -302,14 +323,14 @@ jobs:
           ./scripts/feeds install -a -p youtubeUnblock
           make defconfig
           make package/luci-app-youtubeUnblock/compile V=s
-          mv $(find ./bin -type f -name 'luci-app-youtubeUnblock*.ipk') ./luci-app-youtubeUnblock-$VERSION-$RELEASE-$SHA.ipk
+          mv $(find ./bin -type f -name 'luci-app-youtubeUnblock*.${{ matrix.package_extension }}') ./luci-app-youtubeUnblock-$VERSION-$RELEASE-$SHA.${{ matrix.package_extension }}
 
       - name: Upload packages
         if: steps.build.outcome == 'success'
         uses: actions/upload-artifact@v4
         with:
-          name: luci-app-youtubeUnblock
-          path: /builder/luci-app-youtubeUnblock*.ipk
+          name: luci-app-youtubeUnblock-${{ matrix.branch }}
+          path: /builder/luci-app-youtubeUnblock*.${{ matrix.package_extension }}
           if-no-files-found: error
 
   build-entware:
@@ -387,5 +408,7 @@ jobs:
           title: 'Development build'
           files: |
             ./**/youtubeUnblock*.ipk
+            ./**/youtubeUnblock*.apk
             ./**/youtubeUnblock*.tar.gz
             ./**/luci-app-youtubeUnblock*.ipk
+            ./**/luci-app-youtubeUnblock*.apk
