@@ -9,6 +9,7 @@
     - [IPv6](#ipv6)
   - [Check it](#check-it)
   - [Flags](#flags)
+  - [UDP](#udp)
   - [Troubleshooting](#troubleshooting)
     - [TV](#tv)
     - [Troubleshooting EPERMS (Operation not permitted)](#troubleshooting-eperms-operation-not-permitted)
@@ -265,6 +266,10 @@ Available flags:
 - `--packet-mark=<mark>` Use this option if youtubeUnblock conflicts with other systems rely on packet mark. Note that you may want to change accept rule for iptables to follow the mark.
 
 - `--fbegin` and `--fend` flags: youtubeUnblock supports multiple sets of strategies for specific filters. You may want to initiate a new set after the default one, like: `--sni-domains=googlevideo.com --faking-strategy=md5sum --fbegin --sni-domains=youtube.com --faking-strategy=tcp_check --fbegin --sni-domains=l.google.com --faking-strategy=pastseq`. Note, that the priority of these sets goes backwards: last is first, default (one that does not start with --fbegin) is last. If you start the new section, the default settings are implemented just like youtubeUnblock without any parameters. Note that the config above is just an example and won't work for you.
+
+## UDP
+
+UDP is another communication protocol. Well-known technologies that use it are DNS, QUIC, voice chats. UDP does not provide reliable connection and its header is much simpler than TCP thus fragmentation is limited. The support provided primarily by faking. For QUIC faking may not work well, so use `--quic-drop` if you want to drop all quic traffic. For other technologies I recommend to configure UDP support in the separate section from TCP, like `--fbegin --udp-dport-filter=50000-50099 --tls=disabled`. See more in flags related to udp and [issues tagged with udp label](https://github.com/Waujito/youtubeUnblock/issues?q=label%3Audp+is%3Aclosed). 
 
 ## Troubleshooting
 
