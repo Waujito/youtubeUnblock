@@ -800,7 +800,9 @@ static size_t print_config_section(const struct section_config_t *section, char 
 
 	if (section->tls_enabled) {
 		print_cnf_buf("--tls=enabled");
-		if (section->sni_domains != NULL) {
+		if (section->all_domains) {
+			print_cnf_buf("--sni-domains=all");
+		} else if (section->sni_domains != NULL) {
 			print_cnf_raw("--sni-domains=");
 			for (struct domains_list *sne = section->sni_domains; sne != NULL; sne = sne->next) {
 				print_cnf_raw("%s,", sne->domain_name);
