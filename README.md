@@ -133,7 +133,8 @@ Copy `youtubeUnblock.service` to `/usr/lib/systemd/system` (you should change th
 On nftables you should put next nftables rules:
 ```sh
 nft add chain inet fw4 youtubeUnblock '{ type filter hook postrouting priority mangle - 1; policy accept; }'
-nft add rule inet fw4 youtubeUnblock 'meta l4proto { tcp, udp } th dport 443 ct original packets < 20 counter queue num 537 bypass'
+nft add rule inet fw4 youtubeUnblock 'tcp dport 443 ct original packets < 20 counter queue num 537 bypass'
+nft add rule inet fw4 youtubeUnblock 'meta l4proto udp ct original packets < 9 counter queue num 537 bypass'
 nft insert rule inet fw4 output 'mark and 0x8000 == 0x8000 counter accept'
 ```
 
@@ -143,7 +144,7 @@ On iptables you should put next iptables rules:
 ```sh
 iptables -t mangle -N YOUTUBEUNBLOCK
 iptables -t mangle -A YOUTUBEUNBLOCK -p tcp --dport 443 -m connbytes --connbytes-dir original --connbytes-mode packets --connbytes 0:19 -j NFQUEUE --queue-num 537 --queue-bypass
-iptables -t mangle -A YOUTUBEUNBLOCK -p udp --dport 443 -m connbytes --connbytes-dir original --connbytes-mode packets --connbytes 0:19 -j NFQUEUE --queue-num 537 --queue-bypass
+iptables -t mangle -A YOUTUBEUNBLOCK -p udp -m connbytes --connbytes-dir original --connbytes-mode packets --connbytes 0:8 -j NFQUEUE --queue-num 537 --queue-bypass
 iptables -t mangle -A POSTROUTING -j YOUTUBEUNBLOCK
 iptables -I OUTPUT -m mark --mark 32768/32768 -j ACCEPT
 ```
@@ -154,7 +155,7 @@ For IPv6 on iptables you need to duplicate rules above for ip6tables:
 ```sh
 ip6tables -t mangle -N YOUTUBEUNBLOCK
 ip6tables -t mangle -A YOUTUBEUNBLOCK -p tcp --dport 443 -m connbytes --connbytes-dir original --connbytes-mode packets --connbytes 0:19 -j NFQUEUE --queue-num 537 --queue-bypass
-ip6tables -t mangle -A YOUTUBEUNBLOCK -p udp --dport 443 -m connbytes --connbytes-dir original --connbytes-mode packets --connbytes 0:19 -j NFQUEUE --queue-num 537 --queue-bypass
+ip6tables -t mangle -A YOUTUBEUNBLOCK -p udp -m connbytes --connbytes-dir original --connbytes-mode packets --connbytes 0:8 -j NFQUEUE --queue-num 537 --queue-bypass
 ip6tables -t mangle -A POSTROUTING -j YOUTUBEUNBLOCK
 ip6tables -I OUTPUT -m mark --mark 32768/32768 -j ACCEPT
 ```
@@ -219,8 +220,6 @@ Available flags:
 
 - `--frag-sni-pos=<pos>` With this option **youtubeUnblock** will split the packet at the position pos. Defaults to 1.
 
-- `--quic-drop` Drop all QUIC packets which goes to youtubeUnblock. Won't affect any other UDP packets. Suitable for some TVs. Note, that for this option to work you should also add proxy udp to youtubeUnblock in firewall. `connbytes` may also be used with udp.
-
 - `--fk-winsize=<winsize>` Specifies window size for the fragmented TCP packet. Applicable if you want for response to be fragmented. May slowdown connection initialization.
 
 - `--synfake={1|0}` If 1, syn payload will be sent before each request. The idea is taken from syndata from zapret project. Syn payload will normally be discarded by endpoint but may be handled by TSPU. This option sends normal fake in that payload. Please note, that the option works for all the sites, so --sni-domains won't change anything.
@@ -230,6 +229,20 @@ Available flags:
 - `--sni-detection={parse|brute}` Specifies how to detect SNI. Parse will normally detect it by parsing the Client Hello message. Brute will go through the entire message and check possibility of SNI occurrence. Please note, that when `--sni-domains` option is not all brute will be O(nm) time complexity where n stands for length of the message and m is number of domains. Defaults to parse.
 
 - `--seg2delay=<delay>` This flag forces **youtubeUnblock** to wait a little bit before send the 2nd part of the split packet.
+
+- `--udp-mode={drop|fake}` This flag specifies udp handling strategy. If drop udp packets will be dropped (useful for quic when browser can fallback to tcp), if fake udp will be faked. Defaults to fake.
+
+- `--udp-fake-seq-len=<amount of faking packets sent>` Specifies how much faking packets will be sent over the network. Defaults to 6.
+
+- `--udp-fake-len=<size of udp fake>` Size of udp fake payload (typically payload is zeroes). Defaults to 64.
+
+- `--udp-dport-filter=<5,6,200-500>` Filter the UDP destination ports. Defaults to no ports. Specifie the ports you want to be handled by youtubeUnblock.
+
+- `--udp-filter-quic={disabled|all}` Enables QUIC filtering for UDP handler. If disabled, quic won't be processed, if all all quic initial packets will be handled. Defaults to disabled.
+
+- `--quic-drop` Drop all QUIC packets which goes to youtubeUnblock. Won't affect any other UDP packets. Just an alias for `--udp-filter-quic=all --udp-mode=drop`.
+
+- `--tls={enabled|disabled}` Set it if you want not to process TLS traffic in current section. May be used if you want to set only UDP-based section. (Here section is a unit between `--fbegin` and `--fend` flags).
 
 - `--silent` Disables verbose mode.
 
@@ -241,6 +254,8 @@ Available flags:
 
 - `--threads=<threads number>` Specifies the amount of threads you want to be running for your program. This defaults to **1** and shouldn't be edited for normal use. But if you really want multiple queue instances of youtubeUnblock, note that you should change --queue-num to --queue balance. For example, with 4 threads, use `--queue-balance 537:540` on iptables and `queue num 537-540` on nftables.
 
+- `--connbytes-limit=<pkts>` **Kernel module only!** Specify how much packets of connection should be processed by kyoutubeUnblock. Pass 0 if you want for each packet to be processed. This flag may be useful for UDP traffic since unlimited youtubeUnblock may lead to traffic flood and unexpected bans. Defaults to 5. In most cases you don't want to change it.
+
 - `--daemonize` Daemonizes the youtubeUnblock (forks and detaches it from the shell). Terminate the program with `killall youtubeUnblock`. If you want to track the logs of youtubeUnblock in logread or journalctl, use **--syslog** flag.
 
 - `--syslog` Redirects logs to the system log. You can read it with `journalctl` or `logread`.
@@ -249,7 +264,7 @@ Available flags:
 
 - `--packet-mark=<mark>` Use this option if youtubeUnblock conflicts with other systems rely on packet mark. Note that you may want to change accept rule for iptables to follow the mark.
 
-- `--fbegin` and `--fend` flags: youtubeUnblock supports multiple sets of strategies for specific filters. You may want to initiate a new set after the default one, like: `--sni-domains=googlevideo.com --faking-strategy=md5sum --fbegin --sni-domains=youtube.com --faking-strategy=tcp_check --fend --fbegin --sni-domains=l.google.com --faking-strategy=pastseq --fend`. Note, that the priority of these sets goes backwards: last is first, default (one that does not start with --fbegin) is last. If you start the new section, the default settings are implemented just like youtubeUnblock without any parameters. Note that the config above is just an example and won't work for you.
+- `--fbegin` and `--fend` flags: youtubeUnblock supports multiple sets of strategies for specific filters. You may want to initiate a new set after the default one, like: `--sni-domains=googlevideo.com --faking-strategy=md5sum --fbegin --sni-domains=youtube.com --faking-strategy=tcp_check --fbegin --sni-domains=l.google.com --faking-strategy=pastseq`. Note, that the priority of these sets goes backwards: last is first, default (one that does not start with --fbegin) is last. If you start the new section, the default settings are implemented just like youtubeUnblock without any parameters. Note that the config above is just an example and won't work for you.
 
 ## Troubleshooting
 
@@ -343,24 +358,20 @@ When compilation is done, the binary file will be in build directory. Copy it to
 
 This section describes the kernel module version of youtubeUnblock. The kernel module operates as a normal module inside the kernel and integrates within the netfilter stack to statelessly mangle the packets sent over the Internet.
 
-You can configure the module with its flags in insmod:
-```
-insmod kyoutubeUnblock.ko fake_sni=1 exclude_domains=.ru quic_drop=1
-```
+You can configure the module with its flags:
 
-Note that the flags names are different from ones used for the regular youtubeUnblock(right like in UCI configuration for OpenWRT): replace `-` with `_` and no leading `--`. Also to configure togglers you should set them to `1` (`quic_drop=1`)
-
-Also a good thig to mention is verbosity. The kernel module combines --trace and --silent option to the one parameter `verbosity`. This parameter accepts 3 arguments: `trace`, `debug` and `silent`. I highly don't recommend to enable `trace` mod on router because it may cause huge problems with performance and even freeze your device. 
-
-Also a drop in replacement is supported for all the parameters excluding packet mark. A drop in replacement does not require module restart if you want to change the parameters. You can specify and check the parameters within module's directory inside the sysfs: `/sys/module/kyoutubeUnblock/parameters/`. For example, to set quic_drop to true you may use next command:
 ```sh
-echo 1 | sudo tee /sys/module/kyoutubeUnblock/parameters/quic_drop
+insmod kyoutubeUnblock.ko 
+echo "--fake_sni=1 --exclude_domains=.ru --quic_drop" | sudo tee /sys/module/kyoutubeUnblock/parameters/parameters
 ```
-and 
+
+You can also do 
+
 ```sh
-cat /sys/module/kyoutubeUnblock/parameters/quic_drop
+cat /sys/module/kyoutubeUnblock/parameters/parameters
 ```
-to check the parameter.
+
+and check all the parameters configured.
 
 ### Building kernel module
 

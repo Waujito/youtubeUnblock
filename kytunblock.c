@@ -16,10 +16,14 @@
 #include <linux/netfilter_ipv4.h>
 #include <linux/netfilter_ipv6.h>
 
+#include <net/netfilter/nf_conntrack.h>
+#include <net/netfilter/nf_conntrack_acct.h>
+
 #include "mangle.h"
 #include "config.h"
 #include "utils.h"
 #include "logging.h"
+#include "args.h"
 
 #if defined(PKG_VERSION)
 MODULE_VERSION(PKG_VERSION);
@@ -206,9 +210,9 @@ erret_lc:
 	int ipvx = netproto_version(pkt, pktlen);
 
 	if (ipvx == IP4VERSION) {
-		return send_raw_ipv4(pkt, pktlen);
+		ret = send_raw_ipv4(pkt, pktlen);
 	} else if (ipvx == IP6VERSION) {
-		return send_raw_ipv6(pkt, pktlen);
+		ret = send_raw_ipv6(pkt, pktlen);
 	} else {
 		printf("proto version %d is unsupported\n", ipvx);
 		return -EINVAL;
@@ -228,6 +232,32 @@ struct instance_config_t instance_config = {
 	.send_delayed_packet = delay_packet_send,
 };
 
+static int connbytes_pkts(const struct sk_buff *skb) {
+	const struct nf_conn *ct;
+	enum ip_conntrack_info ctinfo;
+	u_int64_t pkts = 0;
+	const struct nf_conn_counter *counters;
+
+	ct = nf_ct_get(skb, &ctinfo);
+	if (!ct)
+		return -1;
+
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 13, 0)
+	const struct nf_conn_acct *acct;
+	acct = nf_conn_acct_find(ct);
+	if (!acct)
+		return -1;
+	counters = acct->counter;
+#else 
+	counters = nf_conn_acct_find(ct);
+	if (!counters)
+		return -1;
+#endif
+
+	pkts = atomic64_read(&counters[IP_CT_DIR_ORIGINAL].packets);
+
+	return pkts;
+}
 
 /* If this is a Red Hat-based kernel (Red Hat, CentOS, Fedora, etc)... */
 #ifdef RHEL_RELEASE_CODE
@@ -307,6 +337,9 @@ static NF_CALLBACK(ykb_nf_hook, skb) {
 	if (skb->len > MAX_PACKET_SIZE)
 		goto accept;
 
+	if (config.connbytes_limit != 0 && connbytes_pkts(skb) > config.connbytes_limit)
+		goto accept;
+
 	ret = skb_linearize(skb);
 	if (ret < 0) {
 		lgerror(ret, "Cannot linearize");
@@ -346,6 +379,8 @@ static struct nf_hook_ops ykb6_nf_reg __read_mostly = {
 
 static int __init ykb_init(void) {
 	int ret = 0;
+	ret = init_config(&config);
+	if (ret < 0) goto err;
 
 	ret = open_raw_socket();
 	if (ret < 0) goto err;
@@ -420,6 +455,8 @@ static void __exit ykb_destroy(void) {
 #endif
 
 	close_raw_socket();
+
+	free_config(config);
 	lginfo("youtubeUnblock kernel module destroyed.\n");
 }
 

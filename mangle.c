@@ -62,7 +62,7 @@ int process_packet(const uint8_t *raw_payload, uint32_t raw_payload_len) {
 		lgtrace_addp("UDP");
 
 	
-	ITER_CONFIG_SECTIONS(section) {
+	ITER_CONFIG_SECTIONS(&config, section) {
 		lgtrace_addp("Section #%d", CONFIG_SECTION_NUMBER(section));
 
 		switch (transport_proto) {
@@ -74,16 +74,32 @@ int process_packet(const uint8_t *raw_payload, uint32_t raw_payload_len) {
 			break;
 		}
 
-		if (verdict == PKT_CONTINUE)
+		if (verdict == PKT_CONTINUE) {
+			lgtrace_addp("continue_flow");
 			continue;
+		}
 
-		lgtrace_end();
-		return verdict;
+		goto ret_verdict;
 	}
 
 accept:	
+	verdict = PKT_ACCEPT;
+
+ret_verdict:
+
+	switch (verdict) {
+	case PKT_ACCEPT:
+		lgtrace_addp("accept");
+		break;
+	case PKT_DROP:
+		lgtrace_addp("drop");
+		break;
+	default:
+		lgtrace_addp("unknow verdict: %d", verdict);
+	}
 	lgtrace_end();
-	return PKT_ACCEPT;
+
+	return verdict;
 }
 
 int process_tcp_packet(const struct section_config_t *section, const uint8_t *raw_payload, uint32_t raw_payload_len) {
@@ -153,6 +169,9 @@ int process_tcp_packet(const struct section_config_t *section, const uint8_t *ra
 	}
 
 	if (tcph->syn) goto continue_flow;
+
+	if (!section->tls_enabled)
+		goto continue_flow;
 
 	struct tls_verdict vrd = analyze_tls_data(section, data, dlen);
 	lgtrace_addp("TLS analyzed");
@@ -309,13 +328,10 @@ drop_lc:
 	}
 
 continue_flow:
-	lgtrace_addp("continue_flow");
 	return PKT_CONTINUE;
 accept:
-	lgtrace_addp("accept");
 	return PKT_ACCEPT;
 drop:
-	lgtrace_addp("drop");
 	return PKT_DROP;
 }
 
@@ -325,7 +341,6 @@ int process_udp_packet(const struct section_config_t *section, const uint8_t *pk
 	const struct udphdr *udph;
 	const uint8_t *data;
 	uint32_t dlen;
-	int ipver = netproto_version(pkt, pktlen);
 
 	int ret = udp_payload_split((uint8_t *)pkt, pktlen,
 			      (void **)&iph, &iph_len, 
@@ -350,75 +365,54 @@ int process_udp_packet(const struct section_config_t *section, const uint8_t *pk
 	}
 
 
-	if (section->quic_drop) {
-		lgtrace_addp("QUIC probe");
-		const struct quic_lhdr *qch;
-		uint32_t qch_len;
-		struct quic_cids qci;
-		uint8_t *quic_raw_payload;
-		uint32_t quic_raw_plen;
-		ret = quic_parse_data((uint8_t *)data, dlen, 
-			 (struct quic_lhdr **)&qch, &qch_len, &qci, 
-			 &quic_raw_payload, &quic_raw_plen);
+	if (!detect_udp_filtered(section, pkt, pktlen)) 
+		goto continue_flow;
 
-		if (ret < 0) {
-			lgtrace_addp("undefined type");
-			goto accept_quic;
-		}
-
-		lgtrace_addp("QUIC detected");
-		uint8_t qtype = qch->type;
-
+	if (section->udp_mode == UDP_MODE_DROP)
 		goto drop;
-
-		if (qch->version == QUIC_V1)
-			qtype = quic_convtype_v1(qtype);
-		else if (qch->version == QUIC_V2) 
-			qtype = quic_convtype_v2(qtype);
-
-		if (qtype != QUIC_INITIAL_TYPE) {
-			lgtrace_addp("quic message type: %d", qtype);
-			goto accept_quic;
-		}
-		
-		lgtrace_addp("quic initial message");
-	}
-
-/*
-	if (1) {
-		lgtrace_addp("Probe udp");
-		if (ipver == IP4VERSION && ntohs(udph->dest) > 30) {
-			lgtrace_addp("udp fool");
-			const uint8_t *payload;
-			uint32_t payload_len;
-
-			uint32_t poses[10];
-			int cnt = 3;
-
-			poses[0] = 8;
-			for (int i = 1; i < cnt; i++) {
-				poses[i] = poses[i - 1] + 8;
+	else if (section->udp_mode == UDP_MODE_FAKE) {
+		for (int i = 0; i < section->udp_fake_seq_len; i++) {
+			NETBUF_ALLOC(fake_udp, MAX_PACKET_SIZE);
+			if (!NETBUF_CHECK(fake_udp)) {
+				lgerror(-ENOMEM, "Allocation error");
+				return -ENOMEM;
 			}
+			uint32_t fsn_len = MAX_PACKET_SIZE;
 
-			ret = send_ip4_frags(pkt, pktlen, poses, cnt, 0);
+			struct udp_fake_type fake_type = {
+				.fake_len = section->udp_fake_len,
+				.strategy = {
+					.strategy = section->udp_faking_strategy,
+				},
+			};
+			ret = gen_fake_udp(fake_type, iph, iph_len, udph, fake_udp, &fsn_len);
 			if (ret < 0) {
-				lgerror("ip4 send frags", ret);
-				goto accept;
+				lgerror(ret, "gen_fake_udp");
+				goto erret_lc;
 			}
 
-			goto drop;
-		} else {
-			lginfo("WARNING: IP fragmentation is supported only for IPv4\n");	
+			lgtrace_addp("post fake udp #%d", i + 1);
+
+			ret = instance_config.send_raw_packet(fake_udp, fsn_len);
+			if (ret < 0) {
+				lgerror(ret, "send fake udp");
+				goto erret_lc;
+			}
+						
+			NETBUF_FREE(fake_udp);
+			continue;
+erret_lc:
+			NETBUF_FREE(fake_udp);
 			goto accept;
 		}
-	}
-*/
 
+		
+		ret = instance_config.send_raw_packet(pkt, pktlen);
+		goto drop;
+	}
 
 continue_flow:
-	lgtrace_addp("continue_flow");
 	return PKT_CONTINUE;
-accept_quic:
 accept:
 	return PKT_ACCEPT;
 drop:
@@ -456,6 +450,7 @@ int send_ip4_frags(const struct section_config_t *section, const uint8_t *packet
 			return -ENOMEM;
 		}
 
+/*
 		NETBUF_ALLOC(fake_pad, MAX_PACKET_SIZE);
 		if (!NETBUF_CHECK(fake_pad)) {
 			lgerror(-ENOMEM, "Allocation error");
@@ -463,10 +458,11 @@ int send_ip4_frags(const struct section_config_t *section, const uint8_t *packet
 			NETBUF_FREE(frag2);
 			return -ENOMEM;
 		}
+*/
 
 		uint32_t f1len = MAX_PACKET_SIZE;
 		uint32_t f2len = MAX_PACKET_SIZE;
-		uint32_t fake_pad_len = MAX_PACKET_SIZE;
+		// uint32_t fake_pad_len = MAX_PACKET_SIZE;
 
 		int ret;
 
@@ -542,12 +538,12 @@ send_frag2:
 out_lc:
 		NETBUF_FREE(frag1);
 		NETBUF_FREE(frag2);
-		NETBUF_FREE(fake_pad);
+		// NETBUF_FREE(fake_pad);
 		goto out;
 erret_lc:
 		NETBUF_FREE(frag1);
 		NETBUF_FREE(frag2);
-		NETBUF_FREE(fake_pad);
+		// NETBUF_FREE(fake_pad);
 		return ret;
 	}
 

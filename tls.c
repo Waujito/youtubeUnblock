@@ -9,6 +9,114 @@
 #include <unistd.h>
 #endif
 
+static int bruteforce_analyze_sni_str(
+	const struct section_config_t *section,
+	const uint8_t *data, size_t dlen,
+	struct tls_verdict *vrd
+) {
+	if (section->all_domains) {
+		vrd->target_sni = 1;
+		vrd->sni_len = 0;
+		vrd->sni_offset = dlen / 2;
+		return 0;
+	}
+
+	for (struct domains_list *sne = section->sni_domains; sne != NULL; sne = sne->next) {
+		const char *domain_startp = sne->domain_name;
+		int domain_len = sne->domain_len;
+
+		if (sne->domain_len + dlen + 1 > MAX_PACKET_SIZE) { 
+			continue;
+		}
+
+		NETBUF_ALLOC(buf, MAX_PACKET_SIZE);
+		if (!NETBUF_CHECK(buf)) {
+			lgerror(-ENOMEM, "Allocation error");
+			return -ENOMEM;
+		}
+		NETBUF_ALLOC(nzbuf, MAX_PACKET_SIZE * sizeof(int));
+		if (!NETBUF_CHECK(nzbuf)) {
+			lgerror(-ENOMEM, "Allocation error");
+			NETBUF_FREE(buf);
+			return -ENOMEM;
+		}
+
+		int *zbuf = (void *)nzbuf;
+
+		memcpy(buf, domain_startp, domain_len);
+		memcpy(buf + domain_len, "#", 1);
+		memcpy(buf + domain_len + 1, data, dlen);
+
+		z_function((char *)buf, zbuf, domain_len + 1 + dlen);
+
+		for (unsigned int k = 0; k < dlen; k++) {
+			if (zbuf[k] == domain_len) {
+				vrd->target_sni = 1;
+				vrd->sni_len = domain_len;
+				vrd->sni_offset = (k - domain_len - 1);
+				vrd->sni_target_offset = vrd->sni_offset;
+				vrd->sni_target_len = vrd->sni_len;
+				NETBUF_FREE(buf);
+				NETBUF_FREE(nzbuf);
+				return 0;
+			}
+		}
+
+
+		NETBUF_FREE(buf);
+		NETBUF_FREE(nzbuf);
+	}
+
+	return 0;
+}
+static int analyze_sni_str(
+	const struct section_config_t *section,
+	const char *sni_name, int sni_len, const uint8_t *data, 
+	struct tls_verdict *vrd
+) {
+	if (section->all_domains) {
+		vrd->target_sni = 1;
+		goto check_domain;
+	}
+		
+	for (struct domains_list *sne = section->sni_domains; sne != NULL; sne = sne->next) {
+		const char *sni_startp = sni_name + sni_len - sne->domain_len;
+		const char *domain_startp = sne->domain_name;
+
+		if (sni_len >= sne->domain_len &&
+			sni_len < 128 && 
+			!strncmp(sni_startp, 
+			domain_startp, 
+			sne->domain_len)) {
+				vrd->target_sni = 1;
+				vrd->sni_target_offset = (const uint8_t *)sni_startp - data;
+				vrd->sni_target_len = sne->domain_len;
+				break;
+		}
+	}
+
+check_domain:
+	if (vrd->target_sni == 1) {
+		for (struct domains_list *sne = section->exclude_sni_domains; sne != NULL; sne = sne->next) {
+			const char *sni_startp = sni_name + sni_len - sne->domain_len;
+			const char *domain_startp = sne->domain_name;
+
+			if (sni_len >= sne->domain_len &&
+				sni_len < 128 && 
+				!strncmp(sni_startp, 
+				domain_startp, 
+				sne->domain_len)) {
+					vrd->target_sni = 0;
+					lgdebugmsg("Excluded SNI: %.*s", 
+						vrd->sni_len, data + vrd->sni_offset);
+			}
+		}
+	}
+
+	return 0;
+}
+
+
 #define TLS_CONTENT_TYPE_HANDSHAKE 0x16
 #define TLS_HANDSHAKE_TYPE_CLIENT_HELLO 0x01
 #define TLS_EXTENSION_SNI 0x0000
@@ -30,6 +138,11 @@ struct tls_verdict analyze_tls_data(
 	size_t i = 0;
 	const uint8_t *data_end = data + dlen;
 
+	if (section->sni_detection == SNI_DETECTION_BRUTE) {
+		bruteforce_analyze_sni_str(section, data, dlen, &vrd);
+		goto out;
+	}
+
 	while (i + 4 < dlen) {
 		const uint8_t *msgData = data + i;
 
@@ -43,10 +156,6 @@ struct tls_verdict analyze_tls_data(
 
 		if (tls_content_type != TLS_CONTENT_TYPE_HANDSHAKE) 
 			goto nextMessage;
-
-		if (section->sni_detection == SNI_DETECTION_BRUTE) {
-			goto brute;
-		}
 
 		const uint8_t *handshakeProto = msgData + 5;
 
@@ -120,76 +229,14 @@ struct tls_verdict analyze_tls_data(
 
 			if (sni_ext_ptr + sni_len > sni_ext_end) break;
 
-			char *sni_name = (char *)sni_ext_ptr;
+			const char *sni_name = (char *)sni_ext_ptr;
 
 			vrd.sni_offset = (uint8_t *)sni_name - data;
 			vrd.sni_target_offset = vrd.sni_offset;
 			vrd.sni_len = sni_len;
 			vrd.sni_target_len = vrd.sni_len;
 
-			if (section->all_domains) {
-				vrd.target_sni = 1;
-				goto check_domain;
-			}
-
-			unsigned int j = 0;
-			for (unsigned int i = 0; i <= section->domains_strlen; i++) {
-				if (	i > j &&
-					(i == section->domains_strlen	||	
-					section->domains_str[i] == '\0'	||
-					section->domains_str[i] == ','	|| 
-					section->domains_str[i] == '\n'	)) {
-
-					unsigned int domain_len = (i - j);
-					const char *sni_startp = sni_name + sni_len - domain_len;
-					const char *domain_startp = section->domains_str + j;
-
-					if (sni_len >= domain_len &&
-						sni_len < 128 && 
-						!strncmp(sni_startp, 
-						domain_startp, 
-						domain_len)) {
-							vrd.target_sni = 1;
-							vrd.sni_target_offset = (const uint8_t *)sni_startp - data;
-							vrd.sni_target_len = domain_len;
-							goto check_domain;
-					}
-
-					j = i + 1;
-				}
-			}
-
-check_domain:
-			if (vrd.target_sni == 1 && section->exclude_domains_strlen != 0) {
-				unsigned int j = 0;
-				for (unsigned int i = 0; i <= section->exclude_domains_strlen; i++) {
-					if (	i > j &&
-						(i == section->exclude_domains_strlen	||	
-						section->exclude_domains_str[i] == '\0'	||
-						section->exclude_domains_str[i] == ','	|| 
-						section->exclude_domains_str[i] == '\n'	)) {
-
-						unsigned int domain_len = (i - j);
-						const char *sni_startp = sni_name + sni_len - domain_len;
-						const char *domain_startp = section->exclude_domains_str + j;
-
-						if (sni_len >= domain_len &&
-							sni_len < 128 && 
-							!strncmp(sni_startp, 
-							domain_startp, 
-							domain_len)) {
-
-							vrd.target_sni = 0;
-							lgdebugmsg("Excluded SNI: %.*s", 
-								vrd.sni_len, data + vrd.sni_offset);
-							goto out;
-						}
-
-						j = i + 1;
-					}
-				}
-			}
-
+			analyze_sni_str(section, sni_name, sni_len, data, &vrd);
 			goto out;
 
 nextExtension:
@@ -201,73 +248,6 @@ nextMessage:
 
 out:
 	return vrd;
-
-
-brute:
-	if (section->all_domains) {
-		vrd.target_sni = 1;
-		vrd.sni_len = 0;
-		vrd.sni_offset = dlen / 2;
-		goto out;
-	}
-
-	unsigned int j = 0;
-	for (unsigned int i = 0; i <= section->domains_strlen; i++) {
-		if (	i > j &&
-			(i == section->domains_strlen	||	
-			section->domains_str[i] == '\0'	||
-			section->domains_str[i] == ','	|| 
-			section->domains_str[i] == '\n'	)) {
-
-			unsigned int domain_len = (i - j);
-			const char *domain_startp = section->domains_str + j;
-
-			if (domain_len + dlen + 1> MAX_PACKET_SIZE) { 
-				continue;
-			}
-
-			NETBUF_ALLOC(buf, MAX_PACKET_SIZE);
-			if (!NETBUF_CHECK(buf)) {
-				lgerror(-ENOMEM, "Allocation error");
-				goto out;
-			}
-			NETBUF_ALLOC(nzbuf, MAX_PACKET_SIZE * sizeof(int));
-			if (!NETBUF_CHECK(nzbuf)) {
-				lgerror(-ENOMEM, "Allocation error");
-				NETBUF_FREE(buf);
-				goto out;
-			}
-
-			int *zbuf = (void *)nzbuf;
-
-			memcpy(buf, domain_startp, domain_len);
-			memcpy(buf + domain_len, "#", 1);
-			memcpy(buf + domain_len + 1, data, dlen);
-
-			z_function((char *)buf, zbuf, domain_len + 1 + dlen);
-
-			for (unsigned int k = 0; k < dlen; k++) {
-				if (zbuf[k] == domain_len) {
-					vrd.target_sni = 1;
-					vrd.sni_len = domain_len;
-					vrd.sni_offset = (k - domain_len - 1);
-					vrd.sni_target_offset = vrd.sni_offset;
-					vrd.sni_target_len = vrd.sni_len;
-					NETBUF_FREE(buf);
-					NETBUF_FREE(nzbuf);
-					goto out;
-				}
-			}
-
-
-			j = i + 1;
-
-			NETBUF_FREE(buf);
-			NETBUF_FREE(nzbuf);
-		}
-	}
-
-	goto out;
 }
 
 int gen_fake_sni(struct fake_type type,
@@ -275,7 +255,6 @@ int gen_fake_sni(struct fake_type type,
 		const struct tcphdr *tcph, uint32_t tcph_len,
 		uint8_t *buf, uint32_t *buflen) {
 	uint32_t data_len = type.fake_len;
-	int ret;
 
 	if (type.type == FAKE_PAYLOAD_RANDOM && data_len == 0) {
 		data_len = (uint32_t)randint() % 1200;
@@ -322,7 +301,8 @@ int gen_fake_sni(struct fake_type type,
 			get_random_bytes(bfdptr, data_len);
 #else /* KERNEL_SPACE */
 #if _NO_GETRANDOM
-			ret = open("/dev/urandom", O_RDONLY);
+		{
+			int ret = open("/dev/urandom", O_RDONLY);
 			if (ret < 0) {
 				lgerror(ret, "Unable to open /dev/urandom");
 				return ret;
@@ -330,7 +310,7 @@ int gen_fake_sni(struct fake_type type,
 			
 			read(ret, bfdptr, data_len);
 			close(ret);
-			
+		}
 #else /* _NO_GETRANDOM */
 			getrandom(bfdptr, data_len, 0);
 #endif /* _NO_GETRANDOM */

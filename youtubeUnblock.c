@@ -45,12 +45,12 @@ static int open_socket(struct mnl_socket **_nl) {
 	nl = mnl_socket_open(NETLINK_NETFILTER);
 
 	if (nl == NULL) {
-		lgerror(errno, "mnl_socket_open");
+		lgerror(-errno, "mnl_socket_open");
 		return -1;
 	}
 
 	if (mnl_socket_bind(nl, 0, MNL_SOCKET_AUTOPID) < 0) {
-		lgerror(errno, "mnl_socket_bind");
+		lgerror(-errno, "mnl_socket_bind");
 		mnl_socket_close(nl);
 		return -1;
 	}
@@ -65,7 +65,7 @@ static int close_socket(struct mnl_socket **_nl) {
 	struct mnl_socket *nl = *_nl;
 	if (nl == NULL) return 1;
 	if (mnl_socket_close(nl) < 0) {
-		lgerror(errno, "mnl_socket_close");
+		lgerror(-errno, "mnl_socket_close");
 		return -1;
 	}
 
@@ -77,26 +77,26 @@ static int close_socket(struct mnl_socket **_nl) {
 static int open_raw_socket(void) {
 	if (rawsocket != -2) {
 		errno = EALREADY;
-		lgerror(errno, "Raw socket is already opened");
+		lgerror(-errno, "Raw socket is already opened");
 		return -1;
 	}
 	
 	rawsocket = socket(AF_INET, SOCK_RAW, IPPROTO_RAW);
 	if (rawsocket == -1) {
-		lgerror(errno, "Unable to create raw socket");
+		lgerror(-errno, "Unable to create raw socket");
 		return -1;
 	}
 
 	int mark = config.mark;
 	if (setsockopt(rawsocket, SOL_SOCKET, SO_MARK, &mark, sizeof(mark)) < 0)
 	{
-		lgerror(errno, "setsockopt(SO_MARK, %d) failed\n", mark);
+		lgerror(-errno, "setsockopt(SO_MARK, %d) failed\n", mark);
 		return -1;
 	}
 
 	int mst = pthread_mutex_init(&rawsocket_lock, NULL);
 	if (mst) {
-		lgerror(errno, "Mutex err: %d\n", mst);
+		lgerror(-errno, "Mutex err: %d\n", mst);
 		close(rawsocket);
 		errno = mst;
 
@@ -110,12 +110,12 @@ static int open_raw_socket(void) {
 static int close_raw_socket(void) {
 	if (rawsocket < 0) {
 		errno = EALREADY;
-		lgerror(errno, "Raw socket is not set");
+		lgerror(-errno, "Raw socket is not set");
 		return -1;
 	}
 
 	if (close(rawsocket)) {
-		lgerror(errno, "Unable to close raw socket");
+		lgerror(-errno, "Unable to close raw socket");
 		pthread_mutex_destroy(&rawsocket_lock);
 		return -1;
 	}
@@ -129,28 +129,27 @@ static int close_raw_socket(void) {
 static int open_raw6_socket(void) {
 	if (raw6socket != -2) {
 		errno = EALREADY;
-		lgerror(errno, "Raw socket is already opened");
+		lgerror(-errno, "Raw socket is already opened");
 		return -1;
 	}
 	
 	raw6socket = socket(AF_INET6, SOCK_RAW, IPPROTO_RAW);
 	if (rawsocket == -1) {
-		lgerror(errno, "Unable to create raw socket");
+		lgerror(-errno, "Unable to create raw socket");
 		return -1;
 	}
 
 	int mark = config.mark;
 	if (setsockopt(raw6socket, SOL_SOCKET, SO_MARK, &mark, sizeof(mark)) < 0)
 	{
-		lgerror(errno, "setsockopt(SO_MARK, %d) failed\n", mark);
+		lgerror(-errno, "setsockopt(SO_MARK, %d) failed\n", mark);
 		return -1;
 	}
 
 	int mst = pthread_mutex_init(&raw6socket_lock, NULL);
 	if (mst) {
-		lgerror(mst, "Mutex err: %d\n", mst);
+		lgerror(-errno, "Mutex err: %d\n", mst);
 		close(raw6socket);
-		errno = mst;
 
 		return -1;
 	}
@@ -162,12 +161,12 @@ static int open_raw6_socket(void) {
 static int close_raw6_socket(void) {
 	if (raw6socket < 0) {
 		errno = EALREADY;
-		lgerror(errno, "Raw socket is not set");
+		lgerror(-errno, "Raw socket is not set");
 		return -1;
 	}
 
 	if (close(raw6socket)) {
-		lgerror(errno, "Unable to close raw socket");
+		lgerror(-errno, "Unable to close raw socket");
 		pthread_mutex_destroy(&rawsocket_lock);
 		return -1;
 	}
@@ -345,7 +344,7 @@ static int fallback_accept_packet(uint32_t id, struct queue_data qdata) {
         nfq_nlmsg_verdict_put(verdnlh, id, NF_ACCEPT);
 
         if (mnl_socket_sendto(*qdata._nl, verdnlh, verdnlh->nlmsg_len) < 0) {
-                lgerror(errno, "mnl_socket_send");
+                lgerror(-errno, "mnl_socket_send");
                 return MNL_CB_ERROR;
         }
 
@@ -370,7 +369,7 @@ void *delay_packet_send_fn(void *data) {
 	int ret = send_raw_socket(pkt, pktlen);
 	if (ret < 0) {
 		errno = -ret;
-		lgerror(errno, "send delayed raw packet");
+		lgerror(-errno, "send delayed raw packet");
 	}
 
 	free(pkt);
@@ -402,13 +401,13 @@ static int queue_cb(const struct nlmsghdr *nlh, void *data) {
 	struct packet_data packet = {0};
 
         if (nfq_nlmsg_parse(nlh, attr) < 0) {
-                lgerror(errno, "Attr parse");
+                lgerror(-errno, "Attr parse");
                 return MNL_CB_ERROR;
         }
  
         if (attr[NFQA_PACKET_HDR] == NULL) {
 		errno = ENODATA;
-                lgerror(errno, "Metaheader not set");
+                lgerror(-errno, "Metaheader not set");
                 return MNL_CB_ERROR;
         }
 
@@ -449,7 +448,7 @@ static int queue_cb(const struct nlmsghdr *nlh, void *data) {
 	}
 
         if (mnl_socket_sendto(*qdata->_nl, verdnlh, verdnlh->nlmsg_len) < 0) {
-                lgerror(errno, "mnl_socket_send");
+                lgerror(-errno, "mnl_socket_send");
                 return MNL_CB_ERROR;
         }
 	
@@ -462,7 +461,7 @@ int init_queue(int queue_num) {
 	struct mnl_socket *nl;
 
 	if (open_socket(&nl)) {
-		lgerror(errno, "Unable to open socket");
+		lgerror(-errno, "Unable to open socket");
 		return -1;
 	}
 
@@ -484,7 +483,7 @@ int init_queue(int queue_num) {
 	nfq_nlmsg_cfg_put_cmd(nlh, PF_INET, NFQNL_CFG_CMD_PF_UNBIND);
 
 	if (mnl_socket_sendto(nl, nlh, nlh->nlmsg_len) < 0) {
-		lgerror(errno, "mnl_socket_send");
+		lgerror(-errno, "mnl_socket_send");
 		goto die;
 	}
 
@@ -492,7 +491,7 @@ int init_queue(int queue_num) {
 	nfq_nlmsg_cfg_put_cmd(nlh, PF_INET, NFQNL_CFG_CMD_PF_BIND);
 
 	if (mnl_socket_sendto(nl, nlh, nlh->nlmsg_len) < 0) {
-		lgerror(errno, "mnl_socket_send");
+		lgerror(-errno, "mnl_socket_send");
 		goto die;
 	}
 
@@ -501,7 +500,7 @@ int init_queue(int queue_num) {
 		nfq_nlmsg_cfg_put_cmd(nlh, PF_INET6, NFQNL_CFG_CMD_PF_UNBIND);
 
 		if (mnl_socket_sendto(nl, nlh, nlh->nlmsg_len) < 0) {
-			lgerror(errno, "mnl_socket_send");
+			lgerror(-errno, "mnl_socket_send");
 			goto die;
 		}
 
@@ -509,7 +508,7 @@ int init_queue(int queue_num) {
 		nfq_nlmsg_cfg_put_cmd(nlh, PF_INET6, NFQNL_CFG_CMD_PF_BIND);
 
 		if (mnl_socket_sendto(nl, nlh, nlh->nlmsg_len) < 0) {
-			lgerror(errno, "mnl_socket_send");
+			lgerror(-errno, "mnl_socket_send");
 			goto die;
 		}
 	}
@@ -519,7 +518,7 @@ int init_queue(int queue_num) {
 	nfq_nlmsg_cfg_put_cmd(nlh, AF_INET, NFQNL_CFG_CMD_BIND);
 
 	if (mnl_socket_sendto(nl, nlh, nlh->nlmsg_len) < 0) {
-		lgerror(errno, "mnl_socket_send");
+		lgerror(-errno, "mnl_socket_send");
 		goto die;
 	}
 
@@ -532,7 +531,7 @@ int init_queue(int queue_num) {
 	}
 
 	if (mnl_socket_sendto(nl, nlh, nlh->nlmsg_len) < 0) {
-		lgerror(errno, "mnl_socket_send");
+		lgerror(-errno, "mnl_socket_send");
 		goto die;
 	}
 
@@ -554,7 +553,7 @@ int init_queue(int queue_num) {
 	while (1) {
 		ret = mnl_socket_recvfrom(nl, buf, BUF_SIZE);
 		if (ret == -1) {
-			lgerror(errno, "mnl_socket_recvfrom");
+			lgerror(-errno, "mnl_socket_recvfrom");
 			goto die;
 		}
 
@@ -562,9 +561,9 @@ int init_queue(int queue_num) {
 		if (ret < 0) {
 			lgerror(-EPERM, "mnl_cb_run");
 			if (errno == EPERM) {
-				lgerror(errno, "Probably another instance of youtubeUnblock with the same queue number is running\n");
+				lgerror(-errno, "Probably another instance of youtubeUnblock with the same queue number is running\n");
 			} else {
-				lgerror(errno, "Make sure the nfnetlink_queue kernel module is loaded\n");
+				lgerror(-errno, "Make sure the nfnetlink_queue kernel module is loaded\n");
 			}
 			goto die;
 		}
@@ -613,9 +612,9 @@ struct instance_config_t instance_config = {
 
 int main(int argc, char *argv[]) {
 	int ret;
-	if ((ret = parse_args(argc, argv)) != 0) {
+	if ((ret = yparse_args(argc, argv)) != 0) {
 		if (ret < 0) {
-			lgerror(errno, "Unable to parse args");
+			lgerror(-errno, "Unable to parse args");
 			exit(EXIT_FAILURE);
 		}
 		exit(EXIT_SUCCESS);
@@ -626,13 +625,13 @@ int main(int argc, char *argv[]) {
 
 
 	if (open_raw_socket() < 0) {
-		lgerror(errno, "Unable to open raw socket");
+		lgerror(-errno, "Unable to open raw socket");
 		exit(EXIT_FAILURE);
 	}
 
 	if (config.use_ipv6) {
 		if (open_raw6_socket() < 0) {
-			lgerror(errno, "Unable to open raw socket for ipv6");
+			lgerror(-errno, "Unable to open raw socket for ipv6");
 			close_raw_socket();
 			exit(EXIT_FAILURE);
 		}
