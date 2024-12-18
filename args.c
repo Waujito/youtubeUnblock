@@ -775,13 +775,15 @@ error:
 #ifndef KERNEL_SPACE
 	print_usage(argv[0]);
 #endif
+	if (errno) ret = -errno;
 	if (ret != -EINVAL) {
-		lgerror(ret, "Error thrown in %s\n", long_opt[optIdx].name);
+		lgerror(ret, "argparse: error thrown in %s", long_opt[optIdx].name);
+		ret = -EINVAL;
 	}
 
 	errno = -ret;
 	free_config(rep_config);
-	return -errno;
+	return ret;
 }
 
 #define print_cnf_raw(fmt, ...) do {				\
@@ -829,11 +831,11 @@ static size_t print_config_section(const struct section_config_t *section, char 
 			break;
 		}
 
-		print_cnf_buf("frag-sni-reverse=%d", section->frag_sni_reverse);
-		print_cnf_buf("frag-sni-faked=%d", section->frag_sni_faked);
-		print_cnf_buf("frag-middle-sni=%d", section->frag_middle_sni);
-		print_cnf_buf("frag-sni-pos=%d", section->frag_sni_pos);
-		print_cnf_buf("fk-winsize=%d", section->fk_winsize);
+		print_cnf_buf("--frag-sni-reverse=%d", section->frag_sni_reverse);
+		print_cnf_buf("--frag-sni-faked=%d", section->frag_sni_faked);
+		print_cnf_buf("--frag-middle-sni=%d", section->frag_middle_sni);
+		print_cnf_buf("--frag-sni-pos=%d", section->frag_sni_pos);
+		print_cnf_buf("--fk-winsize=%d", section->fk_winsize);
 
 		if (section->fake_sni) {
 			print_cnf_buf("--fake-sni=1");
@@ -954,7 +956,7 @@ size_t print_config(char *buffer, size_t buffer_size) {
 	print_cnf_buf("--queue-num=%d", config.queue_start_num);
 	print_cnf_buf("--threads=%d", config.threads);
 #endif
-	print_cnf_buf("--mark=%d", config.mark);
+	print_cnf_buf("--packet-mark=%d", config.mark);
 
 #ifndef KERNEL_SPACE
 	if (config.daemonize) {
