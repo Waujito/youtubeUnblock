@@ -876,10 +876,10 @@ static size_t print_config_section(const struct section_config_t *section, char 
 
 			switch(section->sni_detection) {
 			case SNI_DETECTION_BRUTE:
-				print_cnf_buf("--sni_detection=brute");
+				print_cnf_buf("--sni-detection=brute");
 				break;
 			case SNI_DETECTION_PARSE:
-				print_cnf_buf("--sni_detection=parse");
+				print_cnf_buf("--sni-detection=parse");
 				break;
 
 			}
@@ -899,7 +899,7 @@ static size_t print_config_section(const struct section_config_t *section, char 
 
 
 	if (section->udp_filter_quic == UDP_FILTER_QUIC_ALL && section->udp_mode == UDP_MODE_DROP) {
-		print_cnf_buf("--drop-quic");
+		print_cnf_buf("--quic-drop");
 	}
 
 	switch(section->udp_filter_quic) {
