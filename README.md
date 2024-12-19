@@ -91,18 +91,17 @@ For **LuCI** aka **GUI** aka **web-interface of router** you should install **lu
 
 If you got ` * pkg_hash_check_unresolved: cannot find dependency luci-lua-runtime for luci-app-youtubeUnblock` error, you are using old openwrt. Install [this dummy package](https://github.com/xiaorouji/openwrt-passwall/files/12605732/luci-lua-runtime_all_fake.zip). [Check this comment](https://github.com/Waujito/youtubeUnblock/issues/168#issuecomment-2449227547) for more details.
 
-LuCI configuration lives in **Services->youtubeUnblock** section. It is self descriptive, with description for each flag. Note, that after you push `Save & Apply` button, the configuration is applied automatically and the service is restarted.
+LuCI configuration lives in **Services->youtubeUnblock** section. It is just a way to pass flags to youtubeUnblock without terminal shell. Note, that after you push `Save & Apply` button, the configuration is applied automatically and the service is restarted.
 
-UCI configuration is available in /etc/config/youtubeUnblock file, in section `youtubeUnblock.youtubeUnblock`. The configuration is done with [flags](#flags). Note, that names of flags are not the same: you should replace `-` with `_`, you shouldn't use leading `--` for flag. Also you will enable toggle flags (without parameters) with `1`. 
+UCI configuration is available in /etc/config/youtubeUnblock file, in section `youtubeUnblock.youtubeUnblock` and has only one parameter, `args`. You may pass any args as a string to this parameter:
 
-For example, to enable trace logs you should do
 ```sh
-uci set youtubeUnblock.youtubeUnblock.trace=1
+uci set youtubeUnblock.youtubeUnblock.args="--queue-num=537 --threads=1"
 ```
 
-You can check the logs in CLI mode with `logread -l 200 | grep youtubeUnblock` command. 
+To save the configs you should do `uci commit` and then `reload_config` to restart youtubeUnblock
 
-For uci, to save the configs you should do `uci commit` and then `reload_config` to restart the youtubeUnblock
+You can check the logs in CLI mode with `logread -l 200 | grep youtubeUnblock` command. 
 
 In CLI mode you will use youtubeUnblock as a normal init.d service:
 for example, you can enable it with `/etc/init.d/youtubeUnblock enable`.
