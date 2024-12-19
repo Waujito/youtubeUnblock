@@ -94,14 +94,14 @@ _iptables()
 firewall_start_v4() {
 	iptables -t mangle -N YOUTUBEUNBLOCK >/dev/null 2>&1
 	_iptables iptables -A YOUTUBEUNBLOCK -t mangle -p tcp --dport 443 -m connbytes --connbytes-dir original --connbytes-mode packets --connbytes 0:19 -j NFQUEUE --queue-num 537 --queue-bypass
-	_iptables iptables -A YOUTUBEUNBLOCK -t mangle -p udp --dport 443 -m connbytes --connbytes-dir original --connbytes-mode packets --connbytes 0:19 -j NFQUEUE --queue-num 537 --queue-bypass
+	_iptables iptables -A YOUTUBEUNBLOCK -t mangle -p udp -m connbytes --connbytes-dir original --connbytes-mode packets --connbytes 0:8 -j NFQUEUE --queue-num 537 --queue-bypass
 	_iptables iptables -A POSTROUTING -t mangle -j YOUTUBEUNBLOCK
 	_iptables iptables -I OUTPUT -m mark --mark 32768/32768 -j ACCEPT
 }
 
 firewall_stop_v4() {
 	_iptables iptables -D YOUTUBEUNBLOCK -t mangle -p tcp --dport 443 -m connbytes --connbytes-dir original --connbytes-mode packets --connbytes 0:19 -j NFQUEUE --queue-num 537 --queue-bypass
-	_iptables iptables -D YOUTUBEUNBLOCK -t mangle -p udp --dport 443 -m connbytes --connbytes-dir original --connbytes-mode packets --connbytes 0:19 -j NFQUEUE --queue-num 537 --queue-bypass
+	_iptables iptables -D YOUTUBEUNBLOCK -t mangle -p udp -m connbytes --connbytes-dir original --connbytes-mode packets --connbytes 0:8 -j NFQUEUE --queue-num 537 --queue-bypass
 	_iptables iptables -D POSTROUTING -t mangle -j YOUTUBEUNBLOCK
 	_iptables iptables -D OUTPUT -m mark --mark 32768/32768 -j ACCEPT
 	iptables -t mangle -X YOUTUBEUNBLOCK >/dev/null 2>&1
@@ -114,7 +114,7 @@ firewall_start_v6() {
 
 	ip6tables -t mangle -N YOUTUBEUNBLOCK >/dev/null 2>&1
 	_iptables ip6tables -A YOUTUBEUNBLOCK -t mangle -p tcp --dport 443 -m connbytes --connbytes-dir original --connbytes-mode packets --connbytes 0:19 -j NFQUEUE --queue-num 537 --queue-bypass
-	_iptables ip6tables -A YOUTUBEUNBLOCK -t mangle -p udp --dport 443 -m connbytes --connbytes-dir original --connbytes-mode packets --connbytes 0:19 -j NFQUEUE --queue-num 537 --queue-bypass
+	_iptables ip6tables -A YOUTUBEUNBLOCK -t mangle -p udp -m connbytes --connbytes-dir original --connbytes-mode packets --connbytes 0:8 -j NFQUEUE --queue-num 537 --queue-bypass
 	_iptables ip6tables -A POSTROUTING -t mangle -j YOUTUBEUNBLOCK
 	_iptables ip6tables -I OUTPUT -m mark --mark 32768/32768 -j ACCEPT
 }
@@ -125,7 +125,7 @@ firewall_stop_v6() {
 	fi
 
 	_iptables ip6tables -D YOUTUBEUNBLOCK -t mangle -p tcp --dport 443 -m connbytes --connbytes-dir original --connbytes-mode packets --connbytes 0:19 -j NFQUEUE --queue-num 537 --queue-bypass
-	_iptables ip6tables -D YOUTUBEUNBLOCK -t mangle -p udp --dport 443 -m connbytes --connbytes-dir original --connbytes-mode packets --connbytes 0:19 -j NFQUEUE --queue-num 537 --queue-bypass
+	_iptables ip6tables -D YOUTUBEUNBLOCK -t mangle -p udp -m connbytes --connbytes-dir original --connbytes-mode packets --connbytes 0:8 -j NFQUEUE --queue-num 537 --queue-bypass
 	_iptables ip6tables -D POSTROUTING -t mangle -j YOUTUBEUNBLOCK
 	_iptables ip6tables -D OUTPUT -m mark --mark 32768/32768 -j ACCEPT
 	ip6tables -t mangle -X YOUTUBEUNBLOCK >/dev/null 2>&1
