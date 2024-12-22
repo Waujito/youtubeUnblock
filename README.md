@@ -212,9 +212,9 @@ Flags that do not scoped to a specific section, used over all the youtubeUnblock
 
 #### Section scoped flags
 
-- `--tls={enabled|disabled}` Set it if you want not to process TLS traffic in current section. May be used if you want to set only UDP-based section. (Here section is a unit between `--fbegin` and `--fend` flags).
-
 - `--fbegin` and `--fend` flags: youtubeUnblock supports multiple sets of strategies for specific filters. You may want to initiate a new set after the default one, like: `--sni-domains=googlevideo.com --faking-strategy=md5sum --fbegin --sni-domains=youtube.com --faking-strategy=tcp_check --fbegin --sni-domains=l.google.com --faking-strategy=pastseq`. Note, that the priority of these sets goes backwards: last is first, default (one that does not start with --fbegin) is last. If you start the new section, the default settings are implemented just like youtubeUnblock without any parameters. Note that the config above is just an example and won't work for you.
+
+- `--tls={enabled|disabled}` Set it if you want not to process TLS traffic in current section. May be used if you want to set only UDP-based section. (Here section is a unit between `--fbegin` and `--fend` flags).
 
 - `--fake-sni={0|1}` This flag enables fake-sni which forces **youtubeUnblock** to send at least three packets instead of one with TLS *ClientHello*: Fake *ClientHello*, 1st part of original *ClientHello*, 2nd part of original *ClientHello*. This flag may be related to some Operation not permitted error messages, so before open an issue refer to [Troubleshooting for EPERMS](#troubleshooting-eperms-operation-not-permitted). Defaults to **1**.
 
