@@ -272,7 +272,7 @@ Flags that do not scoped to a specific section, used over all the youtubeUnblock
 
 ## UDP
 
-UDP is another communication protocol. Well-known technologies that use it are DNS, QUIC, voice chats. UDP does not provide reliable connection and its header is much simpler than TCP thus fragmentation is limited. The support provided primarily by faking. For QUIC faking may not work well, so use `--quic-drop` if you want to drop all quic traffic. For other technologies I recommend to configure UDP support in the separate section from TCP, like `--fbegin --udp-dport-filter=50000-50099 --tls=disabled`. See more in flags related to udp and [issues tagged with udp label](https://github.com/Waujito/youtubeUnblock/issues?q=label%3Audp+is%3Aclosed). 
+UDP is another communication protocol. Well-known technologies that use it are DNS, QUIC, voice chats. UDP does not provide reliable connection and its header is much simpler than TCP thus fragmentation is limited. The support provided primarily by faking. For QUIC faking may not work well, so use `--quic-drop` if you want to drop all quic traffic. For other technologies I recommend to configure UDP support in the separate section from TCP, like `--fbegin --udp-dport-filter=50000-50099 --tls=disabled`. See more in flags related to udp and [issues tagged with udp label](https://github.com/Waujito/youtubeUnblock/issues?q=label%3Audp+). 
 
 ## Troubleshooting
 
