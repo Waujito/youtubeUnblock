@@ -24,5 +24,14 @@
 			"type": "view",
 			"path": "youtubeUnblock/status"
 		}
+	},
+
+	"admin/services/youtubeUnblock/configuration": {
+		"title": "Configuration",
+		"order": 20,
+		"action": {
+			"type": "view",
+			"path": "youtubeUnblock/configuration"
+		}
 	}
 }
