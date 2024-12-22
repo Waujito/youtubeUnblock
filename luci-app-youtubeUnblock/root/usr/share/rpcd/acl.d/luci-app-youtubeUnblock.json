@@ -14,7 +14,8 @@
 				"/etc/init.d/firewall reload" : [ "exec" ],
 				"/usr/bin/youtubeUnblock --version" : [ "exec" ],
 				"/sbin/logread -e youtubeUnblock -l [0-9]*": [ "exec" ],
-				"/usr/sbin/logread -e youtubeUnblock -l [0-9]*": [ "exec" ]
+				"/usr/sbin/logread -e youtubeUnblock -l [0-9]*": [ "exec" ],
+				"/usr/share/youtubeUnblock/youtubeUnblock_defaults.sh --force": [ "exec" ]
 			},
 			"uci": [ "youtubeUnblock" ]
 		},

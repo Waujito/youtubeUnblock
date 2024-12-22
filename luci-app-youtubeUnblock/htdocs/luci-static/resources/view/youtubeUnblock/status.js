@@ -52,6 +52,12 @@ function handleAction(act, event) {
 		} else {
 			fs.exec_direct('/etc/init.d/youtubeUnblock', [ 'disable' ]).then(thn_inc);
 		}
+	} else if (act == "reset_configs") {
+		fs.exec_direct('/usr/share/youtubeUnblock/youtubeUnblock_defaults.sh', [ '--force' ])
+			.then(function() {
+				fs.exec_direct('/etc/init.d/youtubeUnblock', [ 'restart' ])
+					.then(thn_disp);
+			});
 	} else {
 		unroll_inact(event.target);
 	}
@@ -210,15 +216,25 @@ return view.extend({
 							return handleAction('fw_reload', event);
 						})
 					}, [ _('Firewall reload') ]),
+					'\xa0\xa0\xa0',
+					E('button', {
+						'class': 'btn cbi-button cbi-button-negative',
+						'id': 'btn_reset_configs',
+						'click': ui.createHandlerFn(this, function(event) {
+							return handleAction('reset_configs', event);
+						})
+					}, [ _('Reset configuration') ]),
+
 				])
 			]);
 		}, o, this);
 
-		const logs_s = m.section(form.NamedSection, 'ytb_logs');
+		const logs_s = m.section(form.NamedSection, 'ytb_logs', _("Logs"), _("If you want to scroll logs, disable refreshing by clicking the button in the upper right corner of the screen"));
 		logs_s.render = L.bind(function(view, section_id) {
 			return E('div', { class: 'cbi-map' },
 				E('div', { class: 'cbi-section' }, [
-				E('div', { class: 'cbi-section-descr' }, _('The syslog output, pre-filtered for messages related to: youtubeUnblock')),
+				E('h3', _('Logs')), 
+				E('div', { class: 'cbi-section-descr' }, _('If you want to scroll logs, disable refreshing by clicking the button in the upper right corner of the screen')),
 				E('textarea', {
 					'id': 'ytb_logger',
 					'style': 'width: 100% !important; padding: 5px; font-family: monospace',
