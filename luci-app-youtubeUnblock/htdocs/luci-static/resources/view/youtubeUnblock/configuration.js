@@ -227,7 +227,7 @@ return view.extend({
 		const flags_section = o.subsection;
 		this.renderGeneralConfigs(flags_section);
 
-		o = flags_section.option(form.SectionValue, "_subsections_section", form.GridSection, "section", _("Section configs"))
+		o = flags_section.option(form.SectionValue, "_subsections_section", form.GridSection, "section", _("Section configs"), _("Note that sections will be executed in reverse order: from last section to first. After section handles the packet, it stops processing in the next sections"))
 		const subsects_section = o.subsection;
 		subsects_section.addremove = true;
 		subsects_section.anonymous = true;
