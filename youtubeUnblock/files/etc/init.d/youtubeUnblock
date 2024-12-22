@@ -8,15 +8,110 @@ USE_PROCD=1
 # PROCD_DEBUG=1
 PROG=/usr/bin/youtubeUnblock
 
-UCI_ARGS=""
+# You should use uci for configuration
+OPTS=""
 
-# If you have troubles with uci, pass args here
+# If you prefer to pass args as cmdline arguments, pass them here
 POST_ARGS=""
 
-read_uci_args() {
+xappend() {
+	local name="$1" value="$2"
+	OPTS="$OPTS --${name//_/-}=$value"
+}
+
+xappend_toggler() {
+	local name="$1"
+	OPTS="$OPTS --${name//_/-}"
+}
+
+append_opts() {
+	local name value cfg="$1"; shift
+	for name in $*; do
+		config_get value "$cfg" "$name"
+		[ -n "$value" ] && xappend "$name" "$value"
+	done
+}
+
+append_commasep_list() {
+	local name cfg="$1"; shift
+	for name in $*; do
+		local res=""
+		_handle_list() {
+			res="$res$1,"
+		}
+		config_list_foreach "$cfg" "$name" _handle_list
+		[ -n "$res" ] && xappend "$name" "$res"
+	done
+}
+
+append_opts_boolean() {
+	local name value cfg="$1"; shift
+	for name in $*; do
+		config_get_bool value "$cfg" "$name" 0
+		xappend "$name" "$value"
+	done
+}
+
+append_opts_btoggler() {
+	local name value cfg="$1"; shift
+	for name in $*; do
+		config_get_bool value "$cfg" "$name" 0
+		[ $value -gt 0 ] && xappend_toggler "$name"
+	done
+}
+
+SECTION_NUMBER=0
+
+parse_sections_options() {
+	local config="$1"
 	local value
-	config_get value "$1" "args"
-	UCI_ARGS="$value" 
+
+	config_get_bool value "$config" enabled 0
+	if [ "$value" -eq "0" ]; then
+		return
+	fi
+
+	[ $SECTION_NUMBER -gt 0 ] && xappend_toggler "fbegin"
+	SECTION_NUMBER=$((SECTION_NUMBER+1))
+
+	config_get_bool value "$config" tls_enabled 0
+	if [ $value -gt 0 ]; then
+		xappend "tls" "enabled"
+	else
+		xappend "tls" "disabled"
+	fi
+
+	config_get_bool value "$config" all_domains 0
+	if [ $value -gt 0 ]; then
+		xappend "sni_domains" "all"
+	else
+		append_commasep_list "$config" sni_domains
+	fi
+
+        append_opts_boolean "$config" fake_sni frag_sni_reverse frag_sni_faked frag_middle_sni synfake 
+	append_opts "$config" fake_sni_seq_len fake_sni_type fake_custom_payload faking_strategy faking_ttl fake_seq_offset frag frag_sni_pos fk_winsize seg2delay synfake_len sni_detection udp_mode udp_fake_seq_len udp_fake_len udp_filter_quic
+        append_commasep_list "$config" exclude_domains udp_dport_filter
+        append_opts_btoggler "$config" quic_drop
+
+}
+
+parse_general_options() {
+	local config="$1"
+	local value
+	
+	config_get value "$config" conf_strat
+	if [ "$value" = "args" ]; then
+		config_get value "$config" args
+		OPTS="$value"
+	else
+		append_opts "$config" queue_num packet_mark
+		append_opts_btoggler "$config" silent trace no_gso no_ipv6
+
+		config_foreach parse_sections_options section
+
+		config_get value "$config" post_args
+		POST_ARGS="$value"
+	fi
 }
 
 # Openwrt procd script: https://openwrt.org/docs/guide-developer/procd-init-script-example
@@ -25,12 +120,12 @@ read_uci_args() {
 
 start_service() {
 	config_load youtubeUnblock
-	read_uci_args youtubeUnblock
+	parse_general_options youtubeUnblock
 
-	echo "youtubeUnblock is running as: '$PROG $UCI_ARGS $POST_ARGS'"
+	echo "youtubeUnblock is running as: '$PROG $OPTS $POST_ARGS'"
 
 	procd_open_instance 'youtubeUnblock'
-	procd_set_param command $PROG $UCI_ARGS $POST_ARGS
+	procd_set_param command $PROG $OPTS $POST_ARGS
 	procd_set_param stdout 1
 	procd_set_param stderr 1
 	procd_close_instance

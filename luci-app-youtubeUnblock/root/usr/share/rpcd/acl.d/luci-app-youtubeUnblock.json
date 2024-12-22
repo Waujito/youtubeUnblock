@@ -1,0 +1,25 @@
+{
+	"luci-app-youtubeUnblock": {
+		"description": "Grant UCI access for luci-app-youtubeUnblock",
+		"read": {
+			"cgi-io": [ "exec" ],
+			"file": {
+				"/etc/init.d/youtubeUnblock status" : [ "exec" ],
+				"/etc/init.d/youtubeUnblock enabled" : [ "exec" ],
+				"/etc/init.d/youtubeUnblock start" : [ "exec" ],
+				"/etc/init.d/youtubeUnblock stop" : [ "exec" ],
+				"/etc/init.d/youtubeUnblock restart" : [ "exec" ],
+				"/etc/init.d/youtubeUnblock enable" : [ "exec" ],
+				"/etc/init.d/youtubeUnblock disable" : [ "exec" ],
+				"/etc/init.d/firewall reload" : [ "exec" ],
+				"/usr/bin/youtubeUnblock --version" : [ "exec" ],
+				"/sbin/logread -e youtubeUnblock -l [0-9]*": [ "exec" ],
+				"/usr/sbin/logread -e youtubeUnblock -l [0-9]*": [ "exec" ]
+			},
+			"uci": [ "youtubeUnblock" ]
+		},
+		"write": {
+			"uci": [ "youtubeUnblock" ]
+		}
+	}
+}
