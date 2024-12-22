@@ -91,15 +91,17 @@ For **LuCI** aka **GUI** aka **web-interface of router** you should install **lu
 
 If you got ` * pkg_hash_check_unresolved: cannot find dependency luci-lua-runtime for luci-app-youtubeUnblock` error, you are using old openwrt. Install [this dummy package](https://github.com/xiaorouji/openwrt-passwall/files/12605732/luci-lua-runtime_all_fake.zip). [Check this comment](https://github.com/Waujito/youtubeUnblock/issues/168#issuecomment-2449227547) for more details.
 
-LuCI configuration lives in **Services->youtubeUnblock** section. It is just a way to pass flags to youtubeUnblock without terminal shell. Note, that after you push `Save & Apply` button, the configuration is applied automatically and the service is restarted.
+LuCI configuration lives in **Services->youtubeUnblock** section. It is self descriptive, with description for each flag. Note, that after you push `Save & Apply` button, the configuration is applied automatically and the service is restarted.
 
-UCI configuration is available in /etc/config/youtubeUnblock file, in section `youtubeUnblock.youtubeUnblock` and has only one parameter, `args`. You may pass any args as a string to this parameter:
+UCI configuration is available in /etc/config/youtubeUnblock file, in section `youtubeUnblock.youtubeUnblock`. You may pass any args as a string to parameter `args`, but before it disable interactive flags (You can configurate with it but it is a way harder and I recommend to use it only with `luci-app-youtubeUnblock`):
 
 ```sh
+uci set youtubeUnblock.youtubeUnblock.conf_strat="args"
 uci set youtubeUnblock.youtubeUnblock.args="--queue-num=537 --threads=1"
 ```
 
 To save the configs you should do `uci commit` and then `reload_config` to restart youtubeUnblock
+
 
 You can check the logs in CLI mode with `logread -l 200 | grep youtubeUnblock` command. 
 
