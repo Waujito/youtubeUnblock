@@ -185,12 +185,36 @@ curl -o/dev/null -k --connect-to ::google.com -k -L -H Host:\ mirror.gcr.io http
 Put flags to the **BINARY**, not an init script. If you are on OpenWRT you should put the flags inside the script: open `/etc/init.d/youtubeUnblock` with any text editor, like vi or nano and put your flags after `procd_set_param command /usr/bin/youtubeUnblock` line.
 
 Available flags:
-
-- `--sni-domains=<comma separated domain list>|all` List of domains you want to be handled by SNI. Use this string if you want to change default domain list. Defaults to `googlevideo.com,ggpht.com,ytimg.com,youtube.com,play.google.com,youtu.be,googleapis.com,googleusercontent.com,gstatic.com,l.google.com`. You can pass **all** if you want for every *ClientHello* to be handled. You can exclude some domains with `--exclude-domains` flag.
-
-- `--exclude-domains=<comma separated domain list>` List of domains to be excluded from targeting.
+#### General flags
+Flags that do not scoped to a specific section, used over all the youtubeUnblock
 
 - `--queue-num=<number of netfilter queue>` The number of netfilter queue **youtubeUnblock** will be linked to. Defaults to **537**.
+
+- `--silent` Disables verbose mode.
+
+- `--trace` Maximum verbosity for debugging purposes.
+
+- `--no-gso` Disables support for Google Chrome fat packets which uses GSO. This feature is well tested now, so this flag probably won't fix anything.
+
+- `--no-ipv6` Disables support for ipv6. May be useful if you don't want for ipv6 socket to be opened.
+
+- `--threads=<threads number>` Specifies the amount of threads you want to be running for your program. This defaults to **1** and shouldn't be edited for normal use. But if you really want multiple queue instances of youtubeUnblock, note that you should change --queue-num to --queue balance. For example, with 4 threads, use `--queue-balance 537:540` on iptables and `queue num 537-540` on nftables.
+
+- `--connbytes-limit=<pkts>` **Kernel module only!** Specify how much packets of connection should be processed by kyoutubeUnblock. Pass 0 if you want for each packet to be processed. This flag may be useful for UDP traffic since unlimited youtubeUnblock may lead to traffic flood and unexpected bans. Defaults to 5. In most cases you don't want to change it.
+
+- `--daemonize` Daemonizes the youtubeUnblock (forks and detaches it from the shell). Terminate the program with `killall youtubeUnblock`. If you want to track the logs of youtubeUnblock in logread or journalctl, use **--syslog** flag.
+
+- `--syslog` Redirects logs to the system log. You can read it with `journalctl` or `logread`.
+
+- `--noclose` Usable only with `--daemonize`. Will not redirect io streams to /dev/null.
+
+- `--packet-mark=<mark>` Use this option if youtubeUnblock conflicts with other systems rely on packet mark. Note that you may want to change accept rule for iptables to follow the mark.
+
+#### Section scoped flags
+
+- `--tls={enabled|disabled}` Set it if you want not to process TLS traffic in current section. May be used if you want to set only UDP-based section. (Here section is a unit between `--fbegin` and `--fend` flags).
+
+- `--fbegin` and `--fend` flags: youtubeUnblock supports multiple sets of strategies for specific filters. You may want to initiate a new set after the default one, like: `--sni-domains=googlevideo.com --faking-strategy=md5sum --fbegin --sni-domains=youtube.com --faking-strategy=tcp_check --fbegin --sni-domains=l.google.com --faking-strategy=pastseq`. Note, that the priority of these sets goes backwards: last is first, default (one that does not start with --fbegin) is last. If you start the new section, the default settings are implemented just like youtubeUnblock without any parameters. Note that the config above is just an example and won't work for you.
 
 - `--fake-sni={0|1}` This flag enables fake-sni which forces **youtubeUnblock** to send at least three packets instead of one with TLS *ClientHello*: Fake *ClientHello*, 1st part of original *ClientHello*, 2nd part of original *ClientHello*. This flag may be related to some Operation not permitted error messages, so before open an issue refer to [Troubleshooting for EPERMS](#troubleshooting-eperms-operation-not-permitted). Defaults to **1**.
 
@@ -230,6 +254,10 @@ Available flags:
 
 - `--seg2delay=<delay>` This flag forces **youtubeUnblock** to wait a little bit before send the 2nd part of the split packet.
 
+- `--sni-domains=<comma separated domain list>|all` List of domains you want to be handled by SNI. Use this string if you want to change default domain list. Defaults to `googlevideo.com,ggpht.com,ytimg.com,youtube.com,play.google.com,youtu.be,googleapis.com,googleusercontent.com,gstatic.com,l.google.com`. You can pass **all** if you want for every *ClientHello* to be handled. You can exclude some domains with `--exclude-domains` flag.
+
+- `--exclude-domains=<comma separated domain list>` List of domains to be excluded from targeting.
+
 - `--udp-mode={drop|fake}` This flag specifies udp handling strategy. If drop udp packets will be dropped (useful for quic when browser can fallback to tcp), if fake udp will be faked. Defaults to fake.
 
 - `--udp-fake-seq-len=<amount of faking packets sent>` Specifies how much faking packets will be sent over the network. Defaults to 6.
@@ -238,33 +266,9 @@ Available flags:
 
 - `--udp-dport-filter=<5,6,200-500>` Filter the UDP destination ports. Defaults to no ports. Specifie the ports you want to be handled by youtubeUnblock.
 
-- `--udp-filter-quic={disabled|all}` Enables QUIC filtering for UDP handler. If disabled, quic won't be processed, if all all quic initial packets will be handled. Defaults to disabled.
+- `--udp-filter-quic={disabled|all}` Enables QUIC filtering for UDP handler. If disabled, quic won't be processed, if all, all quic initial packets will be handled. Defaults to disabled.
 
 - `--quic-drop` Drop all QUIC packets which goes to youtubeUnblock. Won't affect any other UDP packets. Just an alias for `--udp-filter-quic=all --udp-mode=drop`.
-
-- `--tls={enabled|disabled}` Set it if you want not to process TLS traffic in current section. May be used if you want to set only UDP-based section. (Here section is a unit between `--fbegin` and `--fend` flags).
-
-- `--silent` Disables verbose mode.
-
-- `--trace` Maximum verbosity for debugging purposes.
-
-- `--no-gso` Disables support for Google Chrome fat packets which uses GSO. This feature is well tested now, so this flag probably won't fix anything.
-
-- `--no-ipv6` Disables support for ipv6. May be useful if you don't want for ipv6 socket to be opened.
-
-- `--threads=<threads number>` Specifies the amount of threads you want to be running for your program. This defaults to **1** and shouldn't be edited for normal use. But if you really want multiple queue instances of youtubeUnblock, note that you should change --queue-num to --queue balance. For example, with 4 threads, use `--queue-balance 537:540` on iptables and `queue num 537-540` on nftables.
-
-- `--connbytes-limit=<pkts>` **Kernel module only!** Specify how much packets of connection should be processed by kyoutubeUnblock. Pass 0 if you want for each packet to be processed. This flag may be useful for UDP traffic since unlimited youtubeUnblock may lead to traffic flood and unexpected bans. Defaults to 5. In most cases you don't want to change it.
-
-- `--daemonize` Daemonizes the youtubeUnblock (forks and detaches it from the shell). Terminate the program with `killall youtubeUnblock`. If you want to track the logs of youtubeUnblock in logread or journalctl, use **--syslog** flag.
-
-- `--syslog` Redirects logs to the system log. You can read it with `journalctl` or `logread`.
-
-- `--noclose` Usable only with `--daemonize`. Will not redirect io streams to /dev/null.
-
-- `--packet-mark=<mark>` Use this option if youtubeUnblock conflicts with other systems rely on packet mark. Note that you may want to change accept rule for iptables to follow the mark.
-
-- `--fbegin` and `--fend` flags: youtubeUnblock supports multiple sets of strategies for specific filters. You may want to initiate a new set after the default one, like: `--sni-domains=googlevideo.com --faking-strategy=md5sum --fbegin --sni-domains=youtube.com --faking-strategy=tcp_check --fbegin --sni-domains=l.google.com --faking-strategy=pastseq`. Note, that the priority of these sets goes backwards: last is first, default (one that does not start with --fbegin) is last. If you start the new section, the default settings are implemented just like youtubeUnblock without any parameters. Note that the config above is just an example and won't work for you.
 
 ## UDP
 
