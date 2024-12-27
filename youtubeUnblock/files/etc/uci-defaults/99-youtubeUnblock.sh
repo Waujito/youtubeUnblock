@@ -1,5 +1,13 @@
 #!/bin/sh
-[[ ! "$(uci -q get youtubeUnblock.youtubeUnblock)" == "" ]] && [[ ! "$1" == "--force" ]] && exit 0
+
+# youtubeUnblock.youtubeUnblock.frag is used to automatically update old configuration to new one.
+
+if [ "$1" != "--force" ] \
+	&& [ -z "$(uci -q get youtubeUnblock.youtubeUnblock.frag)" ] \
+	&& [ -n "$(uci -q get youtubeUnblock.youtubeUnblock)" ]; then
+	exit 0
+fi
+
 while uci -q delete youtubeUnblock.@section[0]; do :; done
 uci -q delete youtubeUnblock.youtubeUnblock
 
