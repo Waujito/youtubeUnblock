@@ -43,7 +43,7 @@ int quic_parse_data(uint8_t *raw_payload, uint32_t raw_payload_len,
 	uint32_t left_len = raw_payload_len - sizeof(struct quic_lhdr);
 	uint8_t *cur_rawptr = raw_payload + sizeof(struct quic_lhdr);
 	if (!nqch->fixed) {
-		lgtrace_addp("quic fixed uset");
+		lgtrace_addp("quic fixed unset");
 		return -EPROTO;
 	}
 
@@ -281,27 +281,29 @@ int detect_udp_filtered(const struct section_config_t *section,
 			 &quic_raw_payload, &quic_raw_plen);
 
 		if (ret < 0) {
-			lgtrace_addp("undefined type");
-			goto skip;
+			lgtrace_addp("QUIC undefined type");
+			goto match_port;
 		}
 
 		lgtrace_addp("QUIC detected");
 
-		goto approve;
+		uint8_t qtype = qch->type;
+		if (qch->version == QUIC_V1)
+			qtype = quic_convtype_v1(qtype);
+		else if (qch->version == QUIC_V2) 
+			qtype = quic_convtype_v2(qtype);
 
-		// uint8_t qtype = qch->type;
-		// if (qch->version == QUIC_V1)
-		// 	qtype = quic_convtype_v1(qtype);
-		// else if (qch->version == QUIC_V2) 
-		// 	qtype = quic_convtype_v2(qtype);
-		//
-		// if (qtype != QUIC_INITIAL_TYPE) {
-		// 	lgtrace_addp("quic message type: %d", qtype);
-		// 	goto accept_quic;
-		// }
-		// 
-		// lgtrace_addp("quic initial message");
+		if (qtype != QUIC_INITIAL_TYPE) {
+			lgtrace_addp("QUIC message type: %d", qtype);
+			goto match_port;
+		}
+
+		lgtrace_addp("QUIC initial message");
+
+		goto approve;
 	}
+
+match_port:
 
 	for (int i = 0; i < section->udp_dport_range_len; i++) {
 		struct udp_dport_range crange = section->udp_dport_range[i];
