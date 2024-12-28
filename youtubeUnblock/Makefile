@@ -4,7 +4,7 @@ include $(TOPDIR)/rules.mk
 
 PKG_NAME:=youtubeUnblock
 PKG_VERSION:=1.0.0
-PKG_REV:=5ee77d517b083079d1ae1c432aa26906c5e8e67e
+PKG_REV:=bc345ed6d489f184116d1b3f8e7037c928710d8b
 PKG_RELEASE:=5
 
 PKG_SOURCE_URL:=https://github.com/Waujito/youtubeUnblock.git
