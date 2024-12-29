@@ -7,6 +7,7 @@
 #include <libnetfilter_queue/libnetfilter_queue_ipv4.h>
 #include <libnetfilter_queue/libnetfilter_queue_ipv6.h>
 #include <libnetfilter_queue/libnetfilter_queue_tcp.h>
+#include <libnetfilter_queue/libnetfilter_queue_udp.h>
 #else
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 24))
 	#include <net/ip6_checksum.h>
@@ -31,6 +32,20 @@ void tcp4_set_checksum(struct tcphdr *tcph, struct iphdr *iph)
 #endif
 }
 
+void udp4_set_checksum(struct udphdr *udph, struct iphdr *iph) 
+{
+#ifdef KERNEL_SPACE
+	uint32_t udp_packet_len = ntohs(iph->tot_len) - (iph->ihl << 2);
+	udph->check = 0;
+	udph->check = csum_tcpudp_magic(
+		iph->saddr, iph->daddr, udp_packet_len,
+		IPPROTO_UDP, 
+		csum_partial(udph, udp_packet_len, 0));
+#else
+	nfq_udp_compute_checksum_ipv4(udph, iph);
+#endif
+}
+
 void ip4_set_checksum(struct iphdr *iph) 
 {
 #ifdef KERNEL_SPACE
@@ -49,6 +64,17 @@ void tcp6_set_checksum(struct tcphdr *tcph, struct ip6_hdr *iph) {
 		 csum_partial(tcph, ntohs(iph->ip6_plen), 0));
 #else
 	nfq_tcp_compute_checksum_ipv6(tcph, iph);
+#endif
+}
+
+void udp6_set_checksum(struct udphdr *udph, struct ip6_hdr *iph) {
+#ifdef KERNEL_SPACE
+	udph->check = 0;
+	udph->check = csum_ipv6_magic(&iph->saddr, &iph->daddr, 
+		 ntohs(iph->ip6_plen), IPPROTO_UDP, 
+		 csum_partial(udph, ntohs(iph->ip6_plen), 0));
+#else
+	nfq_udp_compute_checksum_ipv6(udph, iph);
 #endif
 }
 
@@ -76,6 +102,21 @@ int set_tcp_checksum(struct tcphdr *tcph, void *iph, uint32_t iphb_len) {
 
 	return 0;
 }
+
+int set_udp_checksum(struct udphdr *udph, void *iph, uint32_t iphb_len) {
+	int ipvx = netproto_version(iph, iphb_len);
+
+	if (ipvx == IP4VERSION) {
+		udp4_set_checksum(udph, iph);
+	} else if (ipvx == IP6VERSION) {
+		udp6_set_checksum(udph, iph);
+	} else {
+		return -1;
+	}
+
+	return 0;
+}
+
 
 int ip4_payload_split(uint8_t *pkt, uint32_t buflen,
 		       struct iphdr **iph, uint32_t *iph_len, 

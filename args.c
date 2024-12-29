@@ -347,7 +347,7 @@ void print_usage(const char *argv0) {
 	printf("\t--udp-mode={drop|fake}\n");
 	printf("\t--udp-fake-seq-len=<amount of faking packets sent>\n");
 	printf("\t--udp-fake-len=<size of upd fake>\n");
-	printf("\t--udp-faking-strategy={checksum|ttl}\n");
+	printf("\t--udp-faking-strategy={checksum|ttl|none}\n");
 	printf("\t--udp-dport-filter=<5,6,200-500>\n");
 	printf("\t--udp-filter-quic={disabled|all}\n");
 	printf("\t--threads=<threads number>\n");
@@ -709,6 +709,8 @@ int yparse_args(int argc, char *argv[]) {
 				sect_config->udp_faking_strategy = FAKE_STRAT_UDP_CHECK;
 			} else if (strcmp(optarg, "ttl") == 0) {
 				sect_config->udp_faking_strategy = FAKE_STRAT_TTL;
+			} else if (strcmp(optarg, "none") == 0) {
+				sect_config->udp_faking_strategy = FAKE_STRAT_NONE;
 			} else {
 				goto invalid_opt;
 			}
@@ -938,6 +940,11 @@ static size_t print_config_section(const struct section_config_t *section, char 
 					break;
 				case FAKE_STRAT_TTL:
 					print_cnf_buf("--udp-faking-strategy=ttl");
+					print_cnf_buf("--faking-ttl=%d", section->faking_ttl);
+					break;
+				case 0:
+					print_cnf_buf("--udp-faking-strategy=none");
+					break;
 				}
 			}
 			break;
