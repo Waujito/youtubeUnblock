@@ -51,5 +51,6 @@ set youtubeUnblock.@section[0].udp_mode='fake'
 set youtubeUnblock.@section[0].udp_fake_seq_len='6'
 set youtubeUnblock.@section[0].udp_fake_len='64'
 set youtubeUnblock.@section[0].udp_filter_quic='disabled'
+set youtubeUnblock.@section[0].udp_faking_strategy='none'
 EOI
 uci commit
