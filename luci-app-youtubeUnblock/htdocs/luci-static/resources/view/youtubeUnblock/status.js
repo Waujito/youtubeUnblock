@@ -6,7 +6,6 @@
 'require uci';
 'require form';
 'require tools.widgets as widgets';
-'require tools.views as views';
 
 /**
  * Big thanks to luci-app-adblock for the best reference implementation
