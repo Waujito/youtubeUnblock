@@ -96,9 +96,12 @@ void tcp4_set_checksum(struct tcphdr *tcph, struct iphdr *iph);
 void ip4_set_checksum(struct iphdr *iph);
 void ip6_set_checksum(struct ip6_hdr *iph);
 void tcp6_set_checksum(struct tcphdr *tcph, struct ip6_hdr *iph);
+void udp4_set_checksum(struct udphdr *udph, struct iphdr *iph);
+void udp6_set_checksum(struct udphdr *udph, struct ip6_hdr *iph);
 
 int  set_ip_checksum(void *iph, uint32_t iphb_len);
 int  set_tcp_checksum(struct tcphdr *tcph, void *iph, uint32_t iphb_len);
+int  set_udp_checksum(struct udphdr *udph, void *iph, uint32_t iphb_len);
 
 void z_function(const char *str, int *zbuf, size_t len);
 

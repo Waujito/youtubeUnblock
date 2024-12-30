@@ -148,6 +148,7 @@ for (struct section_config_t *section = (config)->last_section; section != NULL;
 
 #define FAKE_TTL 8
 
+#define FAKE_STRAT_NONE		0
 // Will invalidate fake packets by out-of-ack_seq out-of-seq request
 #define FAKE_STRAT_RAND_SEQ	(1 << 0)
 // Will assume that GGC server is located further than FAKE_TTL
@@ -228,7 +229,7 @@ enum {
 	.udp_mode = UDP_MODE_FAKE,				\
 	.udp_fake_seq_len = 6,					\
 	.udp_fake_len = 64,					\
-	.udp_faking_strategy = FAKE_STRAT_UDP_CHECK,		\
+	.udp_faking_strategy = FAKE_STRAT_NONE,			\
 	.udp_dport_range = NULL,				\
 	.udp_dport_range_len = 0,				\
 	.udp_filter_quic = UDP_FILTER_QUIC_DISABLED,		\

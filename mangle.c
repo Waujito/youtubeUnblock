@@ -383,6 +383,7 @@ int process_udp_packet(const struct section_config_t *section, const uint8_t *pk
 				.fake_len = section->udp_fake_len,
 				.strategy = {
 					.strategy = section->udp_faking_strategy,
+					.faking_ttl = section->faking_ttl,
 				},
 			};
 			ret = gen_fake_udp(fake_type, iph, iph_len, udph, fake_udp, &fsn_len);

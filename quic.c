@@ -159,7 +159,7 @@ int udp_fail_packet(struct udp_failing_strategy strategy, uint8_t *payload, uint
 
 
 	if (strategy.strategy == FAKE_STRAT_TTL) {
-		lgtrace_addp("set fake ttl to %d", strategy.faking_ttl);
+		lgtrace_addp("Set fake ttl to %d", strategy.faking_ttl);
 
 		if (ipxv == IP4VERSION) {
 			((struct iphdr *)iph)->ttl = strategy.faking_ttl;
@@ -237,7 +237,8 @@ int gen_fake_udp(struct udp_fake_type type,
 
 	struct udphdr *nudph = (struct udphdr *)(buf + iph_len);
 	nudph->len = htons(sizeof(struct udphdr) + data_len);
-
+	
+	set_udp_checksum(nudph, buf, iph_len);
 
 	udp_fail_packet(type.strategy, buf, &dlen, *buflen);
 
