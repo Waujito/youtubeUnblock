@@ -10,7 +10,7 @@ run: $(OBJS)
 	@ar rcs libcyclone.a $(OBJS)
 
 prep_dirs:
-	mkdir build
+	mkdir -p build
 
 
 build/%.o: %.c prep_dirs
