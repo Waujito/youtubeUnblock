@@ -622,12 +622,10 @@ int send_tcp_frags(const struct section_config_t *section, const uint8_t *packet
 		lgtrace_addp("Packet split in %d bytes position of payload start, dvs: %d to two packets of %d and %d lengths", poses[0], dvs, f1len, f2len);
 
 		if (ret < 0) {
-			lgerror(ret, "send_frags: tcp_frag: with context packet with size %d, position: %d, recursive dvs: %d", pktlen, poses[0], dvs);
+			lgerror(ret, "send_frags: tcp_frag: with context packet with size %d, position: %d", pktlen, poses[0]);
 			goto erret_lc;
 		}
 
-
-		dvs += poses[0];
 
 		if (section->frag_sni_reverse)
 			goto send_frag2;
@@ -666,7 +664,7 @@ send_fake:
 
 send_frag2:
 		{
-			ret = send_tcp_frags(section, frag2, f2len, poses + 1, poses_sz - 1, dvs);
+			ret = send_tcp_frags(section, frag2, f2len, poses + 1, poses_sz - 1, poses[0]);
 			if (ret < 0) {
 				goto erret_lc;
 			}
