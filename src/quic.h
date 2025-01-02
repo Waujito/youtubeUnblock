@@ -41,6 +41,9 @@
 #define QUIC_RETRY_TYPE_V2	0b00
 #define quic_convtype_v2(type) (((type) + 1) & 0b11)
 
+#define QUIC_FRAME_CRYPTO	0x06
+#define QUIC_FRAME_PADDING	0x00
+
 #define QUIC_V1	1		// RFC 9000
 #define QUIC_V2	0x6b3343cf	// RFC 9369
 
@@ -130,6 +133,8 @@ int quic_parse_data(const uint8_t *raw_payload, uint32_t raw_payload_len,
  *
  * \mlen Used to signal about variable length and validate left length
  * in the buffer.
+ *
+ * On error/buffer overflow mlen set to 0, otherwise it is higher
  */
 uint64_t quic_parse_varlength(const uint8_t *variable, uint64_t *mlen);
 
@@ -160,6 +165,18 @@ int64_t quic_get_version(const struct quic_lhdr *qch);
 * 0 on false, 1 on true
 */
 int quic_check_is_initial(const struct quic_lhdr *qch);
+
+struct quic_frame_crypto {
+	uint64_t offset;
+	uint64_t payload_length;
+	const uint8_t *payload;
+};
+/**
+ * Parses quic crypto frame
+ * Returns parsed size or -EINVAL on error
+ */
+ssize_t quic_parse_crypto(struct quic_frame_crypto *crypto_frame,
+			  const uint8_t *frame, uint64_t flen);
 
 
 /**

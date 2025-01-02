@@ -18,7 +18,10 @@ uint64_t quic_parse_varlength(const uint8_t *variable, uint64_t *mlen) {
 	uint8_t len = 1 << (*variable >> 6);
 
 	if (mlen) {
-		if (*mlen < len) return 0;
+		if (*mlen < len) {
+			*mlen = 0;
+			return 0;
+		}
 		*mlen = len;
 	}
 
@@ -162,6 +165,47 @@ int quic_parse_initial_header(const uint8_t *inpayload, uint32_t inplen,
 invalid_packet:
 	lgerror(-EINVAL, "QUIC invalid Initial packet");
 	return -EINVAL;
+}
+
+ssize_t quic_parse_crypto(struct quic_frame_crypto *crypto_frame,
+			  const uint8_t *frame, uint64_t flen) {
+	const uint8_t *curptr = frame;
+	uint64_t curptr_len = flen;
+	uint64_t vln;
+	*crypto_frame = (struct quic_frame_crypto){0};
+
+	if (flen == 0 || *frame != QUIC_FRAME_CRYPTO || 
+		crypto_frame == NULL) 
+		return -EINVAL;
+
+	
+	curptr++, curptr_len--;
+
+	vln = curptr_len;
+	uint64_t offset = quic_parse_varlength(curptr, &vln);
+	curptr += vln, curptr_len -= vln;
+	if (vln == 0) {
+		return -EINVAL;
+	}
+
+	vln = curptr_len;
+	uint64_t length = quic_parse_varlength(curptr, &vln);
+	curptr += vln, curptr_len -= vln;
+	if (vln == 0) {
+		return -EINVAL;
+	}
+
+	if (length > curptr_len)
+		return -EINVAL;
+
+	crypto_frame->offset = offset;
+	crypto_frame->payload_length = length;
+	crypto_frame->payload = curptr;
+
+	curptr += length;
+	curptr_len -= length;
+
+	return flen - curptr_len;
 }
 
 int udp_fail_packet(struct udp_failing_strategy strategy, uint8_t *payload, uint32_t *plen, uint32_t avail_buflen) {
@@ -313,20 +357,11 @@ int detect_udp_filtered(const struct section_config_t *section,
 
 		lgtrace_addp("QUIC detected");
 
-		uint8_t qtype = qch->type;
-		if (qch->version == QUIC_V1)
-			qtype = quic_convtype_v1(qtype);
-		else if (qch->version == QUIC_V2) 
-			qtype = quic_convtype_v2(qtype);
-
-		if (qtype != QUIC_INITIAL_TYPE) {
-			lgtrace_addp("QUIC message type: %d", qtype);
-			goto match_port;
+			
+		if (quic_check_is_initial(qch)) {
+			lgtrace_addp("QUIC initial message");
+			goto approve;
 		}
-
-		lgtrace_addp("QUIC initial message");
-
-		goto approve;
 	}
 
 match_port:
