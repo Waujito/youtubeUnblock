@@ -32,16 +32,24 @@ endif
 export CC CCLD LD CFLAGS LDFLAGS LIBNFNETLINK_CFLAGS LIBNFNETLINK_LIBS LIBMNL_CFLAGS LIBMNL_LIBS
 
 APP:=$(BUILD_DIR)/youtubeUnblock
+TEST_APP:=$(BUILD_DIR)/testYoutubeUnblock
 
-SRCS := youtubeUnblock.c mangle.c args.c utils.c quic.c tls.c getopt.c quic_crypto.c
+SRCS := mangle.c args.c utils.c quic.c tls.c getopt.c quic_crypto.c
 OBJS := $(SRCS:%.c=$(BUILD_DIR)/%.o)
+APP_EXEC := youtubeUnblock.c 
+APP_OBJ := $(APP_EXEC:%.c=$(BUILD_DIR)/%.o)
+
+
+TEST_SRCS := $(shell find test -name "*.c")
+TEST_OBJS := $(TEST_SRCS:%.c=$(BUILD_DIR)/%.o)
+TEST_CFLAGS := -Itest/unity -Itest
 
 LIBNFNETLINK := $(DEPSDIR)/lib/libnfnetlink.la
 LIBMNL := $(DEPSDIR)/lib/libmnl.la
 LIBNETFILTER_QUEUE := $(DEPSDIR)/lib/libnetfilter_queue.la
 LIBCYCLONE := $(DEPSDIR)/lib/libcyclone.a
 
-.PHONY: default all dev dev_attrs prepare_dirs
+.PHONY: default all test build_test dev dev_attrs prepare_dirs
 default: all
 
 run_dev: dev
@@ -54,9 +62,15 @@ dev_attrs:
 
 all: prepare_dirs $(APP)
 
+build_test: prepare_dirs $(TEST_APP)
+test: build_test
+	$(TEST_APP)
+
 prepare_dirs:
 	mkdir -p $(BUILD_DIR)
 	mkdir -p $(BUILD_DIR)/crypto
+	mkdir -p $(BUILD_DIR)/test
+	mkdir -p $(BUILD_DIR)/test/unity
 	mkdir -p $(DEPSDIR)
 
 $(LIBCYCLONE):
@@ -79,13 +93,21 @@ $(LIBNETFILTER_QUEUE): $(LIBNFNETLINK) $(LIBMNL)
 	$(MAKE) -C deps/libnetfilter_queue
 	$(MAKE) install -C deps/libnetfilter_queue
 
-$(APP): $(OBJS) $(REQ) $(LIBCYCLONE)
+$(APP): $(OBJS) $(APP_OBJ) $(REQ) $(LIBCYCLONE)
 	@echo 'CCLD $(APP)'
-	$(CCLD) $(OBJS) -o $(APP) $(LDFLAGS) -lmnl -lnetfilter_queue -lpthread -lcyclone
+	$(CCLD) $(OBJS) $(APP_OBJ) -o $(APP) $(LDFLAGS) -lmnl -lnetfilter_queue -lpthread -lcyclone
+
+$(TEST_APP): $(APP) $(TEST_OBJS) $(REQ) $(LIBCYCLONE)
+	@echo 'CCLD $(TEST_APP)'
+	$(CCLD) $(OBJS) $(TEST_OBJS) -o $(TEST_APP) $(LDFLAGS) -lmnl -lnetfilter_queue -lpthread -lcyclone
 
 $(BUILD_DIR)/%.o: src/%.c $(REQ) $(INCLUDE_DIR)/config.h
 	@echo 'CC $@'
 	$(CC) -c $(CFLAGS) $(LDFLAGS) $< -o $@
+
+$(BUILD_DIR)/test/%.o: test/%.c $(REQ) $(INCLUDE_DIR)/config.h
+	@echo 'CC $@'
+	$(CC) -c $(CFLAGS) $(LDFLAGS) $(TEST_CFLAGS) $< -o $@
 
 install: all
 	install -d $(DESTDIR)$(PREFIX)/bin/
