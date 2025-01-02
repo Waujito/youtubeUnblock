@@ -58,6 +58,10 @@ TEST(QuicTest, Test_decrypts)
 
 	// tag is left
 	TEST_ASSERT_EQUAL(16, decrypted_payload + decrypted_payload_len - curptr);
+
+#undef free
+	free(decrypted_payload);
+#define free unity_free
 }
 
 TEST(QuicTest, Test_crypto_parser_valid)
@@ -81,7 +85,9 @@ TEST(QuicTest, Test_crypto_parser_tls)
 	struct tls_verdict tlsv;
 
 	fret = quic_parse_crypto(&fr_cr, (const uint8_t *)quic_decrypted_crypto, sizeof(quic_decrypted_crypto));
+	TEST_ASSERT_GREATER_OR_EQUAL(0, fret); 
 	ret = analyze_tls_message(&sconf, fr_cr.payload, fr_cr.payload_length, &tlsv);
+	TEST_ASSERT_GREATER_OR_EQUAL(0, ret); 
 	TEST_ASSERT_EQUAL_STRING_LEN("example.com", tlsv.sni_ptr, 11);
 }
 
@@ -129,6 +135,29 @@ TEST(QuicTest, Test_varlength_parser)
 	TEST_ASSERT_EQUAL(0, mlen);
 }
 
+TEST(QuicTest, Test_parse_quic_decrypted)
+{
+	int ret;
+	uint8_t *decrypted_payload;
+	uint32_t decrypted_payload_len;
+	const uint8_t *decrypted_message;
+	uint32_t decrypted_message_len;
+	struct tls_verdict tlsv = {0};
+
+	ret = quic_parse_initial_message(
+		(const uint8_t *)quic_testing_payload, sizeof(quic_testing_payload) - 1,
+		&decrypted_payload, &decrypted_payload_len,
+		&decrypted_message, &decrypted_message_len
+	);
+	TEST_ASSERT_EQUAL(ret, 0);
+
+	tlsv = parse_quic_decrypted(&sconf, decrypted_message, decrypted_message_len);
+	TEST_ASSERT_EQUAL_STRING_LEN("example.com", tlsv.sni_ptr, 11);
+#undef free
+	free(decrypted_payload);
+#define free unity_free
+}
+
 TEST_GROUP_RUNNER(QuicTest)
 {
 	RUN_TEST_CASE(QuicTest, Test_decrypts);
@@ -136,4 +165,5 @@ TEST_GROUP_RUNNER(QuicTest)
 	RUN_TEST_CASE(QuicTest, Test_crypto_parser_tls);
 	RUN_TEST_CASE(QuicTest, Test_crypto_parser_invalid);
 	RUN_TEST_CASE(QuicTest, Test_varlength_parser);
+	RUN_TEST_CASE(QuicTest, Test_parse_quic_decrypted)
 }

@@ -26,6 +26,9 @@ struct tls_verdict {
 #define TLS_MESSAGE_ANALYZE_FOUND	0
 #define TLS_MESSAGE_ANALYZE_GOTO_NEXT	1
 
+/**
+ * Analyzes each TLS Client Hello message (inside TLS Record or QUIC CRYPTO FRAME)
+ */
 int analyze_tls_message(
 	const struct section_config_t *section,
 	const uint8_t *message_data, 

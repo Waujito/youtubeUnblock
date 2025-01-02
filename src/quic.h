@@ -43,6 +43,7 @@
 
 #define QUIC_FRAME_CRYPTO	0x06
 #define QUIC_FRAME_PADDING	0x00
+#define QUIC_FRAME_PING		0x01
 
 #define QUIC_V1	1		// RFC 9000
 #define QUIC_V2	0x6b3343cf	// RFC 9369
@@ -198,6 +199,14 @@ int quic_parse_initial_message(
 	const uint8_t *quic_payload, uint32_t quic_plen,
 	uint8_t **udecrypted_payload, uint32_t *udecrypted_payload_len,
 	const uint8_t **udecrypted_message, uint32_t *udecrypted_message_len
+);
+
+/**
+ * Like analyze_tls_data for QUIC
+ */
+struct tls_verdict parse_quic_decrypted(
+	const struct section_config_t *section,
+	const uint8_t *decrypted_message, uint32_t decrypted_message_len
 );
 
 // Like fail_packet for TCP

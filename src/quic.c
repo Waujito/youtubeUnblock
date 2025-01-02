@@ -1,4 +1,5 @@
 #include "quic.h"
+#include "tls.h"
 #include "logging.h"
 
 
@@ -316,6 +317,53 @@ int gen_fake_udp(struct udp_fake_type type,
 	return 0;
 }
 
+struct tls_verdict parse_quic_decrypted(
+	const struct section_config_t *section,
+	const uint8_t *decrypted_message, uint32_t decrypted_message_len
+) {
+	const uint8_t *curptr = decrypted_message;
+	ssize_t curptr_len = decrypted_message_len;
+	ssize_t fret;
+	int ret;
+	struct tls_verdict tlsv = {0};
+	struct quic_frame_crypto fr_cr;
+
+	while (curptr_len > 0) {
+		uint8_t type = curptr[0];
+		switch (type) {
+			case QUIC_FRAME_PADDING:
+			case QUIC_FRAME_PING:
+				curptr++, curptr_len--;
+				break;
+			case QUIC_FRAME_CRYPTO:
+				fret = quic_parse_crypto(&fr_cr, curptr, curptr_len);
+				if (fret < 0)
+					break;
+				curptr += fret;
+				curptr_len -= fret;
+				
+				ret = analyze_tls_message(
+					section, fr_cr.payload, fr_cr.payload_length, &tlsv
+				);
+				switch (ret) {
+					case TLS_MESSAGE_ANALYZE_GOTO_NEXT:
+						break;
+					case TLS_MESSAGE_ANALYZE_FOUND: 
+					case TLS_MESSAGE_ANALYZE_INVALID: 
+					default:
+						goto out;
+					
+				}
+				break;
+			default:
+				goto out;
+		}
+	}
+
+out:
+	return tlsv;
+}
+
 int detect_udp_filtered(const struct section_config_t *section,
 			const uint8_t *payload, uint32_t plen) {
 	const void *iph;
@@ -341,14 +389,14 @@ int detect_udp_filtered(const struct section_config_t *section,
 		const struct quic_lhdr *qch;
 		uint32_t qch_len;
 		struct quic_cids qci;
-		const uint8_t *quic_raw_payload;
-		uint32_t quic_raw_plen;
+		const uint8_t *quic_in_payload;
+		uint32_t quic_in_plen;
 
 		lgtrace_addp("QUIC probe");
 
 		ret = quic_parse_data((uint8_t *)data, dlen, 
 			 &qch, &qch_len, &qci, 
-			 &quic_raw_payload, &quic_raw_plen);
+			 &quic_in_payload, &quic_in_plen);
 
 		if (ret < 0) {
 			lgtrace_addp("QUIC undefined type");
@@ -358,10 +406,43 @@ int detect_udp_filtered(const struct section_config_t *section,
 		lgtrace_addp("QUIC detected");
 
 			
-		if (quic_check_is_initial(qch)) {
-			lgtrace_addp("QUIC initial message");
+		if (!quic_check_is_initial(qch)) {
+			lgtrace_addp("QUIC not initial");
+			goto match_port;
+		}
+
+		uint8_t *decrypted_payload;
+		uint32_t decrypted_payload_len;
+		const uint8_t *decrypted_message;
+		uint32_t decrypted_message_len;
+		struct tls_verdict tlsv;
+
+		lgtrace_addp("QUIC initial message");
+		ret = quic_parse_initial_message(
+			data, dlen,
+			&decrypted_payload, &decrypted_payload_len,
+			&decrypted_message, &decrypted_message_len
+		);
+
+		if (ret < 0) {
+			goto match_port;
+		}
+
+		tlsv = parse_quic_decrypted(section,
+		       decrypted_message, decrypted_message_len
+		);
+
+		if (tlsv.sni_len != 0) {
+			lgdebugmsg("QUIC SNI detected: %.*s", tlsv.sni_len, tlsv.sni_ptr);
+		}
+
+		if (tlsv.target_sni) {
+			lgdebugmsg("QUIC target SNI detected: %.*s", tlsv.sni_len, tlsv.sni_ptr);
+			free(decrypted_payload);
 			goto approve;
 		}
+
+		free(decrypted_payload);
 	}
 
 match_port:
