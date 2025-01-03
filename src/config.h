@@ -218,6 +218,7 @@ enum {
 enum {
 	UDP_FILTER_QUIC_DISABLED,
 	UDP_FILTER_QUIC_ALL,
+	UDP_FILTER_QUIC_PARSED,
 };
 
 #define default_section_config {				\

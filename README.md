@@ -9,7 +9,7 @@
     - [IPv6](#ipv6)
   - [Check it](#check-it)
   - [Flags](#flags)
-  - [UDP](#udp)
+  - [UDP/QUIC](#udp/quic)
   - [Troubleshooting](#troubleshooting)
     - [TV](#tv)
     - [Troubleshooting EPERMS (Operation not permitted)](#troubleshooting-eperms-operation-not-permitted)
@@ -270,13 +270,21 @@ Flags that do not scoped to a specific section, used over all the youtubeUnblock
 
 - `--udp-faking-strategy={checksum|ttl|none}` Faking strategy for udp. `checksum` will fake UDP checksum, `ttl` won't fake but will make UDP content relatively small, `none` is no faking. Defaults to none.
 
-- `--udp-filter-quic={disabled|all}` Enables QUIC filtering for UDP handler. If disabled, quic won't be processed, if all, all quic initial packets will be handled. Defaults to disabled.
+- `--udp-filter-quic={disabled|all|parsed}` Enables QUIC filtering for UDP handler. If disabled, quic won't be processed, if all, all quic initial packets will be handled. `parsed` will decrypt and parse QUIC initial message and match it with `--sni-domains`. Defaults to disabled.
 
 - `--quic-drop` Drop all QUIC packets which goes to youtubeUnblock. Won't affect any other UDP packets. Just an alias for `--udp-filter-quic=all --udp-mode=drop`.
 
-## UDP
+## UDP/QUIC
 
-UDP is another communication protocol. Well-known technologies that use it are DNS, QUIC, voice chats. UDP does not provide reliable connection and its header is much simpler than TCP thus fragmentation is limited. The support provided primarily by faking. For QUIC faking may not work well, so use `--quic-drop` if you want to drop all quic traffic. For other technologies I recommend to configure UDP support in the separate section from TCP, like `--fbegin --udp-dport-filter=50000-50099 --tls=disabled`. See more in flags related to udp and [issues tagged with udp label](https://github.com/Waujito/youtubeUnblock/issues?q=label%3Audp+). 
+UDP is another communication protocol. Well-known technologies that use it are DNS, QUIC, voice chats. UDP does not provide reliable connection and its header is much simpler than TCP thus fragmentation is limited. The support provided primarily by faking. 
+
+Right now, QUIC faking may not work well, so use `--udp-mode=drop` option.
+
+QUIC is enabled with `--udp-filter-quic` flag. The flag supports two modes: `all` will handle all the QUIC initial messages and `parse` will decrypt and parse the QUIC initial message, and then compare it with `--sni-domains` flag.
+
+**I recommend to use** `--udp-mode=drop --udp-filter-quic=parse`.
+
+For **other UDP protocols** I recommend to configure UDP support in the separate section from TCP, like `--fbegin --udp-dport-filter=50000-50099 --tls=disabled`. See more in flags related to udp and [tickets tagged with udp label](https://github.com/Waujito/youtubeUnblock/issues?q=label%3Audp+). 
 
 ## Troubleshooting
 

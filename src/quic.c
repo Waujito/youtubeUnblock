@@ -404,7 +404,7 @@ int detect_udp_filtered(const struct section_config_t *section,
 		goto skip;
 	}
 	
-	if (section->udp_filter_quic) {
+	if (section->udp_filter_quic != UDP_FILTER_QUIC_DISABLED) {
 		const struct quic_lhdr *qch;
 		uint32_t qch_len;
 		struct quic_cids qci;
@@ -430,6 +430,12 @@ int detect_udp_filtered(const struct section_config_t *section,
 			goto match_port;
 		}
 
+		if (section->udp_filter_quic == UDP_FILTER_QUIC_ALL || 
+			section->all_domains) {
+			lgtrace_addp("QUIC early approve");
+			goto approve;
+		}
+
 		uint8_t *decrypted_payload;
 		uint32_t decrypted_payload_len;
 		const uint8_t *decrypted_message;
@@ -452,7 +458,7 @@ int detect_udp_filtered(const struct section_config_t *section,
 		);
 
 		if (tlsv.sni_len != 0) {
-			lgdebugmsg("QUIC SNI detected: %.*s", tlsv.sni_len, tlsv.sni_ptr);
+			lgtrace_addp("QUIC SNI detected: %.*s", tlsv.sni_len, tlsv.sni_ptr);
 		}
 
 		if (tlsv.target_sni) {
