@@ -347,32 +347,43 @@ struct tls_verdict parse_quic_decrypted(
 	struct tls_verdict tlsv = {0};
 	struct quic_frame_crypto fr_cr;
 
+	uint8_t *crypto_message = calloc(AVAILABLE_MTU, 1);
+	if (crypto_message == NULL) {
+		lgerror(-ENOMEM, "No memory");
+		return tlsv;
+	}
+
+	int crypto_message_len = AVAILABLE_MTU;
+
 	while (curptr_len > 0) {
 		uint8_t type = curptr[0];
 		switch (type) {
-			case QUIC_FRAME_PADDING:
 			case QUIC_FRAME_PING:
+				lgtrace_addp("ping");
+				goto pl_incr;
+			case QUIC_FRAME_PADDING:
+				if (curptr == decrypted_message ||
+					*(curptr - 1) != QUIC_FRAME_PADDING) {
+					lgtrace_addp("padding");
+				}
+pl_incr:
 				curptr++, curptr_len--;
 				break;
 			case QUIC_FRAME_CRYPTO:
 				fret = quic_parse_crypto(&fr_cr, curptr, curptr_len);
+				lgtrace_addp("crypto %lu", fr_cr.offset);
 				if (fret < 0)
 					break;
 				curptr += fret;
 				curptr_len -= fret;
-				
-				ret = analyze_tls_message(
-					section, fr_cr.payload, fr_cr.payload_length, &tlsv
-				);
-				switch (ret) {
-					case TLS_MESSAGE_ANALYZE_GOTO_NEXT:
-						break;
-					case TLS_MESSAGE_ANALYZE_FOUND: 
-					case TLS_MESSAGE_ANALYZE_INVALID: 
-					default:
-						goto out;
-					
+
+				if (fr_cr.offset + fr_cr.payload_length <= 
+					crypto_message_len) {
+
+					memcpy(crypto_message + fr_cr.offset, 
+					fr_cr.payload, fr_cr.payload_length);
 				}
+				
 				break;
 			default:
 				goto out;
@@ -380,6 +391,11 @@ struct tls_verdict parse_quic_decrypted(
 	}
 
 out:
+	ret = analyze_tls_message(
+		section, crypto_message, crypto_message_len, &tlsv
+	);
+
+	free(crypto_message);
 	return tlsv;
 }
 
@@ -430,6 +446,8 @@ int detect_udp_filtered(const struct section_config_t *section,
 			goto match_port;
 		}
 
+		lgtrace_addp("QUIC initial message");
+
 		if (section->udp_filter_quic == UDP_FILTER_QUIC_ALL || 
 			section->all_domains) {
 			lgtrace_addp("QUIC early approve");
@@ -442,7 +460,6 @@ int detect_udp_filtered(const struct section_config_t *section,
 		uint32_t decrypted_message_len;
 		struct tls_verdict tlsv;
 
-		lgtrace_addp("QUIC initial message");
 		ret = quic_parse_initial_message(
 			data, dlen,
 			&decrypted_payload, &decrypted_payload_len,

@@ -4,6 +4,9 @@ static const char quic_decrypted_header[] = "\xc3\x00\x00\x00\x01\x08\x83\x94\xc
 static const char quic_decrypted_crypto[] = "\x06\x00\x40\xf1\x01\x00\x00\xed\x03\x03\xeb\xf8\xfa\x56\xf1\x29\x39\xb9\x58\x4a\x38\x96\x47\x2e\xc4\x0b\xb8\x63\xcf\xd3\xe8\x68\x04\xfe\x3a\x47\xf0\x6a\x2b\x69\x48\x4c\x00\x00\x04\x13\x01\x13\x02\x01\x00\x00\xc0\x00\x00\x00\x10\x00\x0e\x00\x00\x0b\x65\x78\x61\x6d\x70\x6c\x65\x2e\x63\x6f\x6d\xff\x01\x00\x01\x00\x00\x0a\x00\x08\x00\x06\x00\x1d\x00\x17\x00\x18\x00\x10\x00\x07\x00\x05\x04\x61\x6c\x70\x6e\x00\x05\x00\x05\x01\x00\x00\x00\x00\x00\x33\x00\x26\x00\x24\x00\x1d\x00\x20\x93\x70\xb2\xc9\xca\xa4\x7f\xba\xba\xf4\x55\x9f\xed\xba\x75\x3d\xe1\x71\xfa\x71\xf5\x0f\x1c\xe1\x5d\x43\xe9\x94\xec\x74\xd7\x48\x00\x2b\x00\x03\x02\x03\x04\x00\x0d\x00\x10\x00\x0e\x04\x03\x05\x03\x06\x03\x02\x03\x08\x04\x08\x05\x08\x06\x00\x2d\x00\x02\x01\x01\x00\x1c\x00\x02\x40\x01\x00\x39\x00\x32\x04\x08\xff\xff\xff\xff\xff\xff\xff\xff\x05\x04\x80\x00\xff\xff\x07\x04\x80\x00\xff\xff\x08\x01\x10\x01\x04\x80\x00\x75\x30\x09\x01\x10\x0f\x08\x83\x94\xc8\xf0\x3e\x51\x57\x08\x06\x04\x80\x00\xff\xff";
 static const int quic_padding_len = 917;
 
+// Just a QUIC payload but with sparse frames (like ping, padding, ping, crypto 0, padding, ping, ping, padding, ping, crypto 425, padding)
+static const char quic_sparse_payload[] = "\306\000\000\000\001\bB\302\246\317\237]S\226\000\000D\320\372/\3503Ac\222\312\360\355\030\223\231\340\360\022\222e\177$@\270\312\006\205-\267\304\207\036Zq?\246\2072zza\272\337\365'\335_\246\255\2502\347\245r\217>\2556\t\033\347\234w*Q4\003\330\270\037\271\004\346\254B(G\022\356\232\221P\357\305>\301T\331J xv.<\224\344Q\267\v\017b\254\260f\313\232\2213D:F\371\214\177\342C\234\022\301\316\277\342/\027\337X\317\250\200N< 6y\313\r\224\310i\263-\212\372\030\264Z\003#D4\234\315\205H\373\227\026yx\245d\375\211U\223\235\204\236\"T\255i\001\3308)ca%\243\376.mMc\225\b&\276\245n\233V\300\334\261\261\247\266(\334kA\314\250\261\271\353\nC\034\273\276\324\361J\341\017\361N\212\3128\261\233z\267|\344\260d\376\344\342\357\336\255X\366w\313\225C\022\022s\256\202\3568k!\177\025\375K~\224y\216\022\341\376\230\024\346\212l\025\253\300\256\031\360O\200|\331\342\315=I\306dS\030\306\320\212\177\356\350\207\360D7\177\agQ\"\031o6\202\352k\206]\210\370k5k\252\221\254\245\364\333\247\310\207\024\202Q#\314\214\264\341R?UL\340\271\313\213nj\217;\rU\304C\274\361[\327\002\321\372\212LO\325\324\237<\336\361<\205\331w\177`\210\\\276\304\314\220\235\3437\206g\323\275\036\a\033A!\254\217\341\277y6\211\304\031`-d\207wj\037\334MjY'!\327\245\002\255;\b\251\215\tY\310/\366N\224\206\027\037*\311\235\302\236=\377C\264\343o\255\264f\235%\036\026y\353\271(\3160\343*\300>\214&}\177-\363jj\336\204'\266\310\210\312\347\211h)\351\031\325\231\332\177\332#\3552bC\2775)\336\353\271gY\305\315`\212\342\325\376\250\2235y\a\315b\200R\361S\022\333\f\023\r\313\370\267\n\205\314\374\257\376\211\304Y?}.u\244b\315\221\264\211\371\256\224\332C\333@\025\027nb)G\360S\326_\277\362\201\365]\2745\376\253#\251\240\224=\316Y_\233\260\302\260\227.}\260\226\244\241r\320\347_\2273V\237\0262\375^\374F\266!\036k\346\352\204\222\300VuN\027\216\"\2531j\330\222\335\354Uz\367,\376\201\272O\177\376\026\220:?\n\202S\220\373\343\333'+%*rW\n\177Y{\347\211\357+\364(\270\034\207\371\221>\200Ua\026\034\235e\246D\036\352X\202\350\036\303\231\210\351j+\227e\352il\362\273`\360\361\304e\356\206\321\2232\327]\246\325\273\361\233G\336n\212.\335\250\t\177\233$\243\334<\304%\332\000\346\2777\343c\026`|\222\3666\207\021\034\001~\206\221I\f\316\f\006\000\036~\313kH\243L\343B\261Yg\031\362\324\370-\260B\330?e>fd\r\3544\\\312E\231\000\210oZ\033s\207\220\36379f=\017\032\256~\222\377!q\270w\305!\312o\343\035_\003U\313P\356\363^\016o\203,Yf \354\321\0038:\363I\300\215+h\316\305\257\305\002\t\232c\333'~\341\352\3170\362\244A\211\360\272\371\321\371Q\b\237\3076s.\032\322k\202,\345\374\266\233b OS\035\b*\242J\265\215\357\317\325\356\322\031g\2610G]\272i\265\\,\226\237\323\355\351\237\345\032b\364\347\250\227\217\323\353Y\002q[\335\365\034\363$*\312\231\317\302}\2600~\261O\336\265(d\240\323\214zr\371=\027\203\376\330\032w\002,90~{\3677\230\363\250b\320\202I\221\213?\272\227\ncc\343\031Ow\0347s\313\356\037\312t\206\002\006\336\270\203\277\020j\210g\372MU\2758\333\326:\312\262\r\022\210\275[}\314\377\035\241\267s\326\211\300\236;\217\001/\354k\365+?n\230e\350\002z\\K\035\227j\331\031\rj\230<z\272\220\311\036\000\264\017\020\255S\343\001\246\311\021\301\t\006\337\245\3565\2657D{9\b\271s=\a\202\254\326\365T+e\370)7AE\241\217z\276\331xe\n<\320\206\246-\313\330\035\"&\347\201\275\234r\355>\306\306\236\367\021p#\001\203\262\206+kg\313u\205a\004\t2>\322\224\327\001.c\t\225\244=\243M\006\311\347z\262\021Hl\027\202\271\033\345~\334\214\034\202\024m@\372\361Kk@~\374\340Z\260D\245\272'M\232\001$\242wJ:\r\r-\244\363\217\t\261WgS7\272\213\357\314\240\371\374\313\233r\235\017\235\031\230%}Z\345\"";
+
 
 #include "unity.h"
 #include "unity_fixture.h"
@@ -13,6 +16,7 @@ static const int quic_padding_len = 917;
 #include <stdio.h>
 #include "tls.h"
 #include "config.h"
+#include "logging.h"
 
 static struct section_config_t sconf = default_section_config;
 
@@ -158,6 +162,30 @@ TEST(QuicTest, Test_parse_quic_decrypted)
 #define free unity_free
 }
 
+TEST(QuicTest, Test_parse_quic_decrypted_on_sparse)
+{
+	int ret;
+	uint8_t *decrypted_payload;
+	uint32_t decrypted_payload_len;
+	const uint8_t *decrypted_message;
+	uint32_t decrypted_message_len;
+	struct tls_verdict tlsv = {0};
+
+	ret = quic_parse_initial_message(
+		(const uint8_t *)quic_sparse_payload, sizeof(quic_sparse_payload) - 1,
+		&decrypted_payload, &decrypted_payload_len,
+		&decrypted_message, &decrypted_message_len
+	);
+	TEST_ASSERT_EQUAL(ret, 0);
+
+	tlsv = parse_quic_decrypted(&sconf, decrypted_message, decrypted_message_len);
+	TEST_ASSERT_EQUAL(19, tlsv.sni_len);
+	TEST_ASSERT_EQUAL_STRING_LEN("ipm.adblockplus.dev", tlsv.sni_ptr, 19);
+#undef free
+	free(decrypted_payload);
+#define free unity_free
+}
+
 TEST_GROUP_RUNNER(QuicTest)
 {
 	RUN_TEST_CASE(QuicTest, Test_decrypts);
@@ -166,4 +194,5 @@ TEST_GROUP_RUNNER(QuicTest)
 	RUN_TEST_CASE(QuicTest, Test_crypto_parser_invalid);
 	RUN_TEST_CASE(QuicTest, Test_varlength_parser);
 	RUN_TEST_CASE(QuicTest, Test_parse_quic_decrypted)
+	RUN_TEST_CASE(QuicTest, Test_parse_quic_decrypted_on_sparse)
 }
