@@ -270,7 +270,7 @@ Flags that do not scoped to a specific section, used over all the youtubeUnblock
 
 - `--udp-faking-strategy={checksum|ttl|none}` Faking strategy for udp. `checksum` will fake UDP checksum, `ttl` won't fake but will make UDP content relatively small, `none` is no faking. Defaults to none.
 
-- `--udp-filter-quic={disabled|all|parsed}` Enables QUIC filtering for UDP handler. If disabled, quic won't be processed, if all, all quic initial packets will be handled. `parsed` will decrypt and parse QUIC initial message and match it with `--sni-domains`. Defaults to disabled.
+- `--udp-filter-quic={disabled|all|parse}` Enables QUIC filtering for UDP handler. If disabled, quic won't be processed, if all, all quic initial packets will be handled. `parse` will decrypt and parse QUIC initial message and match it with `--sni-domains`. Defaults to disabled.
 
 - `--quic-drop` Drop all QUIC packets which goes to youtubeUnblock. Won't affect any other UDP packets. Just an alias for `--udp-filter-quic=all --udp-mode=drop`.
 

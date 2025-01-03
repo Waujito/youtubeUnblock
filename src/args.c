@@ -368,7 +368,7 @@ void print_usage(const char *argv0) {
 	printf("\t--udp-fake-len=<size of upd fake>\n");
 	printf("\t--udp-faking-strategy={checksum|ttl|none}\n");
 	printf("\t--udp-dport-filter=<5,6,200-500>\n");
-	printf("\t--udp-filter-quic={disabled|all|parsed}\n");
+	printf("\t--udp-filter-quic={disabled|all|parse}\n");
 	printf("\t--threads=<threads number>\n");
 	printf("\t--packet-mark=<mark>\n");
 	printf("\t--connbytes-limit=<pkts>\n");
@@ -764,7 +764,7 @@ int yparse_args(int argc, char *argv[]) {
 				sect_config->udp_filter_quic = UDP_FILTER_QUIC_DISABLED;
 			} else if (strcmp(optarg, "all") == 0) {
 				sect_config->udp_filter_quic = UDP_FILTER_QUIC_ALL;
-			} else if (strcmp(optarg, "parsed") == 0) {
+			} else if (strcmp(optarg, "parse") == 0) {
 				sect_config->udp_filter_quic = UDP_FILTER_QUIC_PARSED;
 			} else {
 				goto invalid_opt;
@@ -933,7 +933,7 @@ static size_t print_config_section(const struct section_config_t *section, char 
 		print_cnf_buf("--udp-filter-quic=disabled");
 		break;
 	case UDP_FILTER_QUIC_PARSED:
-		print_cnf_buf("--udp-filter-quic=parsed");
+		print_cnf_buf("--udp-filter-quic=parse");
 		break;
 	}
 
