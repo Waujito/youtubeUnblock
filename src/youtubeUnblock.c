@@ -578,11 +578,11 @@ int init_queue(int queue_num) {
 
 		ret = mnl_cb_run(buf, ret, 0, portid, queue_cb, &qdata);
 		if (ret < 0) {
-			lgerror(-EPERM, "mnl_cb_run");
-			if (errno == EPERM) {
-				lgerror(-errno, "Probably another instance of youtubeUnblock with the same queue number is running\n");
+			lgerror(ret, "mnl_cb_run");
+			if (ret == -EPERM) {
+				lgerr("Probably another instance of youtubeUnblock with the same queue number is running\n");
 			} else {
-				lgerror(-errno, "Make sure the nfnetlink_queue kernel module is loaded\n");
+				lgerr("Make sure the nfnetlink_queue kernel module is loaded\n");
 			}
 			goto die;
 		}
