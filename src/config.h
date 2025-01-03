@@ -206,7 +206,7 @@ if ((fake_bitmask) & strategy)
 
 #define MAX_PACKET_SIZE 8192
 
-#define DEFAULT_SNISTR "googlevideo.com,ggpht.com,ytimg.com,youtube.com,play.google.com,youtu.be,googleapis.com,googleusercontent.com,gstatic.com,l.google.com"
+#define DEFAULT_SNISTR "googlevideo.com,ggpht.com,ytimg.com,youtube.com,play.google.com,youtu.be,youtubei.googleapis.com,youtube.googleapis.com,youtubeembeddedplayer.googleapis.com,googleusercontent.com,gstatic.com,l.google.com"
 
 static const char default_snistr[] = DEFAULT_SNISTR;
 
