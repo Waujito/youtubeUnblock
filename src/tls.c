@@ -213,7 +213,7 @@ int analyze_tls_message(
 		sni_ext_ptr += 2;
 
 		const uint8_t *sni_ext_end = sni_ext_ptr + sni_ext_dlen;
-		if (sni_ext_end >= extensions_end)
+		if (sni_ext_end > extensions_end)
 			goto invalid;
 		
 		if (sni_ext_ptr + 3 >= sni_ext_end)

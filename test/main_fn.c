@@ -8,6 +8,7 @@ struct instance_config_t instance_config = {
 
 static void RunAllTests(void)
 {
+	RUN_TEST_GROUP(TLSTest)
 	RUN_TEST_GROUP(QuicTest);
 }
 
