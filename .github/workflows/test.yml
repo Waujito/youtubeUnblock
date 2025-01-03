@@ -70,6 +70,29 @@ jobs:
           name: static-youtubeUnblock-${{ matrix.arch }}
           path: ./**/static-youtubeUnblock*.tar.gz
 
+  test:
+    needs: prepare
+    name: test
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        arch: [x86_64]
+        branch: [latest-stable]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build 
+        id: build
+        shell: bash
+        run: |
+          make build_test -j$(nproc)
+
+      - name: Test
+        id: test
+        run:
+          ./build/testYoutubeUnblock
+
   build-kmod:
     needs: prepare
     name: build-kmod ${{ matrix.kernel_version }}
