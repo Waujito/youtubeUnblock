@@ -76,6 +76,8 @@ int quic_parse_initial_message(
 	uint32_t key_info_size;
 	const uint8_t *hp_info;
 	uint32_t hp_info_size;
+	const uint8_t *initial_salt;
+	uint32_t initial_salt_size;
 
 	ret = quic_parse_data(quic_payload, quic_plen,
 			&qch, &qch_len, &qci, &inpayload, &inplen
@@ -94,6 +96,8 @@ int quic_parse_initial_message(
 			key_info_size = sizeof(quic_key_info) - 1;
 			hp_info = quic_hp_info;
 			hp_info_size = sizeof(quic_hp_info) - 1;
+			initial_salt = (const uint8_t *)QUIC_INITIAL_SALT_V1;
+			initial_salt_size = sizeof(QUIC_INITIAL_SALT_V1) - 1;
 			break;
 		case QUIC_V2:
 			iv_info = quic2_iv_info;
@@ -102,6 +106,8 @@ int quic_parse_initial_message(
 			key_info_size = sizeof(quic2_key_info) - 1;
 			hp_info = quic2_hp_info;
 			hp_info_size = sizeof(quic2_hp_info) - 1;
+			initial_salt = (const uint8_t *)QUIC_INITIAL_SALT_V2;
+			initial_salt_size = sizeof(QUIC_INITIAL_SALT_V2) - 1;
 			break;
 		default:
 			return -EINVAL;
@@ -137,7 +143,8 @@ int quic_parse_initial_message(
 	memcpy(dcptr, inpayload, inheader_len);
 	dcptr += inheader_len;
 	
-	ret = hkdfExtract(SHA256_HASH_ALGO, (const unsigned char *)qci.dst_id, qci.dst_len, (const unsigned char *)QUIC_INITIAL_SALT_V1, sizeof(QUIC_INITIAL_SALT_V1) - 1, initial_secret);
+
+	ret = hkdfExtract(SHA256_HASH_ALGO, (const unsigned char *)qci.dst_id, qci.dst_len, initial_salt, initial_salt_size, initial_secret);
 	if (ret) {
 		lgerr("hkdfExtract initial_secret: %d", ret);
 		ret = -EINVAL;
