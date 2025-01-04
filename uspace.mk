@@ -74,7 +74,7 @@ prepare_dirs:
 	mkdir -p $(DEPSDIR)
 
 $(LIBCYCLONE):
-	$(MAKE) -C deps/cyclone
+	$(MAKE) -C deps/cyclone CFLAGS="$(CFLAGS)"
 	mkdir -p $(DEPSDIR)/lib
 	cp deps/cyclone/libcyclone.a $(DEPSDIR)/lib/libcyclone.a
 

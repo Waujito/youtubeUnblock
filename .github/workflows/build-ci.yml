@@ -32,11 +32,12 @@ jobs:
         run: |
           echo "version=$(cat Makefile | grep "PKG_VERSION :=" | sed 's/PKG_VERSION := //')" >> $GITHUB_OUTPUT
           echo "release=$(cat Makefile | grep "PKG_RELEASE :=" | sed 's/PKG_RELEASE := //')" >> $GITHUB_OUTPUT
-          if [[ "${{ github.event_name }}" != "pull_request" ]]; then
-            echo "sha=$(echo ${GITHUB_SHA::7})" >> $GITHUB_OUTPUT
-          else
-            echo "sha=$(gh api repos/$REPO/commits/main --jq '.sha[:7]')" >> $GITHUB_OUTPUT
+
+          if [ "$GITHUB_EVENT_NAME" == "pull_request" ]; then
+            GITHUB_SHA=$(cat $GITHUB_EVENT_PATH | jq -r .pull_request.head.sha)
           fi
+          echo "sha=$(echo ${GITHUB_SHA::7})" >> $GITHUB_OUTPUT
+          cat $GITHUB_OUTPUT
 
   build-static:
     needs: prepare
