@@ -452,8 +452,7 @@ int detect_udp_filtered(const struct section_config_t *section,
 
 		lgtrace_addp("QUIC initial message");
 
-		if (section->udp_filter_quic == UDP_FILTER_QUIC_ALL || 
-			section->all_domains) {
+		if (section->udp_filter_quic == UDP_FILTER_QUIC_ALL) {
 			lgtrace_addp("QUIC early approve");
 			goto approve;
 		}
