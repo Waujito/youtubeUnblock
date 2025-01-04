@@ -391,9 +391,13 @@ pl_incr:
 	}
 
 out:
-	ret = analyze_tls_message(
-		section, crypto_message, crypto_message_len, &tlsv
-	);
+	if (section->sni_detection == SNI_DETECTION_BRUTE) {
+		ret = bruteforce_analyze_sni_str(section, crypto_message, crypto_message_len, &tlsv);
+	} else {
+		ret = analyze_tls_message(
+			section, crypto_message, crypto_message_len, &tlsv
+		);
+	}
 
 	free(crypto_message);
 	return tlsv;

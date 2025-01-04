@@ -28,11 +28,13 @@
 #include <unistd.h>
 #endif
 
-static int bruteforce_analyze_sni_str(
+int bruteforce_analyze_sni_str(
 	const struct section_config_t *section,
 	const uint8_t *data, size_t dlen,
 	struct tls_verdict *vrd
 ) {
+	*vrd = (struct tls_verdict){0};
+
 	if (section->all_domains) {
 		vrd->target_sni = 1;
 		vrd->sni_len = 0;

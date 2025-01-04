@@ -55,6 +55,15 @@ int analyze_tls_message(
 	struct tls_verdict *tlsv
 );
 
+/**
+ * Tries to bruteforce over the packet and match domains as plain text
+ */
+int bruteforce_analyze_sni_str(
+	const struct section_config_t *section,
+	const uint8_t *data, size_t dlen,
+	struct tls_verdict *vrd
+);
+
 
 /**
  * Processes the packet and finds TLS Client Hello information inside it.
