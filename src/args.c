@@ -824,23 +824,7 @@ static size_t print_config_section(const struct section_config_t *section, char 
 	size_t sz;
 
 	if (section->tls_enabled) {
-		print_cnf_buf("--tls=enabled");
-		if (section->all_domains) {
-			print_cnf_buf("--sni-domains=all");
-		} else if (section->sni_domains != NULL) {
-			print_cnf_raw("--sni-domains=");
-			for (struct domains_list *sne = section->sni_domains; sne != NULL; sne = sne->next) {
-				print_cnf_raw("%s,", sne->domain_name);
-			}
-			print_cnf_raw(" ");
-		}
-		if (section->exclude_sni_domains != NULL) {
-			print_cnf_raw("--exclude-domains=");
-			for (struct domains_list *sne = section->exclude_sni_domains; sne != NULL; sne = sne->next) {
-				print_cnf_raw("%s,", sne->domain_name);
-			}
-			print_cnf_raw(" ");
-		}
+		print_cnf_buf("--tls=enabled");	
 
 		switch(section->fragmentation_strategy) {
 		case FRAG_STRAT_IP:
@@ -895,22 +879,39 @@ static size_t print_config_section(const struct section_config_t *section, char 
 				print_cnf_buf("--fake-seq-offset=%d", section->fakeseq_offset);
 				break;
 
-			}
-
-			switch(section->sni_detection) {
-			case SNI_DETECTION_BRUTE:
-				print_cnf_buf("--sni-detection=brute");
-				break;
-			case SNI_DETECTION_PARSE:
-				print_cnf_buf("--sni-detection=parse");
-				break;
-
-			}
+			}	
 
 			print_cnf_buf("--seg2delay=%d", section->seg2_delay);
 		}
 	} else {
 		print_cnf_buf("--tls=disabled");
+	}
+
+	if (section->all_domains) {
+		print_cnf_buf("--sni-domains=all");
+	} else if (section->sni_domains != NULL) {
+		print_cnf_raw("--sni-domains=");
+		for (struct domains_list *sne = section->sni_domains; sne != NULL; sne = sne->next) {
+			print_cnf_raw("%s,", sne->domain_name);
+		}
+		print_cnf_raw(" ");
+	}
+	if (section->exclude_sni_domains != NULL) {
+		print_cnf_raw("--exclude-domains=");
+		for (struct domains_list *sne = section->exclude_sni_domains; sne != NULL; sne = sne->next) {
+			print_cnf_raw("%s,", sne->domain_name);
+		}
+		print_cnf_raw(" ");
+	}
+
+	switch(section->sni_detection) {
+	case SNI_DETECTION_BRUTE:
+		print_cnf_buf("--sni-detection=brute");
+		break;
+	case SNI_DETECTION_PARSE:
+		print_cnf_buf("--sni-detection=parse");
+		break;
+
 	}
 
 	if (section->synfake) {
