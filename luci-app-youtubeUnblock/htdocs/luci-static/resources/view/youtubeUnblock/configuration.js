@@ -137,16 +137,7 @@ return view.extend({
 		o = s.option(form.Value, "synfake_len", _("synfake len"), _("The fake packet sent in synfake may be too large. If you experience issues, lower up synfake-len. where len stands for how much bytes should be sent as syndata. Pass 0 if you want to send an entire fake packet."));
 		o.depends("synfake", "1");
 		o.default = 0;
-		o.rmempty = false;
-
-		o = s.option(form.ListValue, "sni_detection", _("SNI detection"), _("Specifies how to detect SNI. Parse will normally detect it by parsing the Client Hello message. Brute will go through the entire message and check possibility of SNI occurrence. Please note, that when --sni-domains option is not all brute will be O(nm) time complexity where n stands for length of the message and m is number of domains."));
-		o.depends('tls_enabled', '1');
-		o.widget="radio";
-		o.value("parse", "parse");
-		o.value("brute", "brute");
-		o.default = "parse";
-		o.rmempty = false;
-
+		o.rmempty = false;	
 	},
 	renderSectionUDPConfigs: function(s) {
 		let o;
@@ -196,6 +187,29 @@ return view.extend({
 		o.default = "disabled";
 		o.rmempty = false;
 
+	},
+	renderDomainConfigs: function(s) {
+		let o;
+
+		o = s.option(form.Flag, "all_domains", _("Target all domains"), _("Use this option if you want for every ClientHello to be handled"));
+		o.enabled = "1";
+		o.disabled = "0";
+		o.default = o.disabled;
+		o.rmempty = false;
+
+		o = s.option(form.DynamicList, "sni_domains", _("Sni domains"), _("List of domains you want to be handled by SNI."));
+		o.depends("all_domains", "0");
+		o.default = ["googlevideo.com", "ggpht.com", "ytimg.com", "youtube.com", "play.google.com", "youtu.be", "googleapis.com", "googleusercontent.com", "gstatic.com", "l.google.com"];
+
+
+		o = s.option(form.DynamicList, "exclude_domains", _("Excluded domains"), _("List of domains to be excluded from targeting."));
+
+
+		o = s.option(form.ListValue, "sni_detection", _("SNI detection"), _("Specifies how to detect SNI. Parse will normally detect it by parsing the Client Hello message. Brute will go through the entire message and check possibility of SNI occurrence. Please note, that when --sni-domains option is not all brute will be O(nm) time complexity where n stands for length of the message and m is number of domains."));
+		o.widget="radio";
+		o.value("parse", "parse");
+		o.value("brute", "brute");
+		o.default = "parse";
 	},
 	renderGeneralConfigs: function(s) {
 		let o;
@@ -270,22 +284,12 @@ return view.extend({
 		}});
 
 		subsects_section.tab('domains', _("Domains"));
-		o = subsects_section.taboption('domains', form.Flag, "all_domains", _("Target all domains"), _("Use this option if you want for every ClientHello to be handled"));
-		o.enabled = "1";
-		o.disabled = "0";
-		o.default = o.disabled;
-		o.rmempty = false;
-		o.modalonly = true;
-
-		o = subsects_section.taboption('domains', form.DynamicList, "sni_domains", _("Sni domains"), _("List of domains you want to be handled by SNI."));
-		o.depends("all_domains", "0");
-		o.default = ["googlevideo.com", "ggpht.com", "ytimg.com", "youtube.com", "play.google.com", "youtu.be", "googleapis.com", "googleusercontent.com", "gstatic.com", "l.google.com"];
-		o.modalonly = true;
-
-
-		o = subsects_section.taboption('domains', form.DynamicList, "exclude_domains", _("Excluded domains"), _("List of domains to be excluded from targeting."));
-		o.modalonly = true;
-
+		this.renderDomainConfigs({option(optionclass, ...classargs) {
+			const o = subsects_section.taboption('domains', optionclass, ...classargs);
+			o.modalonly = true;
+			return o;
+		}});
+		
 		subsects_section.tab('udp', _("UDP"));
 		this.renderSectionUDPConfigs({option(optionclass, ...classargs) {
 			const o = subsects_section.taboption('udp', optionclass, ...classargs);
