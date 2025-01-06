@@ -32,7 +32,10 @@
 #include "linux/inet.h"
 #endif
 
-int process_packet(const uint8_t *raw_payload, size_t raw_payload_len) {
+int process_packet(const struct packet_data *pd) {
+	const uint8_t *raw_payload = pd->payload;
+	uint32_t raw_payload_len = pd->payload_len;
+
 	if (raw_payload_len > MAX_PACKET_SIZE) {
 		return PKT_ACCEPT;
 	}

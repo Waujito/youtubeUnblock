@@ -284,4 +284,42 @@ struct config_t config = default_config_set;	\
 config->last_section = &(config.default_config) \
 
 
+struct ytb_conntrack {
+	uint32_t mask;
+
+	uint64_t orig_packets;
+	uint64_t repl_packets;
+	uint64_t orig_bytes;
+	uint64_t repl_bytes;
+	uint32_t connmark;
+	uint32_t id;
+};
+
+enum yct_attrs {
+	YCTATTR_ORIG_PACKETS,
+	YCTATTR_REPL_PACKETS,
+	YCTATTR_ORIG_BYTES,
+	YCTATTR_REPL_BYTES,
+	YCTATTR_CONNMARK,
+	YCTATTR_CONNID,
+};
+/* enum yct_attrs attr, struct ytb_conntrack * yct */
+#define yct_set_mask_attr(attr, yct) \
+	((yct)->mask |= (1 << (attr)))
+
+/* enum yct_attrs attr, const struct ytb_conntrack * yct */
+#define yct_is_mask_attr(attr, yct) \
+	(((yct)->mask & (1 << (attr))) == (1 << (attr)))
+
+/* enum yct_attrs attr, struct ytb_conntrack * yct */
+#define yct_del_mask_attr(attr, yct) \
+	(yct)->mask &= ~(1 << (attr))
+
+
+struct packet_data {
+	const uint8_t *payload;
+	size_t payload_len;
+	struct ytb_conntrack yct;
+};
+
 #endif /* YTB_CONFIG_H */

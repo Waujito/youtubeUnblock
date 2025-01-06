@@ -22,6 +22,7 @@
 
 #include "types.h"
 #include "tls.h"
+#include "config.h"
 
 #define PKT_ACCEPT	0
 #define PKT_DROP	1
@@ -32,7 +33,7 @@
  * Processes the packet and returns verdict.
  * This is the primary function that traverses the packet.
  */
-int process_packet(const uint8_t *packet, size_t packet_len);
+int process_packet(const struct packet_data *pd);
 
 
 /**

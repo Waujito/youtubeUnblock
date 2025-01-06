@@ -251,10 +251,10 @@ struct instance_config_t instance_config = {
 	.send_delayed_packet = delay_packet_send,
 };
 
-static int connbytes_pkts(const struct sk_buff *skb) {
+static int conntrack_parse(const struct sk_buff *skb, 
+			  struct ytb_conntrack *yct) {
 	const struct nf_conn *ct;
 	enum ip_conntrack_info ctinfo;
-	u_int64_t pkts = 0;
 	const struct nf_conn_counter *counters;
 
 	ct = nf_ct_get(skb, &ctinfo);
@@ -273,9 +273,20 @@ static int connbytes_pkts(const struct sk_buff *skb) {
 		return -1;
 #endif
 
-	pkts = atomic64_read(&counters[IP_CT_DIR_ORIGINAL].packets);
+	yct->orig_packets = atomic64_read(&counters[IP_CT_DIR_ORIGINAL].packets);
+	yct_set_mask_attr(YCTATTR_ORIG_PACKETS, yct);
+	yct->orig_bytes = atomic64_read(&counters[IP_CT_DIR_ORIGINAL].bytes);
+	yct_set_mask_attr(YCTATTR_ORIG_BYTES, yct);
+	yct->repl_packets = atomic64_read(&counters[IP_CT_DIR_REPLY].packets);
+	yct_set_mask_attr(YCTATTR_REPL_PACKETS, yct);
+	yct->repl_bytes = atomic64_read(&counters[IP_CT_DIR_REPLY].bytes);
+	yct_set_mask_attr(YCTATTR_REPL_BYTES, yct);
+	yct->connmark = READ_ONCE(ct->mark);
+	yct_set_mask_attr(YCTATTR_CONNMARK, yct);
+	yct->id = nf_ct_get_id(ct);
+	yct_set_mask_attr(YCTATTR_CONNID, yct);
 
-	return pkts;
+	return 0;
 }
 
 /* If this is a Red Hat-based kernel (Red Hat, CentOS, Fedora, etc)... */
@@ -346,6 +357,7 @@ static int connbytes_pkts(const struct sk_buff *skb) {
 
 static NF_CALLBACK(ykb_nf_hook, skb) {
 	int ret;
+	struct packet_data pd = {0};
 
 	if ((skb->mark & config.mark) == config.mark) 
 		goto accept;
@@ -356,8 +368,17 @@ static NF_CALLBACK(ykb_nf_hook, skb) {
 	if (skb->len > MAX_PACKET_SIZE)
 		goto accept;
 
-	if (config.connbytes_limit != 0 && connbytes_pkts(skb) > config.connbytes_limit)
+	ret = conntrack_parse(skb, &pd.yct);
+	if (ret < 0) {
+		lgtrace("[TRACE] conntrack_parse error code\n");
+	}
+
+	lgtrace("[CONNTRACK TRACE] orig_packets=%llu repl_packets=%llu orig_bytes=%llu repl_bytes=%llu connmark=%d id=%ud\n", pd.yct.orig_packets, pd.yct.repl_packets, pd.yct.orig_bytes, pd.yct.repl_bytes, pd.yct.connmark, pd.yct.id);
+
+	if (config.connbytes_limit != 0 && yct_is_mask_attr(YCTATTR_ORIG_PACKETS, &pd.yct) && pd.yct.orig_packets > config.connbytes_limit)
 		goto accept;
+
+
 
 	ret = skb_linearize(skb);
 	if (ret < 0) {
@@ -365,7 +386,10 @@ static NF_CALLBACK(ykb_nf_hook, skb) {
 		goto accept;
 	}
 
-	int vrd = process_packet(skb->data, skb->len);
+	pd.payload = skb->data;
+	pd.payload_len = skb->len;
+
+	int vrd = process_packet(&pd);
 
 	switch(vrd) {
 		case PKT_ACCEPT:
