@@ -109,11 +109,11 @@ int quic_parse_data(const uint8_t *raw_payload, uint32_t raw_payload_len,
 	int64_t qversion = quic_get_version(nqch);
 
 	if (qversion < 0) {
-		lgtrace_addp("quic version undefined %ld", -qversion);
+		lgtrace_addp("quic version undefined %u", (uint32_t)(-qversion));
 		return -EPROTO;
 	}
 
-	lgtrace_addp("quic version valid %ld", qversion);
+	lgtrace_addp("quic version valid %u", (uint32_t)qversion);
 
 	if (left_len < 2) goto invalid_packet;
 	struct quic_cids nqci = {0};
@@ -336,9 +336,10 @@ int gen_fake_udp(struct udp_fake_type type,
 	return 0;
 }
 
-struct tls_verdict parse_quic_decrypted(
+int parse_quic_decrypted(
 	const struct section_config_t *section,
-	const uint8_t *decrypted_message, uint32_t decrypted_message_len
+	const uint8_t *decrypted_message, uint32_t decrypted_message_len,
+	uint8_t **crypto_message_buf, uint32_t *crypto_message_buf_len
 ) {
 	const uint8_t *curptr = decrypted_message;
 	ssize_t curptr_len = decrypted_message_len;
@@ -350,7 +351,7 @@ struct tls_verdict parse_quic_decrypted(
 	uint8_t *crypto_message = calloc(AVAILABLE_MTU, 1);
 	if (crypto_message == NULL) {
 		lgerror(-ENOMEM, "No memory");
-		return tlsv;
+		return -ENOMEM;
 	}
 
 	int crypto_message_len = AVAILABLE_MTU;
@@ -371,7 +372,7 @@ pl_incr:
 				break;
 			case QUIC_FRAME_CRYPTO:
 				fret = quic_parse_crypto(&fr_cr, curptr, curptr_len);
-				lgtrace_addp("crypto %lu", fr_cr.offset);
+				lgtrace_addp("crypto %d %d %d", (int)fr_cr.offset, (int)fr_cr.payload_length, (int)fret);
 				if (fret < 0)
 					break;
 				curptr += fret;
@@ -391,16 +392,10 @@ pl_incr:
 	}
 
 out:
-	if (section->sni_detection == SNI_DETECTION_BRUTE) {
-		ret = bruteforce_analyze_sni_str(section, crypto_message, crypto_message_len, &tlsv);
-	} else {
-		ret = analyze_tls_message(
-			section, crypto_message, crypto_message_len, &tlsv
-		);
-	}
+	*crypto_message_buf = crypto_message;
+	*crypto_message_buf_len = crypto_message_len;	
 
-	free(crypto_message);
-	return tlsv;
+	return 0;
 }
 
 int detect_udp_filtered(const struct section_config_t *section,
@@ -461,6 +456,8 @@ int detect_udp_filtered(const struct section_config_t *section,
 		uint32_t decrypted_payload_len;
 		const uint8_t *decrypted_message;
 		uint32_t decrypted_message_len;
+		uint8_t *crypto_message;
+		uint32_t crypto_message_len;
 		struct tls_verdict tlsv;
 
 		ret = quic_parse_initial_message(
@@ -473,9 +470,24 @@ int detect_udp_filtered(const struct section_config_t *section,
 			goto match_port;
 		}
 
-		tlsv = parse_quic_decrypted(section,
-		       decrypted_message, decrypted_message_len
+		ret = parse_quic_decrypted(section,
+			decrypted_message, decrypted_message_len,
+			&crypto_message, &crypto_message_len
 		);
+		free(decrypted_payload);
+		decrypted_payload = NULL;
+
+		if (ret < 0) {
+			goto match_port;
+		}
+
+		if (section->sni_detection == SNI_DETECTION_BRUTE) {
+			ret = bruteforce_analyze_sni_str(section, crypto_message, crypto_message_len, &tlsv);
+		} else {
+			ret = analyze_tls_message(
+				section, crypto_message, crypto_message_len, &tlsv
+			);
+		}
 
 		if (tlsv.sni_len != 0) {
 			lgtrace_addp("QUIC SNI detected: %.*s", tlsv.sni_len, tlsv.sni_ptr);
@@ -483,11 +495,13 @@ int detect_udp_filtered(const struct section_config_t *section,
 
 		if (tlsv.target_sni) {
 			lgdebugmsg("QUIC target SNI detected: %.*s", tlsv.sni_len, tlsv.sni_ptr);
-			free(decrypted_payload);
+			free(crypto_message);
+			crypto_message = NULL;
 			goto approve;
 		}
 
-		free(decrypted_payload);
+		free(crypto_message);
+		crypto_message = NULL;
 	}
 
 match_port:

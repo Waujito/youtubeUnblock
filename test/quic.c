@@ -141,11 +141,15 @@ TEST(QuicTest, Test_varlength_parser)
 
 TEST(QuicTest, Test_parse_quic_decrypted)
 {
+#undef free
+
 	int ret;
 	uint8_t *decrypted_payload;
 	uint32_t decrypted_payload_len;
 	const uint8_t *decrypted_message;
 	uint32_t decrypted_message_len;
+	uint8_t *crypto_message;
+	uint32_t crypto_message_len;
 	struct tls_verdict tlsv = {0};
 
 	ret = quic_parse_initial_message(
@@ -153,22 +157,35 @@ TEST(QuicTest, Test_parse_quic_decrypted)
 		&decrypted_payload, &decrypted_payload_len,
 		&decrypted_message, &decrypted_message_len
 	);
-	TEST_ASSERT_EQUAL(ret, 0);
+	TEST_ASSERT_EQUAL(0, ret);
 
-	tlsv = parse_quic_decrypted(&sconf, decrypted_message, decrypted_message_len);
-	TEST_ASSERT_EQUAL_STRING_LEN("example.com", tlsv.sni_ptr, 11);
-#undef free
+	ret = parse_quic_decrypted(
+		&sconf, decrypted_message, decrypted_message_len,
+		&crypto_message, &crypto_message_len);
+	TEST_ASSERT_EQUAL(0, ret);
 	free(decrypted_payload);
+	decrypted_payload = NULL;
+
+	ret = analyze_tls_message(
+		&sconf, crypto_message, crypto_message_len, &tlsv
+	);
+	TEST_ASSERT_EQUAL_STRING_LEN("example.com", tlsv.sni_ptr, 11);
+	free(crypto_message);
+
 #define free unity_free
 }
 
 TEST(QuicTest, Test_parse_quic_decrypted_on_sparse)
 {
+#undef free
+
 	int ret;
 	uint8_t *decrypted_payload;
 	uint32_t decrypted_payload_len;
 	const uint8_t *decrypted_message;
 	uint32_t decrypted_message_len;
+	uint8_t *crypto_message;
+	uint32_t crypto_message_len;
 	struct tls_verdict tlsv = {0};
 
 	ret = quic_parse_initial_message(
@@ -176,13 +193,22 @@ TEST(QuicTest, Test_parse_quic_decrypted_on_sparse)
 		&decrypted_payload, &decrypted_payload_len,
 		&decrypted_message, &decrypted_message_len
 	);
-	TEST_ASSERT_EQUAL(ret, 0);
+	TEST_ASSERT_EQUAL(0, ret);
 
-	tlsv = parse_quic_decrypted(&sconf, decrypted_message, decrypted_message_len);
+	ret = parse_quic_decrypted(
+		&sconf, decrypted_message, decrypted_message_len,
+		&crypto_message, &crypto_message_len);
+	TEST_ASSERT_EQUAL(0, ret);
+	free(decrypted_payload);
+	decrypted_payload = NULL;
+
+	ret = analyze_tls_message(
+		&sconf, crypto_message, crypto_message_len, &tlsv
+	);
 	TEST_ASSERT_EQUAL(19, tlsv.sni_len);
 	TEST_ASSERT_EQUAL_STRING_LEN("ipm.adblockplus.dev", tlsv.sni_ptr, 19);
-#undef free
-	free(decrypted_payload);
+	free(crypto_message);
+
 #define free unity_free
 }
 

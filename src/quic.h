@@ -221,11 +221,14 @@ int quic_parse_initial_message(
 );
 
 /**
- * Like analyze_tls_data for QUIC
+ * CRYPTO frames may be randomly spried in the message.
+ * This function _allocates_ crypto_message_buf and fills it with CRYPTO frames
+ * according to offset and payload_length
  */
-struct tls_verdict parse_quic_decrypted(
+int parse_quic_decrypted(
 	const struct section_config_t *section,
-	const uint8_t *decrypted_message, uint32_t decrypted_message_len
+	const uint8_t *decrypted_message, uint32_t decrypted_message_len,
+	uint8_t **crypto_message_buf, uint32_t *crypto_message_buf_len
 );
 
 // Like fail_packet for TCP
