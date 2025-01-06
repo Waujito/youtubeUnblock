@@ -32,7 +32,7 @@ struct quic_pnumber {
 	uint8_t d4;
 };
 
-uint64_t quic_parse_varlength(const uint8_t *variable, uint64_t *mlen) {
+uint64_t quic_parse_varlength(const uint8_t *variable, size_t *mlen) {
 	if (mlen && *mlen == 0) return 0;
 	uint64_t vr = (*variable & 0x3F);
 	uint8_t len = 1 << (*variable >> 6);
@@ -54,20 +54,23 @@ uint64_t quic_parse_varlength(const uint8_t *variable, uint64_t *mlen) {
 	return vr;
 }
 
-int64_t quic_get_version(const struct quic_lhdr *qch) {
-	int64_t qversion = ntohl(qch->version);
+int quic_get_version(uint32_t *version, const struct quic_lhdr *qch) {
+	uint32_t qversion = ntohl(qch->version);
+	*version = qversion;
 
 	switch (qversion) {
 		case QUIC_V1:
 		case QUIC_V2:
-			return qversion;
+			return 0;
 		default:
-			return -qversion;
+			return -EINVAL;
 	}
 }
 
 int quic_check_is_initial(const struct quic_lhdr *qch) {
-	int64_t qversion = quic_get_version(qch);
+	uint32_t qversion;
+	int ret;
+	ret = quic_get_version(&qversion, qch);
 	if (qversion < 0) return 0;
 
 	uint8_t qtype = qch->type;
@@ -90,30 +93,33 @@ int quic_check_is_initial(const struct quic_lhdr *qch) {
 	return 1;
 }
 
-int quic_parse_data(const uint8_t *raw_payload, uint32_t raw_payload_len,
-		const struct quic_lhdr **qch, uint32_t *qch_len,
+int quic_parse_data(const uint8_t *raw_payload, size_t raw_payload_len,
+		const struct quic_lhdr **qch, size_t *qch_len,
 		struct quic_cids *qci,
-		const uint8_t **payload, uint32_t *plen) {
+		const uint8_t **payload, size_t *plen) {
 	if (	raw_payload == NULL || 
 		raw_payload_len < sizeof(struct quic_lhdr)) 
 		goto invalid_packet;
 
 	const struct quic_lhdr *nqch = (const struct quic_lhdr *)raw_payload;
-	uint32_t left_len = raw_payload_len - sizeof(struct quic_lhdr);
+	size_t left_len = raw_payload_len - sizeof(struct quic_lhdr);
 	const uint8_t *cur_rawptr = raw_payload + sizeof(struct quic_lhdr);
+	int ret;
+	uint32_t qversion;
+
 	if (!nqch->fixed) {
 		lgtrace_addp("quic fixed unset");
 		return -EPROTO;
 	}
 
-	int64_t qversion = quic_get_version(nqch);
+	ret = quic_get_version(&qversion, nqch);
 
-	if (qversion < 0) {
-		lgtrace_addp("quic version undefined %u", (uint32_t)(-qversion));
+	if (ret < 0) {
+		lgtrace_addp("quic version undefined %u", qversion);
 		return -EPROTO;
 	}
 
-	lgtrace_addp("quic version valid %u", (uint32_t)qversion);
+	lgtrace_addp("quic version valid %u", qversion);
 
 	if (left_len < 2) goto invalid_packet;
 	struct quic_cids nqci = {0};
@@ -147,14 +153,14 @@ invalid_packet:
 	return -EINVAL;
 }
 
-int quic_parse_initial_header(const uint8_t *inpayload, uint32_t inplen,
+int quic_parse_initial_header(const uint8_t *inpayload, size_t inplen,
 			struct quici_hdr *qhdr) {
 	if (inplen < 3) goto invalid_packet;
 	struct quici_hdr nqhdr;
 
 	const uint8_t *cur_ptr = inpayload;
-	uint32_t left_len = inplen;
-	uint64_t tlen = left_len;
+	size_t left_len = inplen;
+	size_t tlen = left_len;
 
 	nqhdr.token_len = quic_parse_varlength(cur_ptr, &tlen);
 	nqhdr.token = cur_ptr + tlen;
@@ -188,10 +194,10 @@ invalid_packet:
 }
 
 ssize_t quic_parse_crypto(struct quic_frame_crypto *crypto_frame,
-			  const uint8_t *frame, uint64_t flen) {
+			  const uint8_t *frame, size_t flen) {
 	const uint8_t *curptr = frame;
-	uint64_t curptr_len = flen;
-	uint64_t vln;
+	size_t curptr_len = flen;
+	size_t vln;
 	*crypto_frame = (struct quic_frame_crypto){0};
 
 	if (flen == 0 || *frame != QUIC_FRAME_CRYPTO || 
@@ -202,14 +208,15 @@ ssize_t quic_parse_crypto(struct quic_frame_crypto *crypto_frame,
 	curptr++, curptr_len--;
 
 	vln = curptr_len;
-	uint64_t offset = quic_parse_varlength(curptr, &vln);
+	size_t offset = quic_parse_varlength(curptr, &vln);
 	curptr += vln, curptr_len -= vln;
 	if (vln == 0) {
 		return -EINVAL;
 	}
+	
 
 	vln = curptr_len;
-	uint64_t length = quic_parse_varlength(curptr, &vln);
+	size_t length = quic_parse_varlength(curptr, &vln);
 	curptr += vln, curptr_len -= vln;
 	if (vln == 0) {
 		return -EINVAL;
@@ -228,12 +235,12 @@ ssize_t quic_parse_crypto(struct quic_frame_crypto *crypto_frame,
 	return flen - curptr_len;
 }
 
-int udp_fail_packet(struct udp_failing_strategy strategy, uint8_t *payload, uint32_t *plen, uint32_t avail_buflen) {
+int udp_fail_packet(struct udp_failing_strategy strategy, uint8_t *payload, size_t *plen, size_t avail_buflen) {
 	void *iph;
-	uint32_t iph_len;
+	size_t iph_len;
 	struct udphdr *udph;
 	uint8_t *data;
-	uint32_t dlen;
+	size_t dlen;
 	int ret;
 
 	ret = udp_payload_split(payload, *plen, 
@@ -276,10 +283,10 @@ int udp_fail_packet(struct udp_failing_strategy strategy, uint8_t *payload, uint
 }
 
 int gen_fake_udp(struct udp_fake_type type,
-		const void *ipxh, uint32_t iph_len, 
+		const void *ipxh, size_t iph_len, 
 		const struct udphdr *udph,
-		uint8_t *buf, uint32_t *buflen) {
-	uint32_t data_len = type.fake_len;
+		uint8_t *buf, size_t *buflen) {
+	size_t data_len = type.fake_len;
 
 	if (!ipxh || !udph || !buf || !buflen)
 		return -EINVAL;
@@ -305,7 +312,7 @@ int gen_fake_udp(struct udp_fake_type type,
 		return -EINVAL;
 	}
 
-	uint32_t dlen = iph_len + sizeof(struct udphdr) + data_len;
+	size_t dlen = iph_len + sizeof(struct udphdr) + data_len;
 
 	if (*buflen < dlen) 
 		return -ENOMEM;
@@ -338,8 +345,8 @@ int gen_fake_udp(struct udp_fake_type type,
 
 int parse_quic_decrypted(
 	const struct section_config_t *section,
-	const uint8_t *decrypted_message, uint32_t decrypted_message_len,
-	uint8_t **crypto_message_buf, uint32_t *crypto_message_buf_len
+	const uint8_t *decrypted_message, size_t decrypted_message_len,
+	uint8_t **crypto_message_buf, size_t *crypto_message_buf_len
 ) {
 	const uint8_t *curptr = decrypted_message;
 	ssize_t curptr_len = decrypted_message_len;
@@ -372,14 +379,19 @@ pl_incr:
 				break;
 			case QUIC_FRAME_CRYPTO:
 				fret = quic_parse_crypto(&fr_cr, curptr, curptr_len);
-				lgtrace_addp("crypto %d %d %d", (int)fr_cr.offset, (int)fr_cr.payload_length, (int)fret);
-				if (fret < 0)
-					break;
+				lgtrace_addp("crypto len=%zu offset=%zu fret=%zd", fr_cr.payload_length, fr_cr.offset, fret);
+				if (fret < 0) {
+					lgtrace_addp("Crypto parse error");
+					goto out;
+				}
+
 				curptr += fret;
 				curptr_len -= fret;
 
-				if (fr_cr.offset + fr_cr.payload_length <= 
-					crypto_message_len) {
+				if (fr_cr.offset <= crypto_message_len && 
+					fr_cr.payload_length <= crypto_message_len && 
+					fr_cr.payload_length <= crypto_message_len
+				) {
 
 					memcpy(crypto_message + fr_cr.offset, 
 					fr_cr.payload, fr_cr.payload_length);
@@ -387,6 +399,7 @@ pl_incr:
 				
 				break;
 			default:
+				lgtrace_addp("Frame invalid hash: %02x", type);
 				goto out;
 		}
 	}
@@ -399,12 +412,12 @@ out:
 }
 
 int detect_udp_filtered(const struct section_config_t *section,
-			const uint8_t *payload, uint32_t plen) {
+			const uint8_t *payload, size_t plen) {
 	const void *iph;
-	uint32_t iph_len;
+	size_t iph_len;
 	const struct udphdr *udph;
 	const uint8_t *data;
-	uint32_t dlen;
+	size_t dlen;
 	int ret;
 
 	ret = udp_payload_split((uint8_t *)payload, plen,
@@ -421,10 +434,10 @@ int detect_udp_filtered(const struct section_config_t *section,
 	
 	if (section->udp_filter_quic != UDP_FILTER_QUIC_DISABLED) {
 		const struct quic_lhdr *qch;
-		uint32_t qch_len;
+		size_t qch_len;
 		struct quic_cids qci;
 		const uint8_t *quic_in_payload;
-		uint32_t quic_in_plen;
+		size_t quic_in_plen;
 
 		lgtrace_addp("QUIC probe");
 
@@ -453,11 +466,11 @@ int detect_udp_filtered(const struct section_config_t *section,
 		}
 
 		uint8_t *decrypted_payload;
-		uint32_t decrypted_payload_len;
+		size_t decrypted_payload_len;
 		const uint8_t *decrypted_message;
-		uint32_t decrypted_message_len;
+		size_t decrypted_message_len;
 		uint8_t *crypto_message;
-		uint32_t crypto_message_len;
+		size_t crypto_message_len;
 		struct tls_verdict tlsv;
 
 		ret = quic_parse_initial_message(

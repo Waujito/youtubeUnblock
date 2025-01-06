@@ -26,12 +26,12 @@
 
 #include "types.h"
 
-typedef int (*raw_send_t)(const unsigned char *data, unsigned int data_len);
+typedef int (*raw_send_t)(const unsigned char *data, size_t data_len);
 /**
  * Sends the packet after delay_ms. The function should schedule send and return immediately
  * (for example, open daemon thread)
  */
-typedef int (*delayed_send_t)(const unsigned char *data, unsigned int data_len, unsigned int delay_ms);
+typedef int (*delayed_send_t)(const unsigned char *data, size_t data_len, unsigned int delay_ms);
 
 struct instance_config_t {
 	raw_send_t send_raw_packet;

@@ -196,7 +196,7 @@ static int close_raw6_socket(void) {
 	return 0;
 }
 
-static int send_raw_ipv4(const uint8_t *pkt, uint32_t pktlen) {
+static int send_raw_ipv4(const uint8_t *pkt, size_t pktlen) {
 	int ret;
 	if (pktlen > AVAILABLE_MTU) return -ENOMEM;
 
@@ -233,7 +233,7 @@ static int send_raw_ipv4(const uint8_t *pkt, uint32_t pktlen) {
 	return sent;
 }
 
-static int send_raw_ipv6(const uint8_t *pkt, uint32_t pktlen) {
+static int send_raw_ipv6(const uint8_t *pkt, size_t pktlen) {
 	int ret;
 	if (pktlen > AVAILABLE_MTU) return -ENOMEM;
 
@@ -270,7 +270,7 @@ static int send_raw_ipv6(const uint8_t *pkt, uint32_t pktlen) {
 	return sent;
 }
 
-static int send_raw_socket(const uint8_t *pkt, uint32_t pktlen) {
+static int send_raw_socket(const uint8_t *pkt, size_t pktlen) {
 	int ret;
 
 	if (pktlen > AVAILABLE_MTU) {
@@ -289,8 +289,8 @@ static int send_raw_socket(const uint8_t *pkt, uint32_t pktlen) {
 			return -ENOMEM;
 		}
 
-		uint32_t buff1_size = MNL_SOCKET_BUFFER_SIZE;
-		uint32_t buff2_size = MNL_SOCKET_BUFFER_SIZE;
+		size_t buff1_size = MNL_SOCKET_BUFFER_SIZE;
+		size_t buff2_size = MNL_SOCKET_BUFFER_SIZE;
 
 		if ((ret = tcp_frag(pkt, pktlen, AVAILABLE_MTU-128,
 			buff1, &buff1_size, buff2, &buff2_size)) < 0) {
@@ -373,7 +373,7 @@ static int fallback_accept_packet(uint32_t id, struct queue_data qdata) {
 
 struct dps_t {
 	uint8_t *pkt;
-	uint32_t pktlen;
+	size_t pktlen;
 	// Time for the packet in milliseconds
 	uint32_t timer;
 };
@@ -382,7 +382,7 @@ void *delay_packet_send_fn(void *data) {
 	struct dps_t *dpdt = data;
 
 	uint8_t *pkt = dpdt->pkt;
-	uint32_t pktlen = dpdt->pktlen;
+	size_t pktlen = dpdt->pktlen;
 
 	usleep(dpdt->timer * 1000);
 	int ret = send_raw_socket(pkt, pktlen);
@@ -396,7 +396,7 @@ void *delay_packet_send_fn(void *data) {
 	return NULL;
 }
 
-int delay_packet_send(const unsigned char *data, unsigned int data_len, unsigned int delay_ms) {
+int delay_packet_send(const unsigned char *data, size_t data_len, unsigned int delay_ms) {
 	struct dps_t *dpdt = malloc(sizeof(struct dps_t));
 	dpdt->pkt = malloc(data_len);
 	memcpy(dpdt->pkt, data, data_len);

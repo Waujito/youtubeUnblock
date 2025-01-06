@@ -31,33 +31,33 @@
  * payload_offset indicates the position relatively to start of IP payload
  * (start of transport header)
  */
-int ip4_frag(const uint8_t *pkt, uint32_t pktlen, 
-			uint32_t payload_offset, 
-			uint8_t *frag1, uint32_t *f1len, 
-			uint8_t *frag2, uint32_t *f2len);
+int ip4_frag(const uint8_t *pkt, size_t pktlen, 
+			size_t payload_offset, 
+			uint8_t *frag1, size_t *f1len, 
+			uint8_t *frag2, size_t *f2len);
 
 /**
  * Splits the packet to two TCP segments on position payload_offset
  * payload_offset indicates the position relatively to start of TCP payload.
  */
-// int tcp4_frag(const uint8_t *pkt, uint32_t pktlen, 
-// 			uint32_t payload_offset, 
-// 			uint8_t *seg1, uint32_t *s1len, 
-// 			uint8_t *seg2, uint32_t *s2len);
-int tcp_frag(const uint8_t *pkt, uint32_t pktlen,
-			uint32_t payload_offset,
-			uint8_t *seg1, uint32_t *s1len, 
-			uint8_t *seg2, uint32_t *s2len);
+// int tcp4_frag(const uint8_t *pkt, size_t pktlen, 
+// 			size_t payload_offset, 
+// 			uint8_t *seg1, size_t *s1len, 
+// 			uint8_t *seg2, size_t *s2len);
+int tcp_frag(const uint8_t *pkt, size_t pktlen,
+			size_t payload_offset,
+			uint8_t *seg1, size_t *s1len, 
+			uint8_t *seg2, size_t *s2len);
 
 
 /**
  * Splits the raw packet payload to ip header and ip payload.
  */
-int ip4_payload_split(uint8_t *pkt, uint32_t buflen,
-		       struct iphdr **iph, uint32_t *iph_len, 
-		       uint8_t **payload, uint32_t *plen);
+int ip4_payload_split(uint8_t *pkt, size_t buflen,
+		       struct iphdr **iph, size_t *iph_len, 
+		       uint8_t **payload, size_t *plen);
 
-static inline int netproto_version(const uint8_t *pkt, uint32_t buflen) {
+static inline int netproto_version(const uint8_t *pkt, size_t buflen) {
 	if (pkt == NULL || buflen == 0)
 		return -1;
 
@@ -68,48 +68,48 @@ static inline int netproto_version(const uint8_t *pkt, uint32_t buflen) {
 /**
  * Splits the raw packet payload to ip header, tcp header and tcp payload.
  */
-int tcp4_payload_split(uint8_t *pkt, uint32_t buflen,
-		       struct iphdr **iph, uint32_t *iph_len,
-		       struct tcphdr **tcph, uint32_t *tcph_len,
-		       uint8_t **payload, uint32_t *plen);
+int tcp4_payload_split(uint8_t *pkt, size_t buflen,
+		       struct iphdr **iph, size_t *iph_len,
+		       struct tcphdr **tcph, size_t *tcph_len,
+		       uint8_t **payload, size_t *plen);
 
 /**
  * Splits the raw packet payload to ip header and ip payload.
  */
-int ip6_payload_split(uint8_t *pkt, uint32_t buflen,
-		       struct ip6_hdr **iph, uint32_t *iph_len, 
-		       uint8_t **payload, uint32_t *plen);
+int ip6_payload_split(uint8_t *pkt, size_t buflen,
+		       struct ip6_hdr **iph, size_t *iph_len, 
+		       uint8_t **payload, size_t *plen);
 
 /**
  * Splits the raw packet payload to ip header, tcp header and tcp payload.
  */
-int tcp6_payload_split(uint8_t *pkt, uint32_t buflen,
-		       struct ip6_hdr **iph, uint32_t *iph_len,
-		       struct tcphdr **tcph, uint32_t *tcph_len,
-		       uint8_t **payload, uint32_t *plen);
+int tcp6_payload_split(uint8_t *pkt, size_t buflen,
+		       struct ip6_hdr **iph, size_t *iph_len,
+		       struct tcphdr **tcph, size_t *tcph_len,
+		       uint8_t **payload, size_t *plen);
 
-int tcp_payload_split(uint8_t *pkt, uint32_t buflen,
-		      void **iph, uint32_t *iph_len,
-		      struct tcphdr **tcph, uint32_t *tcph_len,
-		      uint8_t **payload, uint32_t *plen);
+int tcp_payload_split(uint8_t *pkt, size_t buflen,
+		      void **iph, size_t *iph_len,
+		      struct tcphdr **tcph, size_t *tcph_len,
+		      uint8_t **payload, size_t *plen);
 
 /**
  * Splits the raw packet payload to ip header, udp header and udp payload.
  */
-int udp4_payload_split(uint8_t *pkt, uint32_t buflen,
-		       struct iphdr **iph, uint32_t *iph_len,
+int udp4_payload_split(uint8_t *pkt, size_t buflen,
+		       struct iphdr **iph, size_t *iph_len,
 		       struct udphdr **udph,
-		       uint8_t **payload, uint32_t *plen);
+		       uint8_t **payload, size_t *plen);
 
-int udp6_payload_split(uint8_t *pkt, uint32_t buflen,
-		       struct ip6_hdr **iph, uint32_t *iph_len,
+int udp6_payload_split(uint8_t *pkt, size_t buflen,
+		       struct ip6_hdr **iph, size_t *iph_len,
 		       struct udphdr **udph,
-		       uint8_t **payload, uint32_t *plen);
+		       uint8_t **payload, size_t *plen);
 
-int udp_payload_split(uint8_t *pkt, uint32_t buflen,
-		      void **iph, uint32_t *iph_len,
+int udp_payload_split(uint8_t *pkt, size_t buflen,
+		      void **iph, size_t *iph_len,
 		      struct udphdr **udph,
-		      uint8_t **payload, uint32_t *plen);
+		      uint8_t **payload, size_t *plen);
 
 void tcp4_set_checksum(struct tcphdr *tcph, struct iphdr *iph);
 void ip4_set_checksum(struct iphdr *iph);
@@ -118,22 +118,22 @@ void tcp6_set_checksum(struct tcphdr *tcph, struct ip6_hdr *iph);
 void udp4_set_checksum(struct udphdr *udph, struct iphdr *iph);
 void udp6_set_checksum(struct udphdr *udph, struct ip6_hdr *iph);
 
-int  set_ip_checksum(void *iph, uint32_t iphb_len);
-int  set_tcp_checksum(struct tcphdr *tcph, void *iph, uint32_t iphb_len);
-int  set_udp_checksum(struct udphdr *udph, void *iph, uint32_t iphb_len);
+int  set_ip_checksum(void *iph, size_t iphb_len);
+int  set_tcp_checksum(struct tcphdr *tcph, void *iph, size_t iphb_len);
+int  set_udp_checksum(struct udphdr *udph, void *iph, size_t iphb_len);
 
 void z_function(const char *str, int *zbuf, size_t len);
 
 /**
  * Shifts data left delta bytes. Fills delta buffer with zeroes.
  */
-void shift_data(uint8_t *data, uint32_t dlen, uint32_t delta);
+void shift_data(uint8_t *data, size_t dlen, size_t delta);
 
 
 struct failing_strategy {
 	unsigned int strategy;
 	uint8_t faking_ttl;
-	uint32_t randseq_offset;
+	size_t randseq_offset;
 };
 
 
@@ -184,12 +184,12 @@ struct udp_fake_type {
  *
  * Does not support bitmask, pass standalone strategy.
  */
-int fail_packet(struct failing_strategy strategy, uint8_t *payload, uint32_t *plen, uint32_t avail_buflen);
+int fail_packet(struct failing_strategy strategy, uint8_t *payload, size_t *plen, size_t avail_buflen);
 
 /**
  * Shifts the payload right and pushes zeroes before it. Useful for TCP TLS faking.
  */
-int seqovl_packet(uint8_t *payload, uint32_t *plen, uint32_t seq_delta);
+int seqovl_packet(uint8_t *payload, size_t *plen, size_t seq_delta);
 
 
 
@@ -197,7 +197,7 @@ static inline struct failing_strategy args_default_failing_strategy(const struct
 	struct failing_strategy fl_strat = {
 		.strategy = (unsigned int)section->faking_strategy,
 		.faking_ttl = section->faking_ttl,
-		.randseq_offset = (uint32_t)section->fakeseq_offset
+		.randseq_offset = (size_t)section->fakeseq_offset
 	};
 	return fl_strat;
 }

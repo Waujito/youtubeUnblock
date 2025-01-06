@@ -256,7 +256,7 @@ invalid:
 struct tls_verdict analyze_tls_data(
 	const struct section_config_t *section,
 	const uint8_t *data, 
-	uint32_t dlen) 
+	size_t dlen) 
 {
 	struct tls_verdict vrd = {0};
 
@@ -317,13 +317,13 @@ out:
 }
 
 int gen_fake_sni(struct fake_type type,
-		const void *ipxh, uint32_t iph_len, 
-		const struct tcphdr *tcph, uint32_t tcph_len,
-		uint8_t *buf, uint32_t *buflen) {
-	uint32_t data_len = type.fake_len;
+		const void *ipxh, size_t iph_len, 
+		const struct tcphdr *tcph, size_t tcph_len,
+		uint8_t *buf, size_t *buflen) {
+	size_t data_len = type.fake_len;
 
 	if (type.type == FAKE_PAYLOAD_RANDOM && data_len == 0) {
-		data_len = (uint32_t)randint() % 1200;
+		data_len = (size_t)randint() % 1200;
 	}
 
 	if (!ipxh || !tcph || !buf || !buflen)
@@ -350,7 +350,7 @@ int gen_fake_sni(struct fake_type type,
 		return -EINVAL;
 	}
 
-	uint32_t dlen = iph_len + tcph_len + data_len;
+	size_t dlen = iph_len + tcph_len + data_len;
 
 	if (*buflen < dlen) 
 		return -ENOMEM;

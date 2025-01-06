@@ -40,7 +40,7 @@
 void tcp4_set_checksum(struct tcphdr *tcph, struct iphdr *iph) 
 {
 #ifdef KERNEL_SPACE
-	uint32_t tcp_packet_len = ntohs(iph->tot_len) - (iph->ihl << 2);
+	size_t tcp_packet_len = ntohs(iph->tot_len) - (iph->ihl << 2);
 	tcph->check = 0;
 	tcph->check = csum_tcpudp_magic(
 		iph->saddr, iph->daddr, tcp_packet_len,
@@ -54,7 +54,7 @@ void tcp4_set_checksum(struct tcphdr *tcph, struct iphdr *iph)
 void udp4_set_checksum(struct udphdr *udph, struct iphdr *iph) 
 {
 #ifdef KERNEL_SPACE
-	uint32_t udp_packet_len = ntohs(iph->tot_len) - (iph->ihl << 2);
+	size_t udp_packet_len = ntohs(iph->tot_len) - (iph->ihl << 2);
 	udph->check = 0;
 	udph->check = csum_tcpudp_magic(
 		iph->saddr, iph->daddr, udp_packet_len,
@@ -97,7 +97,7 @@ void udp6_set_checksum(struct udphdr *udph, struct ip6_hdr *iph) {
 #endif
 }
 
-int set_ip_checksum(void *iph, uint32_t iphb_len) {
+int set_ip_checksum(void *iph, size_t iphb_len) {
 	int ipvx = netproto_version(iph, iphb_len);
 
 	if (ipvx == IP4VERSION) {
@@ -109,7 +109,7 @@ int set_ip_checksum(void *iph, uint32_t iphb_len) {
 	return 0;
 }
 
-int set_tcp_checksum(struct tcphdr *tcph, void *iph, uint32_t iphb_len) {
+int set_tcp_checksum(struct tcphdr *tcph, void *iph, size_t iphb_len) {
 	int ipvx = netproto_version(iph, iphb_len);
 
 	if (ipvx == IP4VERSION) {
@@ -122,7 +122,7 @@ int set_tcp_checksum(struct tcphdr *tcph, void *iph, uint32_t iphb_len) {
 	return 0;
 }
 
-int set_udp_checksum(struct udphdr *udph, void *iph, uint32_t iphb_len) {
+int set_udp_checksum(struct udphdr *udph, void *iph, size_t iphb_len) {
 	int ipvx = netproto_version(iph, iphb_len);
 
 	if (ipvx == IP4VERSION) {
@@ -137,9 +137,9 @@ int set_udp_checksum(struct udphdr *udph, void *iph, uint32_t iphb_len) {
 }
 
 
-int ip4_payload_split(uint8_t *pkt, uint32_t buflen,
-		       struct iphdr **iph, uint32_t *iph_len, 
-		       uint8_t **payload, uint32_t *plen) {
+int ip4_payload_split(uint8_t *pkt, size_t buflen,
+		       struct iphdr **iph, size_t *iph_len, 
+		       uint8_t **payload, size_t *plen) {
 	if (pkt == NULL || buflen < sizeof(struct iphdr)) {
 		lgerror(-EINVAL, "ip4_payload_split: pkt|buflen");
 		return -EINVAL;
@@ -151,8 +151,8 @@ int ip4_payload_split(uint8_t *pkt, uint32_t buflen,
 		return -EINVAL;
 	}
 
-	uint32_t hdr_len = hdr->ihl * 4;
-	uint32_t pktlen = ntohs(hdr->tot_len);
+	size_t hdr_len = hdr->ihl * 4;
+	size_t pktlen = ntohs(hdr->tot_len);
 	if (buflen < pktlen || hdr_len > pktlen) {
 		lgerror(-EINVAL, "ip4_payload_split: buflen cmp pktlen");
 		return -EINVAL;
@@ -170,17 +170,17 @@ int ip4_payload_split(uint8_t *pkt, uint32_t buflen,
 	return 0;
 }
 
-int tcp4_payload_split(uint8_t *pkt, uint32_t buflen,
-		       struct iphdr **iph, uint32_t *iph_len,
-		       struct tcphdr **tcph, uint32_t *tcph_len,
-		       uint8_t **payload, uint32_t *plen) {
+int tcp4_payload_split(uint8_t *pkt, size_t buflen,
+		       struct iphdr **iph, size_t *iph_len,
+		       struct tcphdr **tcph, size_t *tcph_len,
+		       uint8_t **payload, size_t *plen) {
 	struct iphdr *hdr;
-	uint32_t hdr_len;
+	size_t hdr_len;
 	struct tcphdr *thdr;
-	uint32_t thdr_len;
+	size_t thdr_len;
 	
 	uint8_t *tcph_pl;
-	uint32_t tcph_plen;
+	size_t tcph_plen;
 
 	if (ip4_payload_split(pkt, buflen, &hdr, &hdr_len, 
 			&tcph_pl, &tcph_plen)){
@@ -212,9 +212,9 @@ int tcp4_payload_split(uint8_t *pkt, uint32_t buflen,
 	return 0;
 }
 
-int ip6_payload_split(uint8_t *pkt, uint32_t buflen,
-		       struct ip6_hdr **iph, uint32_t *iph_len, 
-		       uint8_t **payload, uint32_t *plen) {
+int ip6_payload_split(uint8_t *pkt, size_t buflen,
+		       struct ip6_hdr **iph, size_t *iph_len, 
+		       uint8_t **payload, size_t *plen) {
 	if (pkt == NULL || buflen < sizeof(struct ip6_hdr)) {
 		lgerror(-EINVAL, "ip6_payload_split: pkt|buflen");
 		return -EINVAL;
@@ -226,10 +226,10 @@ int ip6_payload_split(uint8_t *pkt, uint32_t buflen,
 		return -EINVAL;
 	}
 
-	uint32_t hdr_len = sizeof(struct ip6_hdr);
-	uint32_t pktlen = ntohs(hdr->ip6_plen);
+	size_t hdr_len = sizeof(struct ip6_hdr);
+	size_t pktlen = ntohs(hdr->ip6_plen);
 	if (buflen < pktlen) {
-		lgerror(-EINVAL, "ip6_payload_split: buflen cmp pktlen: %d %d", buflen, pktlen);
+		lgerror(-EINVAL, "ip6_payload_split: buflen cmp pktlen: %zu %zu", buflen, pktlen);
 		return -EINVAL;
 	}
 
@@ -245,17 +245,17 @@ int ip6_payload_split(uint8_t *pkt, uint32_t buflen,
 	return 0;
 }
 
-int tcp6_payload_split(uint8_t *pkt, uint32_t buflen,
-		       struct ip6_hdr **iph, uint32_t *iph_len,
-		       struct tcphdr **tcph, uint32_t *tcph_len,
-		       uint8_t **payload, uint32_t *plen) {
+int tcp6_payload_split(uint8_t *pkt, size_t buflen,
+		       struct ip6_hdr **iph, size_t *iph_len,
+		       struct tcphdr **tcph, size_t *tcph_len,
+		       uint8_t **payload, size_t *plen) {
 	struct ip6_hdr *hdr;
-	uint32_t hdr_len;
+	size_t hdr_len;
 	struct tcphdr *thdr;
-	uint32_t thdr_len;
+	size_t thdr_len;
 	
 	uint8_t *tcph_pl;
-	uint32_t tcph_plen;
+	size_t tcph_plen;
 
 	if (ip6_payload_split(pkt, buflen, &hdr, &hdr_len, 
 			&tcph_pl, &tcph_plen)){
@@ -287,10 +287,10 @@ int tcp6_payload_split(uint8_t *pkt, uint32_t buflen,
 	return 0;
 }
 
-int tcp_payload_split(uint8_t *pkt, uint32_t buflen,
-		      void **iph, uint32_t *iph_len,
-		      struct tcphdr **tcph, uint32_t *tcph_len,
-		      uint8_t **payload, uint32_t *plen) {
+int tcp_payload_split(uint8_t *pkt, size_t buflen,
+		      void **iph, size_t *iph_len,
+		      struct tcphdr **tcph, size_t *tcph_len,
+		      uint8_t **payload, size_t *plen) {
 	int netvers = netproto_version(pkt, buflen);
 	if (netvers == IP4VERSION) {
 		return tcp4_payload_split(pkt, buflen, (struct iphdr **)iph, iph_len, tcph, tcph_len, payload, plen);
@@ -303,16 +303,16 @@ int tcp_payload_split(uint8_t *pkt, uint32_t buflen,
 }
 
 
-int udp4_payload_split(uint8_t *pkt, uint32_t buflen,
-		       struct iphdr **iph, uint32_t *iph_len,
+int udp4_payload_split(uint8_t *pkt, size_t buflen,
+		       struct iphdr **iph, size_t *iph_len,
 		       struct udphdr **udph,
-		       uint8_t **payload, uint32_t *plen) {
+		       uint8_t **payload, size_t *plen) {
 	struct iphdr *hdr;
-	uint32_t hdr_len;
+	size_t hdr_len;
 	struct udphdr *uhdr;
 	
 	uint8_t *ip_ph;
-	uint32_t ip_phlen;
+	size_t ip_phlen;
 
 	if (ip4_payload_split(pkt, buflen, &hdr, &hdr_len, 
 			&ip_ph, &ip_phlen)){
@@ -341,16 +341,16 @@ int udp4_payload_split(uint8_t *pkt, uint32_t buflen,
 	return 0;
 }
 
-int udp6_payload_split(uint8_t *pkt, uint32_t buflen,
-		       struct ip6_hdr **iph, uint32_t *iph_len,
+int udp6_payload_split(uint8_t *pkt, size_t buflen,
+		       struct ip6_hdr **iph, size_t *iph_len,
 		       struct udphdr **udph,
-		       uint8_t **payload, uint32_t *plen) {
+		       uint8_t **payload, size_t *plen) {
 	struct ip6_hdr *hdr;
-	uint32_t hdr_len;
+	size_t hdr_len;
 	struct udphdr *uhdr;
 	
 	uint8_t *ip_ph;
-	uint32_t ip_phlen;
+	size_t ip_phlen;
 
 	if (ip6_payload_split(pkt, buflen, &hdr, &hdr_len, 
 			&ip_ph, &ip_phlen)){
@@ -379,10 +379,10 @@ int udp6_payload_split(uint8_t *pkt, uint32_t buflen,
 	return 0;
 }
 
-int udp_payload_split(uint8_t *pkt, uint32_t buflen,
-		      void **iph, uint32_t *iph_len,
+int udp_payload_split(uint8_t *pkt, size_t buflen,
+		      void **iph, size_t *iph_len,
 		      struct udphdr **udph,
-		      uint8_t **payload, uint32_t *plen) {
+		      uint8_t **payload, size_t *plen) {
 	int netvers = netproto_version(pkt, buflen);
 	if (netvers == IP4VERSION) {
 		return udp4_payload_split(pkt, buflen, (struct iphdr **)iph, iph_len, udph, payload, plen);
@@ -395,14 +395,14 @@ int udp_payload_split(uint8_t *pkt, uint32_t buflen,
 }
 
 // split packet to two ipv4 fragments.
-int ip4_frag(const uint8_t *pkt, uint32_t buflen, uint32_t payload_offset, 
-			uint8_t *frag1, uint32_t *f1len, 
-			uint8_t *frag2, uint32_t *f2len) {
+int ip4_frag(const uint8_t *pkt, size_t buflen, size_t payload_offset, 
+			uint8_t *frag1, size_t *f1len, 
+			uint8_t *frag2, size_t *f2len) {
 	
 	struct iphdr *hdr;
 	const uint8_t *payload;
-	uint32_t plen;
-	uint32_t hdr_len;
+	size_t plen;
+	size_t hdr_len;
 	int ret;
 
 	if (!frag1 || !f1len || !frag2 || !f2len)
@@ -425,11 +425,11 @@ int ip4_frag(const uint8_t *pkt, uint32_t buflen, uint32_t payload_offset,
 		return -EINVAL;
 	}
 
-	uint32_t f1_plen = payload_offset;
-	uint32_t f1_dlen = f1_plen + hdr_len;
+	size_t f1_plen = payload_offset;
+	size_t f1_dlen = f1_plen + hdr_len;
 
-	uint32_t f2_plen = plen - payload_offset;
-	uint32_t f2_dlen = f2_plen + hdr_len;
+	size_t f2_plen = plen - payload_offset;
+	size_t f2_dlen = f2_plen + hdr_len;
 
 	if (*f1len < f1_dlen || *f2len < f2_dlen) {
 		return -ENOMEM;
@@ -474,15 +474,15 @@ int ip4_frag(const uint8_t *pkt, uint32_t buflen, uint32_t payload_offset,
 }
 
 // split packet to two tcp-on-ipv4 segments.
-int tcp_frag(const uint8_t *pkt, uint32_t buflen, uint32_t payload_offset, 
-			uint8_t *seg1, uint32_t *s1len, 
-			uint8_t *seg2, uint32_t *s2len) {
+int tcp_frag(const uint8_t *pkt, size_t buflen, size_t payload_offset, 
+			uint8_t *seg1, size_t *s1len, 
+			uint8_t *seg2, size_t *s2len) {
 
 	void *hdr;
-	uint32_t hdr_len;
+	size_t hdr_len;
 	struct tcphdr *tcph;
-	uint32_t tcph_len;
-	uint32_t plen;
+	size_t tcph_len;
+	size_t plen;
 	const uint8_t *payload;
 	int ret;
 
@@ -518,11 +518,11 @@ int tcp_frag(const uint8_t *pkt, uint32_t buflen, uint32_t payload_offset,
 		return -EINVAL;
 	}
 
-	uint32_t s1_plen = payload_offset;
-	uint32_t s1_dlen = s1_plen + hdr_len + tcph_len;
+	size_t s1_plen = payload_offset;
+	size_t s1_dlen = s1_plen + hdr_len + tcph_len;
 
-	uint32_t s2_plen = plen - payload_offset;
-	uint32_t s2_dlen = s2_plen + hdr_len + tcph_len;
+	size_t s2_plen = plen - payload_offset;
+	size_t s2_dlen = s2_plen + hdr_len + tcph_len;
 
 	if (*s1len < s1_dlen || *s2len < s2_dlen) 
 		return -ENOMEM;
@@ -589,7 +589,7 @@ void z_function(const char *str, int *zbuf, size_t len) {
 	}
 }
 
-void shift_data(uint8_t *data, uint32_t dlen, uint32_t delta) {
+void shift_data(uint8_t *data, size_t dlen, size_t delta) {
 	uint8_t *ndptr = data + delta + dlen;
 	uint8_t *dptr = data + dlen;
 	uint8_t *ndlptr = data;
@@ -613,20 +613,20 @@ struct tcp_md5sig_opt {
 // Real length of the option, with NOOP fillers
 #define TCP_MD5SIG_OPT_RLEN 20
 
-int fail_packet(struct failing_strategy strategy, uint8_t *payload, uint32_t *plen, uint32_t avail_buflen) {
+int fail_packet(struct failing_strategy strategy, uint8_t *payload, size_t *plen, size_t avail_buflen) {
 	void *iph;
-	uint32_t iph_len;
+	size_t iph_len;
 	struct tcphdr *tcph;
-	uint32_t tcph_len;
+	size_t tcph_len;
 	uint8_t *data;
-	uint32_t dlen;
+	size_t dlen;
 	int ret;
 
 	ret = tcp_payload_split(payload, *plen, 
 			&iph, &iph_len, &tcph, &tcph_len,
 			&data, &dlen);
 
-	uint32_t ipxv = netproto_version(payload, *plen);
+	int ipxv = netproto_version(payload, *plen);
 
 	if (ret < 0) {
 		return ret;
@@ -710,15 +710,15 @@ int fail_packet(struct failing_strategy strategy, uint8_t *payload, uint32_t *pl
 	return 0;
 }
 
-int seqovl_packet(uint8_t *payload, uint32_t *plen, uint32_t seq_delta) {
+int seqovl_packet(uint8_t *payload, size_t *plen, size_t seq_delta) {
 	int ipxv = netproto_version(payload, *plen);
 
 	void *iph;
-	uint32_t iph_len;
+	size_t iph_len;
 	struct tcphdr *tcph;
-	uint32_t tcph_len;
+	size_t tcph_len;
 	uint8_t *data;
-	uint32_t dlen;
+	size_t dlen;
 
 
 	int ret = tcp_payload_split(payload, *plen,

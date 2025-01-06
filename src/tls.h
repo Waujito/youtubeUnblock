@@ -71,15 +71,15 @@ int bruteforce_analyze_sni_str(
  *
  * Note that all the constant pointers of tls_verdict will be relative to data pointer
  */
-struct tls_verdict analyze_tls_data(const struct section_config_t *section, const uint8_t *data, uint32_t dlen);
+struct tls_verdict analyze_tls_data(const struct section_config_t *section, const uint8_t *data, size_t dlen);
 
 
 /**
  * Generates the fake client hello message
  */
 int gen_fake_sni(struct fake_type type,
-		const void *iph, uint32_t iph_len, 
-		const struct tcphdr *tcph, uint32_t tcph_len, 
-		uint8_t *buf, uint32_t *buflen);
+		const void *iph, size_t iph_len, 
+		const struct tcphdr *tcph, size_t tcph_len, 
+		uint8_t *buf, size_t *buflen);
 
 #endif /* TLS_H */

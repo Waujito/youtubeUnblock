@@ -140,10 +140,10 @@ struct quic_cids {
  * \qch_len is sizeof(qch) + qci->dst_len + qci->src_id
  * \payload is Type-Specific payload (#17.2).
  */
-int quic_parse_data(const uint8_t *raw_payload, uint32_t raw_payload_len,
-		const struct quic_lhdr **qch, uint32_t *qch_len,
+int quic_parse_data(const uint8_t *raw_payload, size_t raw_payload_len,
+		const struct quic_lhdr **qch, size_t *qch_len,
 		struct quic_cids *qci,
-		const uint8_t **payload, uint32_t *plen);
+		const uint8_t **payload, size_t *plen);
 		
 
 /**
@@ -156,7 +156,7 @@ int quic_parse_data(const uint8_t *raw_payload, uint32_t raw_payload_len,
  *
  * On error/buffer overflow mlen set to 0, otherwise it is higher
  */
-uint64_t quic_parse_varlength(const uint8_t *variable, uint64_t *mlen);
+uint64_t quic_parse_varlength(const uint8_t *variable, size_t *mlen);
 
 // quici stands for QUIC Initial
 
@@ -164,21 +164,21 @@ uint64_t quic_parse_varlength(const uint8_t *variable, uint64_t *mlen);
  * This structure should be parsed
  */
 struct quici_hdr {
-	uint64_t token_len;
+	size_t token_len;
 	const uint8_t *token;
-	uint64_t length;
+	size_t length;
 
 	const uint8_t *protected_payload; //  with packet number
 
 	// RFC 9001 5.4.2
-	uint64_t sample_length;
+	size_t sample_length;
 	const uint8_t *sample;
 };
 
 /**
  * Checks for quic version and checks if it is supported
  */
-int64_t quic_get_version(const struct quic_lhdr *qch);
+int quic_get_version(uint32_t *version, const struct quic_lhdr *qch);
 
 /**
 * Checks quic message to be initial according to version. 
@@ -187,8 +187,8 @@ int64_t quic_get_version(const struct quic_lhdr *qch);
 int quic_check_is_initial(const struct quic_lhdr *qch);
 
 struct quic_frame_crypto {
-	uint64_t offset;
-	uint64_t payload_length;
+	size_t offset;
+	size_t payload_length;
 	const uint8_t *payload;
 };
 /**
@@ -196,14 +196,14 @@ struct quic_frame_crypto {
  * Returns parsed size or -EINVAL on error
  */
 ssize_t quic_parse_crypto(struct quic_frame_crypto *crypto_frame,
-			  const uint8_t *frame, uint64_t flen);
+			  const uint8_t *frame, size_t flen);
 
 
 /**
  * Parses QUIC initial message header.
  * \inpayload is a QUIC Initial message payload (payload after quic large header)
  */
-int quic_parse_initial_header(const uint8_t *inpayload, uint32_t inplen,
+int quic_parse_initial_header(const uint8_t *inpayload, size_t inplen,
 			struct quici_hdr *qhdr);
 
 /**
@@ -215,9 +215,9 @@ int quic_parse_initial_header(const uint8_t *inpayload, uint32_t inplen,
  *
  */
 int quic_parse_initial_message(
-	const uint8_t *quic_payload, uint32_t quic_plen,
-	uint8_t **udecrypted_payload, uint32_t *udecrypted_payload_len,
-	const uint8_t **udecrypted_message, uint32_t *udecrypted_message_len
+	const uint8_t *quic_payload, size_t quic_plen,
+	uint8_t **udecrypted_payload, size_t *udecrypted_payload_len,
+	const uint8_t **udecrypted_message, size_t *udecrypted_message_len
 );
 
 /**
@@ -227,20 +227,20 @@ int quic_parse_initial_message(
  */
 int parse_quic_decrypted(
 	const struct section_config_t *section,
-	const uint8_t *decrypted_message, uint32_t decrypted_message_len,
-	uint8_t **crypto_message_buf, uint32_t *crypto_message_buf_len
+	const uint8_t *decrypted_message, size_t decrypted_message_len,
+	uint8_t **crypto_message_buf, size_t *crypto_message_buf_len
 );
 
 // Like fail_packet for TCP
-int udp_fail_packet(struct udp_failing_strategy strategy, uint8_t *payload, uint32_t *plen, uint32_t avail_buflen);
+int udp_fail_packet(struct udp_failing_strategy strategy, uint8_t *payload, size_t *plen, size_t avail_buflen);
 
 // Like gen_fake_sni for TCP
 int gen_fake_udp(struct udp_fake_type type,
-		const void *ipxh, uint32_t iph_len, 
+		const void *ipxh, size_t iph_len, 
 		const struct udphdr *udph,
-		uint8_t *buf, uint32_t *buflen);
+		uint8_t *buf, size_t *buflen);
 
 int detect_udp_filtered(const struct section_config_t *section,
-			const uint8_t *payload, uint32_t plen);
+			const uint8_t *payload, size_t plen);
 
 #endif /* QUIC_H */

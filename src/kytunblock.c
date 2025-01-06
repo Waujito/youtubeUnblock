@@ -79,7 +79,7 @@ static void close_raw_socket(void) {
 	sock_release(rawsocket);
 }
 
-static int send_raw_ipv4(const uint8_t *pkt, uint32_t pktlen) {
+static int send_raw_ipv4(const uint8_t *pkt, size_t pktlen) {
 	int ret = 0;
 	if (pktlen > AVAILABLE_MTU) return -ENOMEM;
 
@@ -141,7 +141,7 @@ static void close_raw6_socket(void) {
 	sock_release(raw6socket);
 }
 
-static int send_raw_ipv6(const uint8_t *pkt, uint32_t pktlen) {
+static int send_raw_ipv6(const uint8_t *pkt, size_t pktlen) {
 	int ret = 0;
 	if (pktlen > AVAILABLE_MTU) return -ENOMEM;
 
@@ -177,7 +177,7 @@ static int send_raw_ipv6(const uint8_t *pkt, uint32_t pktlen) {
 	return ret;
 }
 
-static int send_raw_socket(const uint8_t *pkt, uint32_t pktlen) {
+static int send_raw_socket(const uint8_t *pkt, size_t pktlen) {
 	int ret;
 
 	if (pktlen > AVAILABLE_MTU) {
@@ -194,8 +194,8 @@ static int send_raw_socket(const uint8_t *pkt, uint32_t pktlen) {
 			NETBUF_FREE(buff2);
 			return -ENOMEM;
 		}
-		uint32_t buff1_size = MAX_PACKET_SIZE;
-		uint32_t buff2_size = MAX_PACKET_SIZE;
+		size_t buff1_size = MAX_PACKET_SIZE;
+		size_t buff2_size = MAX_PACKET_SIZE;
 
 		if ((ret = tcp_frag(pkt, pktlen, AVAILABLE_MTU-128,
 			buff1, &buff1_size, buff2, &buff2_size)) < 0) {
@@ -241,7 +241,7 @@ erret_lc:
 	return ret;
 }
 
-static int delay_packet_send(const unsigned char *data, unsigned int data_len, unsigned int delay_ms) {
+static int delay_packet_send(const unsigned char *data, size_t data_len, unsigned int delay_ms) {
 	lginfo("delay_packet_send won't work on current youtubeUnblock version");
 	return send_raw_socket(data, data_len);
 }

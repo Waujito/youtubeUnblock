@@ -34,16 +34,16 @@ const uint8_t quic2_iv_info[]		= "\0\x0c\x0ftls13 quicv2 iv\0";
 const uint8_t quic2_hp_info[]		= "\0\x10\x0ftls13 quicv2 hp\0";
 
 int quic_parse_initial_message(
-	const uint8_t *quic_payload, uint32_t quic_plen,
-	uint8_t **udecrypted_payload, uint32_t *udecrypted_payload_len,
-	const uint8_t **udecrypted_message, uint32_t *udecrypted_message_len
+	const uint8_t *quic_payload, size_t quic_plen,
+	uint8_t **udecrypted_payload, size_t *udecrypted_payload_len,
+	const uint8_t **udecrypted_message, size_t *udecrypted_message_len
 ) {
 	int ret;
 	const struct quic_lhdr *qch;
-	uint32_t qch_len;
+	size_t qch_len;
 	struct quic_cids qci;
 	const uint8_t *inpayload; 
-	uint32_t inplen;
+	size_t inplen;
 	struct quici_hdr qich;
 
 	size_t quic_header_len;
@@ -61,29 +61,32 @@ int quic_parse_initial_message(
 	uint8_t quic_hp[QUIC_HP_SIZE];
 	uint8_t mask[QUIC_SAMPLE_SIZE];
 	uint8_t *decrypted_payload = NULL;
-	uint32_t decrypted_payload_len;
+	size_t decrypted_payload_len;
 	uint8_t *decrypted_packet_number = NULL;
 	uint8_t *dcptr = NULL;
 	// Decrypted plain message without header
 	uint8_t *decrypted_message = NULL;
-	uint32_t decrypted_message_len;
+	size_t decrypted_message_len;
 	AesContext actx;
 	GcmContext gctx;
-	int64_t qversion;
+	uint32_t qversion;
 	const uint8_t *iv_info;
-	uint32_t iv_info_size;
+	size_t iv_info_size;
 	const uint8_t *key_info;
-	uint32_t key_info_size;
+	size_t key_info_size;
 	const uint8_t *hp_info;
-	uint32_t hp_info_size;
+	size_t hp_info_size;
 	const uint8_t *initial_salt;
-	uint32_t initial_salt_size;
+	size_t initial_salt_size;
 
 	ret = quic_parse_data(quic_payload, quic_plen,
 			&qch, &qch_len, &qci, &inpayload, &inplen
 	);
 
-	qversion = quic_get_version(qch);
+	ret = quic_get_version(&qversion, qch);
+	if (ret < 0) {
+		return -EINVAL;
+	}
 	if (!quic_check_is_initial(qch)) {
 		return -EINVAL;
 	}

@@ -30,16 +30,16 @@
 #include <stdlib.h>
 #endif
 
-int process_packet(const uint8_t *raw_payload, uint32_t raw_payload_len) {
+int process_packet(const uint8_t *raw_payload, size_t raw_payload_len) {
 	if (raw_payload_len > MAX_PACKET_SIZE) {
 		return PKT_ACCEPT;
 	}
 
 	const struct iphdr *iph;
 	const struct ip6_hdr *ip6h;
-	uint32_t iph_len;
+	size_t iph_len;
 	const uint8_t *ip_payload;
-	uint32_t ip_payload_len;
+	size_t ip_payload_len;
 
 	int transport_proto = -1;
 	int ipver = netproto_version(raw_payload, raw_payload_len);
@@ -121,13 +121,13 @@ ret_verdict:
 	return verdict;
 }
 
-int process_tcp_packet(const struct section_config_t *section, const uint8_t *raw_payload, uint32_t raw_payload_len) {
+int process_tcp_packet(const struct section_config_t *section, const uint8_t *raw_payload, size_t raw_payload_len) {
 	const void *ipxh;
-	uint32_t iph_len;
+	size_t iph_len;
 	const struct tcphdr *tcph;
-	uint32_t tcph_len;
+	size_t tcph_len;
 	const uint8_t *data;
-	uint32_t dlen;
+	size_t dlen;
 
 
 	int ipxv = netproto_version(raw_payload, raw_payload_len);
@@ -153,7 +153,7 @@ int process_tcp_packet(const struct section_config_t *section, const uint8_t *ra
 
 		memcpy(payload, ipxh, iph_len);
 		memcpy(payload + iph_len, tcph, tcph_len);
-		uint32_t fake_len = section->fake_sni_pkt_sz;
+		size_t fake_len = section->fake_sni_pkt_sz;
 
 		if (section->synfake_len) 
 			fake_len = min(section->synfake_len, fake_len);
@@ -204,7 +204,7 @@ int process_tcp_packet(const struct section_config_t *section, const uint8_t *ra
 		size_t sni_offset = vrd.sni_ptr - data;
 		size_t target_sni_offset = vrd.target_sni_ptr - data;
 
-		uint32_t payload_len = raw_payload_len;
+		size_t payload_len = raw_payload_len;
 		NETBUF_ALLOC(payload, MAX_PACKET_SIZE);
 		if (!NETBUF_CHECK(payload)) {
 			lgerror(-ENOMEM, "Allocation error");
@@ -214,11 +214,11 @@ int process_tcp_packet(const struct section_config_t *section, const uint8_t *ra
 		memcpy(payload, raw_payload, raw_payload_len);
 
 		void *iph;
-		uint32_t iph_len;
+		size_t iph_len;
 		struct tcphdr *tcph;
-		uint32_t tcph_len;
+		size_t tcph_len;
 		uint8_t *data;
-		uint32_t dlen;
+		size_t dlen;
 
 		int ret = tcp_payload_split(payload, payload_len,
 				      &iph, &iph_len, &tcph, &tcph_len,
@@ -262,7 +262,7 @@ int process_tcp_packet(const struct section_config_t *section, const uint8_t *ra
 				ipd_offset = target_sni_offset;
 				mid_offset = ipd_offset + vrd.target_sni_len / 2;
 
-				uint32_t poses[2];
+				size_t poses[2];
 				int cnt = 0;
 
 				if (section->frag_sni_pos && dlen > section->frag_sni_pos) {
@@ -274,7 +274,7 @@ int process_tcp_packet(const struct section_config_t *section, const uint8_t *ra
 				}
 
 				if (cnt > 1 && poses[0] > poses[1]) {
-					uint32_t tmp = poses[0];
+					size_t tmp = poses[0];
 					poses[0] = poses[1];
 					poses[1] = tmp;
 				}
@@ -294,7 +294,7 @@ int process_tcp_packet(const struct section_config_t *section, const uint8_t *ra
 				mid_offset = ipd_offset + vrd.target_sni_len / 2;
 				mid_offset += 8 - mid_offset % 8;
 
-				uint32_t poses[2];
+				size_t poses[2];
 				int cnt = 0;
 
 				if (section->frag_sni_pos && dlen > section->frag_sni_pos) {
@@ -308,7 +308,7 @@ int process_tcp_packet(const struct section_config_t *section, const uint8_t *ra
 				}
 
 				if (cnt > 1 && poses[0] > poses[1]) {
-					uint32_t tmp = poses[0];
+					size_t tmp = poses[0];
 					poses[0] = poses[1];
 					poses[1] = tmp;
 				}
@@ -356,12 +356,12 @@ drop:
 	return PKT_DROP;
 }
 
-int process_udp_packet(const struct section_config_t *section, const uint8_t *pkt, uint32_t pktlen) {
+int process_udp_packet(const struct section_config_t *section, const uint8_t *pkt, size_t pktlen) {
 	const void *iph;
-	uint32_t iph_len;
+	size_t iph_len;
 	const struct udphdr *udph;
 	const uint8_t *data;
-	uint32_t dlen;
+	size_t dlen;
 
 	int ret = udp_payload_split((uint8_t *)pkt, pktlen,
 			      (void **)&iph, &iph_len, 
@@ -398,7 +398,7 @@ int process_udp_packet(const struct section_config_t *section, const uint8_t *pk
 				lgerror(-ENOMEM, "Allocation error");
 				return -ENOMEM;
 			}
-			uint32_t fsn_len = MAX_PACKET_SIZE;
+			size_t fsn_len = MAX_PACKET_SIZE;
 
 			struct udp_fake_type fake_type = {
 				.fake_len = section->udp_fake_len,
@@ -441,20 +441,20 @@ drop:
 	return PKT_DROP;
 }
 
-int send_ip4_frags(const struct section_config_t *section, const uint8_t *packet, uint32_t pktlen, const uint32_t *poses, uint32_t poses_sz, uint32_t dvs) {
+int send_ip4_frags(const struct section_config_t *section, const uint8_t *packet, size_t pktlen, const size_t *poses, size_t poses_sz, size_t dvs) {
 	if (poses_sz == 0) {
 		if (section->seg2_delay && ((dvs > 0) ^ section->frag_sni_reverse)) {
 			if (!instance_config.send_delayed_packet) {
 				return -EINVAL;
 			}
 
-			lgtrace_addp("Sent %d delayed for %d", pktlen, section->seg2_delay);
+			lgtrace_addp("Sent %zu delayed for %d", pktlen, section->seg2_delay);
 			instance_config.send_delayed_packet(
 				packet, pktlen, section->seg2_delay);
 
 			return 0;
 		} else {
-			lgtrace_addp("Sent %d bytes", pktlen);
+			lgtrace_addp("Sent %zu bytes", pktlen);
 			return instance_config.send_raw_packet(
 				packet, pktlen);
 		}
@@ -482,26 +482,26 @@ int send_ip4_frags(const struct section_config_t *section, const uint8_t *packet
 		}
 */
 
-		uint32_t f1len = MAX_PACKET_SIZE;
-		uint32_t f2len = MAX_PACKET_SIZE;
-		// uint32_t fake_pad_len = MAX_PACKET_SIZE;
+		size_t f1len = MAX_PACKET_SIZE;
+		size_t f2len = MAX_PACKET_SIZE;
+		// size_t fake_pad_len = MAX_PACKET_SIZE;
 
 		int ret;
 
 		if (dvs > poses[0]) {
-			lgerror(-EINVAL, "send_frags: Recursive dvs(%d) is more than poses0(%d)", dvs, poses[0]);
+			lgerror(-EINVAL, "send_frags: Recursive dvs(%zu) is more than poses0(%zu)", dvs, poses[0]);
 			ret = -EINVAL;
 			goto erret_lc;
 		}
 
-		uint32_t frag_pos = poses[0] - dvs;
+		size_t frag_pos = poses[0] - dvs;
 		frag_pos += 8 - frag_pos % 8;
 
 		ret = ip4_frag(packet, pktlen, frag_pos, 
 			frag1, &f1len, frag2, &f2len);
 
 		if (ret < 0) {
-			lgerror(ret, "send_frags: frag: with context packet with size %d, position: %d, recursive dvs: %d", pktlen, poses[0], dvs);
+			lgerror(ret, "send_frags: frag: with context packet with size %zu, position: %zu, recursive dvs: %zu", pktlen, poses[0], dvs);
 			goto erret_lc;
 		}
 
@@ -522,7 +522,7 @@ send_fake:
 /*
 		if (section->frag_sni_faked) {
 			ITER_FAKE_STRAT(section->faking_strategy, strategy) {
-				uint32_t iphfl;
+				size_t iphfl;
 				fake_pad_len = f2len;
 				ret = ip4_payload_split(frag2, f2len, NULL, &iphfl, NULL, NULL);
 				if (ret < 0) {
@@ -573,7 +573,7 @@ out:
 	return 0;
 }
 
-int send_tcp_frags(const struct section_config_t *section, const uint8_t *packet, uint32_t pktlen, const uint32_t *poses, uint32_t poses_sz, uint32_t dvs) {
+int send_tcp_frags(const struct section_config_t *section, const uint8_t *packet, size_t pktlen, const size_t *poses, size_t poses_sz, size_t dvs) {
 	if (poses_sz == 0) {
 		if (section->seg2_delay && ((dvs > 0) ^ section->frag_sni_reverse)) {
 			if (!instance_config.send_delayed_packet) {
@@ -585,7 +585,7 @@ int send_tcp_frags(const struct section_config_t *section, const uint8_t *packet
 
 			return 0;
 		} else {
-			lgtrace_addp("raw send packet of %d bytes with %d dvs", pktlen, dvs);
+			lgtrace_addp("raw send packet of %zu bytes with %zu dvs", pktlen, dvs);
 			return instance_config.send_raw_packet(
 				packet, pktlen);
 		}
@@ -603,13 +603,13 @@ int send_tcp_frags(const struct section_config_t *section, const uint8_t *packet
 			return -ENOMEM;
 		}
 
-		uint32_t f1len = MAX_PACKET_SIZE;
-		uint32_t f2len = MAX_PACKET_SIZE;
+		size_t f1len = MAX_PACKET_SIZE;
+		size_t f2len = MAX_PACKET_SIZE;
 
 		int ret;
 
 		if (dvs > poses[0]) {
-			lgerror(-EINVAL, "send_frags: Recursive dvs(%d) is more than poses0(%d)", dvs, poses[0]);
+			lgerror(-EINVAL, "send_frags: Recursive dvs(%zu) is more than poses0(%zu)", dvs, poses[0]);
 			ret = -EINVAL;
 			goto erret_lc;
 		}
@@ -619,10 +619,10 @@ int send_tcp_frags(const struct section_config_t *section, const uint8_t *packet
 			frag1, &f1len, frag2, &f2len);
 
 
-		lgtrace_addp("Packet split in %d bytes position of payload start, dvs: %d to two packets of %d and %d lengths", poses[0], dvs, f1len, f2len);
+		lgtrace_addp("Packet split in %zu bytes position of payload start, dvs: %zu to two packets of %zu and %zu lengths", poses[0], dvs, f1len, f2len);
 
 		if (ret < 0) {
-			lgerror(ret, "send_frags: tcp_frag: with context packet with size %d, position: %d", pktlen, poses[0]);
+			lgerror(ret, "send_frags: tcp_frag: with context packet with size %zu, position: %zu", pktlen, poses[0]);
 			goto erret_lc;
 		}
 
@@ -643,7 +643,7 @@ send_frag1:
 
 send_fake:
 		if (section->frag_sni_faked) {
-			uint32_t iphfl, tcphfl;
+			size_t iphfl, tcphfl;
 			void *iph;
 			struct tcphdr *tcph;
 			ret = tcp_payload_split(frag2, f2len, &iph, &iphfl, &tcph, &tcphfl, NULL, NULL);
@@ -712,7 +712,7 @@ int post_fake_sni(struct fake_type f_type,
 				lgerror(-ENOMEM, "Allocation error");
 				return -ENOMEM;
 			}
-			uint32_t fsn_len = MAX_PACKET_SIZE;
+			size_t fsn_len = MAX_PACKET_SIZE;
 			
 			ret = gen_fake_sni(
 				fake_seq_type,
@@ -734,9 +734,9 @@ int post_fake_sni(struct fake_type f_type,
 				lgerror(ret, "send fake sni");
 				goto erret_lc;
 			}
-			uint32_t iph_len;
-			uint32_t tcph_len;
-			uint32_t plen;
+			size_t iph_len;
+			size_t tcph_len;
+			size_t plen;
 			ret = tcp_payload_split(
 				fake_sni, fsn_len, 
 				&fsiph, &iph_len,
