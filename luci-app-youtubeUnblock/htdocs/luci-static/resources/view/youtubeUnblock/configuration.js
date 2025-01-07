@@ -215,10 +215,12 @@ return view.extend({
 		let o;
 
 		o = s.option(form.Flag, "silent", _("Silent"), _("Disables verbose mode"));
-		o.depends("trace", 0);
+		o.defalt = "0"
+		o.depends("trace", "0");
 
 		o = s.option(form.Flag, "trace", _("Trace"), _("Maximum verbosity for debug purposes"));
-		o.depends("silent", 0);
+		o.defalt = "0"
+		o.depends("silent", "0");
 
 		o = s.option(form.Flag, "no_gso", _("No gso"), _("Disables support for Google Chrome fat packets which uses GSO. This feature is well tested now, so this flag probably won't fix anything."));
 
@@ -274,6 +276,10 @@ return view.extend({
 
 		o = subsects_section.taboption('general', form.Value, "name", _("Name"));
 		o.placeholder = _('Unnamed section');
+		o.modalonly = true;
+
+
+		o = subsects_section.taboption('general', form.Value, "section_post_args", _("Section post args"), _("Section-specific post arguments"));
 		o.modalonly = true;
 
 		

@@ -93,6 +93,9 @@ parse_sections_options() {
         append_commasep_list "$config" exclude_domains udp_dport_filter
         append_opts_btoggler "$config" quic_drop
 
+	config_get value "$config" section_post_args
+	OPTS="$OPTS $value"
+
 }
 
 parse_general_options() {
