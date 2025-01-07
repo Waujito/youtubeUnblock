@@ -34,7 +34,7 @@ export CC CCLD LD CFLAGS LDFLAGS LIBNFNETLINK_CFLAGS LIBNFNETLINK_LIBS LIBMNL_CF
 APP:=$(BUILD_DIR)/youtubeUnblock
 TEST_APP:=$(BUILD_DIR)/testYoutubeUnblock
 
-SRCS := mangle.c args.c utils.c quic.c tls.c getopt.c quic_crypto.c
+SRCS := mangle.c args.c utils.c quic.c tls.c getopt.c quic_crypto.c inet_ntop.c
 OBJS := $(SRCS:%.c=$(BUILD_DIR)/%.o)
 APP_EXEC := youtubeUnblock.c 
 APP_OBJ := $(APP_EXEC:%.c=$(BUILD_DIR)/%.o)

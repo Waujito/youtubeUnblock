@@ -26,6 +26,14 @@
 #include "getopt.h"
 #include "raw_replacements.h"
 
+/**
+ * Logging definitions
+ */
+char ylgh_buf[LOGGING_BUFSIZE];
+size_t ylgh_leftbuf = LOGGING_BUFSIZE;
+char *ylgh_curptr = ylgh_buf;
+int ylgh_ndnl = 0;
+
 #ifdef KERNEL_SPACE
 static int errno = 0;
 #define strtol kstrtol
@@ -253,6 +261,7 @@ enum {
 	OPT_FRAG_SNI_POS,
 	OPT_FK_WINSIZE,
 	OPT_TRACE,
+	OPT_INSTAFLUSH,
 	OPT_QUIC_DROP,
 	OPT_SNI_DETECTION,
 	OPT_NO_IPV6,
@@ -311,6 +320,7 @@ static struct option long_opt[] = {
 	{"threads",		1, 0, OPT_THREADS},
 	{"silent",		0, 0, OPT_SILENT},
 	{"trace",		0, 0, OPT_TRACE},
+	{"instaflush",		0, 0, OPT_INSTAFLUSH},
 	{"no-gso",		0, 0, OPT_NO_GSO},
 	{"no-ipv6",		0, 0, OPT_NO_IPV6},
 	{"daemonize",		0, 0, OPT_DAEMONIZE},
@@ -374,6 +384,7 @@ void print_usage(const char *argv0) {
 	printf("\t--connbytes-limit=<pkts>\n");
 	printf("\t--silent\n");
 	printf("\t--trace\n");
+	printf("\t--instaflush\n");
 	printf("\t--no-gso\n");
 	printf("\t--no-ipv6\n");
 	printf("\t--daemonize\n");
@@ -439,10 +450,13 @@ int yparse_args(int argc, char *argv[]) {
 			break;
 #endif
 		case OPT_TRACE:
-			rep_config.verbose = 2;
+			rep_config.verbose = VERBOSE_TRACE;
+			break;
+		case OPT_INSTAFLUSH:
+			rep_config.instaflush = 1;
 			break;
 		case OPT_SILENT:
-			rep_config.verbose = 0;
+			rep_config.verbose = VERBOSE_INFO;
 			break;
 		case OPT_NO_GSO:
 			rep_config.use_gso = 0;
@@ -1013,6 +1027,9 @@ size_t print_config(char *buffer, size_t buffer_size) {
 	}
 	if (config.verbose == VERBOSE_TRACE) {
 		print_cnf_buf("--trace");
+	}
+	if (config.instaflush) {
+		print_cnf_buf("--instaflush");
 	}
 	if (config.verbose == VERBOSE_INFO) {
 		print_cnf_buf("--silent");

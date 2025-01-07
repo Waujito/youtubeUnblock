@@ -45,6 +45,7 @@ typedef __s16 int_least16_t;	/* integer of >= 16 bits */
 #include <stdint.h> // IWYU pragma: export
 #include <string.h> // IWYU pragma: export
 #include <stdlib.h> // IWYU pragma: export
+#include <stdio.h>  // IWYU pragma: export
 
 
 #define _NO_GETRANDOM ((__GLIBC__ <= 2 && __GLIBC_MINOR__ < 25))
@@ -154,12 +155,17 @@ static inline int randint(void) {
 	int rnd;
 	
 #ifdef KERNEL_SPACE
-		get_random_bytes(&rnd, sizeof(rnd));
+	get_random_bytes(&rnd, sizeof(rnd));
 #else
-		rnd = random();
+	rnd = random();
 #endif
 
 	return rnd;
 }
+
+#ifdef KERNEL_SPACE
+#define socklen_t size_t
+#endif
+const char *inet_ntop(int af, const void * a0, char * s, socklen_t l);
 
 #endif /* TYPES_H */

@@ -33,7 +33,7 @@ int optind=1, opterr=1, optopt, __optpos, optreset=0;
 
 static void __getopt_msg(const char *b, const char *c, size_t l)
 {
-	lgerr("%s %.*s\n", b, (int)l, c);
+	lgerr("%s %.*s", b, (int)l, c);
 }
 
 int getopt(int argc, char * const argv[], const char *optstring)

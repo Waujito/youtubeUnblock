@@ -425,8 +425,6 @@ int detect_udp_filtered(const struct section_config_t *section,
 			      (struct udphdr **)&udph,
 			      (uint8_t **)&data, &dlen);
 	int udp_dport = ntohs(udph->dest);
-	lgtrace_addp("UDP dport: %d", udp_dport);
-
 	
 	if (ret < 0) {
 		goto skip;
@@ -507,7 +505,7 @@ int detect_udp_filtered(const struct section_config_t *section,
 		}
 
 		if (tlsv.target_sni) {
-			lgdebugmsg("QUIC target SNI detected: %.*s", tlsv.sni_len, tlsv.sni_ptr);
+			lgdebug("QUIC target SNI detected: %.*s", tlsv.sni_len, tlsv.sni_ptr);
 			free(crypto_message);
 			crypto_message = NULL;
 			goto approve;

@@ -118,6 +118,7 @@ struct config_t {
 	// Same as daemon() noclose
 	int noclose;
 	int syslog;
+	int instaflush;
 
 	int connbytes_limit;
 
@@ -275,6 +276,7 @@ enum {
 	.daemonize = 0,                                         \
 	.noclose = 0,                                           \
 	.syslog = 0,                                            \
+	.instaflush = 0,                                        \
 }
 
 #define CONFIG_SET(config)			\

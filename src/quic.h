@@ -58,7 +58,7 @@
 #define QUIC_0_RTT_TYPE_V2	0b10
 #define QUIC_HANDSHAKE_TYPE_V2	0b11
 #define QUIC_RETRY_TYPE_V2	0b00
-#define quic_convtype_v2(type) (((type) + 1) & 0b11)
+#define quic_convtype_v2(type) (((type) + 1) & __extension__ 0b11)
 
 #define QUIC_FRAME_CRYPTO	0x06
 #define QUIC_FRAME_PADDING	0x00

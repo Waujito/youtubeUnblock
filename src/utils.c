@@ -506,7 +506,7 @@ int tcp_frag(const uint8_t *pkt, size_t buflen, size_t payload_offset,
 		if (
 			ntohs(iphdr->frag_off) & IP_MF || 
 			ntohs(iphdr->frag_off) & IP_OFFMASK) {
-			lgdebugmsg("tcp_frag: ip4: frag value: %d",
+			lgdebug("tcp_frag: ip4: frag value: %d",
 				ntohs(iphdr->frag_off));
 			lgerror(-EINVAL, "tcp_frag: ip4: ip fragmentation is set");
 			return -EINVAL;
@@ -634,13 +634,13 @@ int fail_packet(struct failing_strategy strategy, uint8_t *payload, size_t *plen
 
 
 	if (strategy.strategy == FAKE_STRAT_RAND_SEQ) {
-		lgtrace("fake seq: %u -> ", ntohl(tcph->seq));
+		lgtrace_wr("fake seq: %u -> ", ntohl(tcph->seq));
 
 		tcph->seq = htonl(ntohl(tcph->seq) - (strategy.randseq_offset + dlen));
 
 		lgtrace_addp("%u", ntohl(tcph->seq));
 	} else if (strategy.strategy == FAKE_STRAT_PAST_SEQ) {
-		lgtrace("fake seq: %u -> ", ntohl(tcph->seq));
+		lgtrace_wr("fake seq: %u -> ", ntohl(tcph->seq));
 		tcph->seq = htonl(ntohl(tcph->seq) - dlen);
 		lgtrace_addp("%u", ntohl(tcph->seq));
 

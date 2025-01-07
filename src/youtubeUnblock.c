@@ -109,13 +109,13 @@ static int open_raw_socket(void) {
 	int mark = config.mark;
 	if (setsockopt(rawsocket, SOL_SOCKET, SO_MARK, &mark, sizeof(mark)) < 0)
 	{
-		lgerror(-errno, "setsockopt(SO_MARK, %d) failed\n", mark);
+		lgerror(-errno, "setsockopt(SO_MARK, %d) failed", mark);
 		return -1;
 	}
 
 	int mst = pthread_mutex_init(&rawsocket_lock, NULL);
 	if (mst) {
-		lgerror(-errno, "Mutex err: %d\n", mst);
+		lgerror(-errno, "Mutex err: %d", mst);
 		close(rawsocket);
 		errno = mst;
 
@@ -161,13 +161,13 @@ static int open_raw6_socket(void) {
 	int mark = config.mark;
 	if (setsockopt(raw6socket, SOL_SOCKET, SO_MARK, &mark, sizeof(mark)) < 0)
 	{
-		lgerror(-errno, "setsockopt(SO_MARK, %d) failed\n", mark);
+		lgerror(-errno, "setsockopt(SO_MARK, %d) failed", mark);
 		return -1;
 	}
 
 	int mst = pthread_mutex_init(&raw6socket_lock, NULL);
 	if (mst) {
-		lgerror(-errno, "Mutex err: %d\n", mst);
+		lgerror(-errno, "Mutex err: %d", mst);
 		close(raw6socket);
 
 		return -1;
@@ -274,7 +274,7 @@ static int send_raw_socket(const uint8_t *pkt, size_t pktlen) {
 	int ret;
 
 	if (pktlen > AVAILABLE_MTU) {
-		lgtrace("Split packet!\n");
+		lgtrace("Split packet!");
 
 		NETBUF_ALLOC(buff1, MNL_SOCKET_BUFFER_SIZE);
 		if (!NETBUF_CHECK(buff1)) {
@@ -330,7 +330,7 @@ free_buffs:
 	} else if (ipvx == IP6VERSION) {
 		ret = send_raw_ipv6(pkt, pktlen);
 	} else {
-		lginfo("proto version %d is unsupported\n", ipvx);
+		lginfo("proto version %d is unsupported", ipvx);
 		return -EINVAL;
 	}
 
@@ -439,7 +439,7 @@ static int queue_cb(const struct nlmsghdr *nlh, void *data) {
         packet.payload = mnl_attr_get_payload(attr[NFQA_PAYLOAD]);
 
 	if (attr[NFQA_CAP_LEN] != NULL && ntohl(mnl_attr_get_u32(attr[NFQA_CAP_LEN])) != packet.payload_len) {
-		lgerr("The packet was truncated! Skip!\n");
+		lgerr("The packet was truncated! Skip!");
 		return fallback_accept_packet(packet.id, *qdata);
 	}
 
@@ -567,7 +567,7 @@ int init_queue(int queue_num) {
 		.queue_num = queue_num
 	};
 
-	lginfo("Queue %d started\n", qdata.queue_num);
+	lginfo("Queue %d started", qdata.queue_num);
 
 	while (1) {
 		ret = mnl_socket_recvfrom(nl, buf, BUF_SIZE);
@@ -580,9 +580,9 @@ int init_queue(int queue_num) {
 		if (ret < 0) {
 			lgerror(ret, "mnl_cb_run");
 			if (ret == -EPERM) {
-				lgerr("Probably another instance of youtubeUnblock with the same queue number is running\n");
+				lgerr("Probably another instance of youtubeUnblock with the same queue number is running");
 			} else {
-				lgerr("Make sure the nfnetlink_queue kernel module is loaded\n");
+				lgerr("Make sure the nfnetlink_queue kernel module is loaded");
 			}
 			goto die;
 		}
@@ -619,7 +619,7 @@ void *init_queue_wrapper(void *qdconf) {
 	
 	thres->status = init_queue(qconf->queue_num);
 
-	lgerror(thres->status, "Thread %d exited with status %d\n", qconf->i, thres->status);
+	lgerror(thres->status, "Thread %d exited with status %d", qconf->i, thres->status);
 
 	return thres;
 }
@@ -670,7 +670,7 @@ int main(int argc, char *argv[]) {
 
 		qres = init_queue_wrapper(&tconf);
 	} else {
-		lginfo("%d threads wil be used\n", config.threads);
+		lginfo("%d threads wil be used", config.threads);
 
 		struct queue_conf thread_confs[MAX_THREADS];
 		pthread_t threads[MAX_THREADS];

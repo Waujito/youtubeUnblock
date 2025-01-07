@@ -28,6 +28,8 @@
 
 #ifndef KERNEL_SPACE
 #include <stdlib.h>
+#else
+#include "linux/inet.h"
 #endif
 
 int process_packet(const uint8_t *raw_payload, size_t raw_payload_len) {
@@ -40,18 +42,20 @@ int process_packet(const uint8_t *raw_payload, size_t raw_payload_len) {
 	size_t iph_len;
 	const uint8_t *ip_payload;
 	size_t ip_payload_len;
+	const char *bpt;
 
 	int transport_proto = -1;
 	int ipver = netproto_version(raw_payload, raw_payload_len);
 	int ret;
 
 	lgtrace_start();
-	lgtrace_addp("IPv%d", ipver);
+
+	lgtrace_wr("IPv%d ", ipver);
 
 	if (ipver == IP4VERSION) {
 		ret = ip4_payload_split((uint8_t *)raw_payload, raw_payload_len,
 			 (struct iphdr **)&iph, &iph_len, 
-			 (uint8_t **)&ip_payload, &ip_payload_len);
+			 (uint8_t **)&ip_payload, &ip_payload_len);	
 
 		if (ret < 0)
 			goto accept;
@@ -69,20 +73,83 @@ int process_packet(const uint8_t *raw_payload, size_t raw_payload_len) {
 		transport_proto = ip6h->ip6_nxt;
 
 	} else {
-		lgtracemsg("Unknown layer 3 protocol version: %d", ipver);
+		lgtrace("Unknown layer 3 protocol version: %d", ipver);
 		goto accept;
+	}
+
+	if (LOG_LEVEL >= VERBOSE_TRACE) {
+		bpt = inet_ntop(
+			ipver == IP4VERSION ? AF_INET : AF_INET6, 
+			ipver == IP4VERSION ? (void *)(&iph->saddr) : 
+				(void *)(&ip6h->ip6_src), 
+			ylgh_curptr, ylgh_leftbuf); 
+		if (bpt != NULL) {
+			ret = strnlen(bpt, ylgh_leftbuf);
+			ylgh_leftbuf -= ret;
+			ylgh_curptr += ret;
+		}
+
+		lgtrace_wr(" => ");
+
+		bpt = inet_ntop(
+			ipver == IP4VERSION ? AF_INET : AF_INET6, 
+			ipver == IP4VERSION ? (void *)(&iph->daddr) : 
+				(void *)(&ip6h->ip6_dst),  
+			ylgh_curptr, ylgh_leftbuf); 
+		if (bpt != NULL) {
+			ret = strnlen(bpt, ylgh_leftbuf);
+			ylgh_leftbuf -= ret;
+			ylgh_curptr += ret;
+
+		}
+		
+		lgtrace_wr(" ");
+		const uint8_t *transport_payload = NULL;
+		size_t transport_payload_len = 0;
+		int sport = -1, dport = -1;
+
+		if (transport_proto == IPPROTO_TCP) {
+			lgtrace_wr("TCP ");
+			const struct tcphdr *tcph;
+			ret = tcp_payload_split((uint8_t *)raw_payload, raw_payload_len,
+				      NULL, NULL,
+				      (struct tcphdr **)&tcph, NULL,
+				      (uint8_t **)&transport_payload, &transport_payload_len);
+
+			if (ret == 0) {
+				sport = ntohs(tcph->source);
+				dport = ntohs(tcph->dest);
+			}
+
+		} else if (transport_proto == IPPROTO_UDP) {
+			lgtrace_wr("UDP ");
+			const struct udphdr *udph = ((const struct udphdr *)ip_payload);
+			ret = udp_payload_split((uint8_t *)raw_payload, raw_payload_len,
+				      NULL, NULL,
+				      (struct udphdr **)&udph,
+				      (uint8_t **)&transport_payload, &transport_payload_len);
+
+			if (ret == 0) {
+				sport = ntohs(udph->source);
+				dport = ntohs(udph->dest);
+			}
+		}
+
+		lgtrace_wr("%d => %d ", sport, dport);
+		lgtrace_write();
+
+		lgtrace_wr("Transport payload: [ ");
+		for (int i = 0; i < min(16, transport_payload_len); i++) {
+			lgtrace_wr("%02x ", transport_payload[i]);
+		}
+		lgtrace_wr("]");
+		lgtrace_write();
 	}
 
 	int verdict = PKT_CONTINUE;
 
-	if (transport_proto == IPPROTO_TCP) 
-		lgtrace_addp("TCP");
-	else if (transport_proto == IPPROTO_UDP) 
-		lgtrace_addp("UDP");
-
-	
 	ITER_CONFIG_SECTIONS(&config, section) {
-		lgtrace_addp("Section #%d", CONFIG_SECTION_NUMBER(section));
+		lgtrace_wr("Section #%d: ", CONFIG_SECTION_NUMBER(section));
 
 		switch (transport_proto) {
 		case IPPROTO_TCP:
@@ -94,10 +161,12 @@ int process_packet(const uint8_t *raw_payload, size_t raw_payload_len) {
 		}
 
 		if (verdict == PKT_CONTINUE) {
-			lgtrace_addp("continue_flow");
+			lgtrace_wr("continue_flow");
+			lgtrace_write();
 			continue;
 		}
 
+		lgtrace_write();
 		goto ret_verdict;
 	}
 
@@ -108,13 +177,13 @@ ret_verdict:
 
 	switch (verdict) {
 	case PKT_ACCEPT:
-		lgtrace_addp("accept");
+		lgtrace_wr("accept");
 		break;
 	case PKT_DROP:
-		lgtrace_addp("drop");
+		lgtrace_wr("drop");
 		break;
 	default:
-		lgtrace_addp("unknow verdict: %d", verdict);
+		lgtrace_wr("unknown verdict: %d", verdict);
 	}
 	lgtrace_end();
 
@@ -200,7 +269,7 @@ int process_tcp_packet(const struct section_config_t *section, const uint8_t *ra
 	}
 
 	if (vrd.target_sni) {
-		lgdebugmsg("Target SNI detected: %.*s", vrd.sni_len, vrd.sni_ptr);
+		lgdebug("Target SNI detected: %.*s", vrd.sni_len, vrd.sni_ptr);
 		size_t sni_offset = vrd.sni_ptr - data;
 		size_t target_sni_offset = vrd.target_sni_ptr - data;
 
@@ -247,7 +316,7 @@ int process_tcp_packet(const struct section_config_t *section, const uint8_t *ra
 
 		
 		if (dlen > 1480 && config.verbose) {
-			lgdebugmsg("WARNING! Client Hello packet is too big and may cause issues!");
+			lgdebug("WARNING! Client Hello packet is too big and may cause issues!");
 		}
 
 		if (section->fake_sni) {
@@ -321,7 +390,7 @@ int process_tcp_packet(const struct section_config_t *section, const uint8_t *ra
 
 				goto drop_lc;
 			} else {
-				lginfo("WARNING: IP fragmentation is supported only for IPv4\n");	
+				lginfo("WARNING: IP fragmentation is supported only for IPv4");	
 				goto default_send;
 			}
 			default:
@@ -373,18 +442,6 @@ int process_udp_packet(const struct section_config_t *section, const uint8_t *pk
 		lgtrace_addp("undefined");
 		goto accept;
 	}
-
-	if (dlen > 10 && config.verbose == VERBOSE_TRACE) {
-		char logging_buf[128];
-		char *bufpt = logging_buf;
-		bufpt += sprintf(bufpt, "UDP payload start: [ ");
-		for (int i = 0; i < 10; i++) {
-			bufpt += sprintf(bufpt, "%02x ", data[i]);
-		}
-		bufpt += sprintf(bufpt, "]");
-		lgtrace_addp("%s", logging_buf); 
-	}
-
 
 	if (!detect_udp_filtered(section, pkt, pktlen)) 
 		goto continue_flow;
@@ -586,6 +643,7 @@ int send_tcp_frags(const struct section_config_t *section, const uint8_t *packet
 			return 0;
 		} else {
 			lgtrace_addp("raw send packet of %zu bytes with %zu dvs", pktlen, dvs);
+
 			return instance_config.send_raw_packet(
 				packet, pktlen);
 		}

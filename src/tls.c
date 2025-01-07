@@ -128,7 +128,7 @@ check_domain:
 				domain_startp, 
 				sne->domain_len)) {
 					vrd->target_sni = 0;
-					lgdebugmsg("Excluded SNI: %.*s", 
+					lgdebug("Excluded SNI: %.*s", 
 						vrd->sni_len, vrd->sni_ptr);
 			}
 		}
