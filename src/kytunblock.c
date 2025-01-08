@@ -61,8 +61,14 @@ MODULE_AUTHOR("Vadim Vetrov <vetrovvd@gmail.com>");
 MODULE_DESCRIPTION("Linux kernel module for youtubeUnblock");
 
 static struct socket *rawsocket;
-
 static struct socket *raw6socket;
+
+DEFINE_SPINLOCK(hot_config_spinlock);
+DEFINE_MUTEX(config_free_mutex);
+atomic_t hot_config_counter = ATOMIC_INIT(0);
+// boolean flag for hot config replacement
+// if 1, youtubeUnblock should stop processing
+atomic_t hot_config_rep = ATOMIC_INIT(0);
 
 static int open_raw_socket(void) {
 	int ret = 0;
@@ -385,6 +391,17 @@ static NF_CALLBACK(ykb_nf_hook, skb) {
 	int ret;
 	struct packet_data pd = {0};
 
+	spin_lock(&hot_config_spinlock);
+	// if set flag to disable processing, 
+	// explicitly accept all packets
+	if (atomic_read(&hot_config_rep)) {
+		spin_unlock(&hot_config_spinlock);
+		return NF_ACCEPT;
+	} else {
+		atomic_inc(&hot_config_counter);
+	}
+	spin_unlock(&hot_config_spinlock);
+
 	if ((skb->mark & config.mark) == config.mark) 
 		goto accept;
 	
@@ -422,8 +439,10 @@ static NF_CALLBACK(ykb_nf_hook, skb) {
 	}
 
 accept:
+	atomic_dec(&hot_config_counter);
 	return NF_ACCEPT;
 drop:
+	atomic_dec(&hot_config_counter);
 	kfree_skb(skb);
 	return NF_STOLEN;
 }
@@ -505,6 +524,17 @@ err:
 }
 
 static void __exit ykb_destroy(void) {
+	mutex_lock(&config_free_mutex);
+	// acquire all locks.
+	spin_lock(&hot_config_spinlock);
+	// lock netfilter youtubeUnblock
+	atomic_set(&hot_config_rep, 1);
+	spin_unlock(&hot_config_spinlock);
+
+	// wait until all 
+	// netfilter callbacks keep running
+	while (atomic_read(&hot_config_counter) > 0) {}
+
 	if (config.use_ipv6) {
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4,13,0)
 		struct net *n;
@@ -513,7 +543,6 @@ static void __exit ykb_destroy(void) {
 #else
 		nf_unregister_hook(&ykb6_nf_reg);
 #endif
-		close_raw6_socket();
 	}
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4,13,0)
@@ -523,9 +552,12 @@ static void __exit ykb_destroy(void) {
 #else
 	nf_unregister_hook(&ykb_nf_reg);
 #endif
+	
+	if (config.use_ipv6) {
+		close_raw6_socket();
+	}
 
 	close_raw_socket();
-
 	free_config(config);
 	lginfo("youtubeUnblock kernel module destroyed.\n");
 }

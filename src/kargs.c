@@ -24,11 +24,23 @@
 #include "args.h"
 #include "logging.h"
 
+/**
+* Defined in kyoutubeUnblock.c
+*/
+extern struct spinlock hot_config_spinlock;
+extern atomic_t hot_config_counter;
+extern atomic_t hot_config_rep;
+extern struct mutex config_free_mutex;
+
 #define MAX_ARGC 1024
 static char *argv[MAX_ARGC];
 
 static int params_set(const char *cval, const struct kernel_param *kp) {
-	int ret = 0;
+	int ret;
+	ret = mutex_trylock(&config_free_mutex);
+	if (ret == 0) 
+		return -EBUSY;
+
 
 	int cv_len = strlen(cval);
 	if (cv_len >= 1 && cval[cv_len - 1] == '\n') {
@@ -58,8 +70,25 @@ static int params_set(const char *cval, const struct kernel_param *kp) {
 		}
 	}
 
+	spin_lock(&hot_config_spinlock);
+	// lock netfilter youtubeUnblock
+	atomic_set(&hot_config_rep, 1);
+	spin_unlock(&hot_config_spinlock);
+
+	// lock config hot replacement process until all 
+	// netfilter callbacks keep running
+	while (atomic_read(&hot_config_counter) > 0) {}
+
 	ret = yparse_args(argc, argv);
+
+	spin_lock(&hot_config_spinlock);
+	// relaunch youtubeUnblock
+	atomic_set(&hot_config_rep, 0);
+	spin_unlock(&hot_config_spinlock);
+
 	kfree(val);
+
+	mutex_unlock(&config_free_mutex);
 	return ret;
 }
 
