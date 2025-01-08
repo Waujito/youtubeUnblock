@@ -35,8 +35,16 @@
 #include <linux/netfilter_ipv4.h>
 #include <linux/netfilter_ipv6.h>
 
+#ifdef IS_ENABLED
+#if !(IS_ENABLED(CONFIG_NF_CONNTRACK))
+#define NO_CONNTRACK
+#endif /* IS CONNTRACK ENABLED */
+#endif /* ifdef IS_ENABLED */
+
+#ifndef NO_CONNTRACK
 #include <net/netfilter/nf_conntrack.h>
 #include <net/netfilter/nf_conntrack_acct.h>
+#endif
 
 #include "mangle.h"
 #include "config.h"
@@ -253,6 +261,8 @@ struct instance_config_t instance_config = {
 
 static int conntrack_parse(const struct sk_buff *skb, 
 			  struct ytb_conntrack *yct) {
+#ifndef NO_CONNTRACK
+
 	const struct nf_conn *ct;
 	enum ip_conntrack_info ctinfo;
 	const struct nf_conn_counter *counters;
@@ -273,18 +283,34 @@ static int conntrack_parse(const struct sk_buff *skb,
 		return -1;
 #endif
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 3, 0)
 	yct->orig_packets = atomic64_read(&counters[IP_CT_DIR_ORIGINAL].packets);
-	yct_set_mask_attr(YCTATTR_ORIG_PACKETS, yct);
 	yct->orig_bytes = atomic64_read(&counters[IP_CT_DIR_ORIGINAL].bytes);
-	yct_set_mask_attr(YCTATTR_ORIG_BYTES, yct);
 	yct->repl_packets = atomic64_read(&counters[IP_CT_DIR_REPLY].packets);
-	yct_set_mask_attr(YCTATTR_REPL_PACKETS, yct);
 	yct->repl_bytes = atomic64_read(&counters[IP_CT_DIR_REPLY].bytes);
+#else 
+	yct->orig_packets = counters[IP_CT_DIR_ORIGINAL].packets;
+	yct->orig_bytes = counters[IP_CT_DIR_ORIGINAL].bytes;
+	yct->repl_packets = counters[IP_CT_DIR_REPLY].packets;
+	yct->repl_bytes = counters[IP_CT_DIR_REPLY].bytes;
+#endif
+	yct_set_mask_attr(YCTATTR_ORIG_PACKETS, yct);
+	yct_set_mask_attr(YCTATTR_ORIG_BYTES, yct);
+	yct_set_mask_attr(YCTATTR_REPL_PACKETS, yct);
 	yct_set_mask_attr(YCTATTR_REPL_BYTES, yct);
+
+#if defined(CONFIG_NF_CONNTRACK_MARK)
 	yct->connmark = READ_ONCE(ct->mark);
 	yct_set_mask_attr(YCTATTR_CONNMARK, yct);
+#endif
+
+
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 1, 0)
 	yct->id = nf_ct_get_id(ct);
 	yct_set_mask_attr(YCTATTR_CONNID, yct);
+#endif
+
+#endif /* NO_CONNTRACK */
 
 	return 0;
 }
@@ -373,11 +399,8 @@ static NF_CALLBACK(ykb_nf_hook, skb) {
 		lgtrace("[TRACE] conntrack_parse error code\n");
 	}
 
-	lgtrace("[CONNTRACK TRACE] orig_packets=%llu repl_packets=%llu orig_bytes=%llu repl_bytes=%llu connmark=%d id=%ud\n", pd.yct.orig_packets, pd.yct.repl_packets, pd.yct.orig_bytes, pd.yct.repl_bytes, pd.yct.connmark, pd.yct.id);
-
 	if (config.connbytes_limit != 0 && yct_is_mask_attr(YCTATTR_ORIG_PACKETS, &pd.yct) && pd.yct.orig_packets > config.connbytes_limit)
 		goto accept;
-
 
 
 	ret = skb_linearize(skb);
@@ -421,6 +444,10 @@ static struct nf_hook_ops ykb6_nf_reg __read_mostly = {
 };
 
 static int __init ykb_init(void) {
+#ifdef NO_CONNTRACK
+	lgwarning("Conntrack disabled.");
+#endif
+
 	int ret = 0;
 	ret = init_config(&config);
 	if (ret < 0) goto err;
