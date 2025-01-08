@@ -269,6 +269,7 @@ enum {
 	OPT_PACKET_MARK,
 	OPT_SYNFAKE,
 	OPT_SYNFAKE_LEN,
+	OPT_NO_DPORT_FILTER,
 	OPT_SEG2DELAY,
 	OPT_THREADS,
 	OPT_SILENT,
@@ -318,6 +319,7 @@ static struct option long_opt[] = {
 	{"udp-faking-strategy",	1, 0, OPT_UDP_FAKING_STRATEGY},
 	{"udp-dport-filter",	1, 0, OPT_UDP_DPORT_FILTER},
 	{"udp-filter-quic",	1, 0, OPT_UDP_FILTER_QUIC},
+	{"no-dport-filter",	0, 0, OPT_NO_DPORT_FILTER},
 	{"threads",		1, 0, OPT_THREADS},
 	{"silent",		0, 0, OPT_SILENT},
 	{"trace",		0, 0, OPT_TRACE},
@@ -381,6 +383,7 @@ void print_usage(const char *argv0) {
 	printf("\t--udp-faking-strategy={checksum|ttl|none}\n");
 	printf("\t--udp-dport-filter=<5,6,200-500>\n");
 	printf("\t--udp-filter-quic={disabled|all|parse}\n");
+	printf("\t--no-dport-filter\n");
 	printf("\t--threads=<threads number>\n");
 	printf("\t--packet-mark=<mark>\n");
 	printf("\t--connbytes-limit=<pkts>\n");
@@ -712,6 +715,9 @@ int yparse_args(int argc, char *argv[]) {
 			sect_config->fk_winsize = num;
 			break;
 
+		case OPT_NO_DPORT_FILTER:
+			sect_config->dport_filter = 0;
+			break;
 		case OPT_SEG2DELAY:
 			num = parse_numeric_option(optarg);
 			if (errno != 0 || num < 0) {
@@ -1012,6 +1018,10 @@ static size_t print_config_section(const struct section_config_t *section, char 
 			}
 			break;
 		}
+	}
+
+	if (section->dport_filter == 0) {
+		print_cnf_buf("--no-dport-filter");	
 	}
 
 	return buffer_size - buf_sz;

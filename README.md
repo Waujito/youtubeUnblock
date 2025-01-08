@@ -278,6 +278,8 @@ Flags that do not scoped to a specific section, used over all the youtubeUnblock
 
 - `--quic-drop` Drop all QUIC packets which goes to youtubeUnblock. Won't affect any other UDP packets. Just an alias for `--udp-filter-quic=all --udp-mode=drop`.
 
+- `--no-dport-filter` By default, youtubeUnblock will filter for TLS and QUIC 443. If you want to disable it, pass this flag. (this does not affect `--udp-dport-filter`)
+
 ## UDP/QUIC
 
 UDP is another communication protocol. Well-known technologies that use it are DNS, QUIC, voice chats. UDP does not provide reliable connection and its header is much simpler than TCP thus fragmentation is limited. The support provided primarily by faking. 

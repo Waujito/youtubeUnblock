@@ -431,6 +431,10 @@ int detect_udp_filtered(const struct section_config_t *section,
 	}
 	
 	if (section->udp_filter_quic != UDP_FILTER_QUIC_DISABLED) {
+		if (section->dport_filter && ntohs(udph->dest) != 443)
+			goto match_port;
+
+
 		const struct quic_lhdr *qch;
 		size_t qch_len;
 		struct quic_cids qci;

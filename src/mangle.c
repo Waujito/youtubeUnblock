@@ -214,6 +214,11 @@ int process_tcp_packet(const struct section_config_t *section, const uint8_t *ra
 		goto accept;
 	}
 
+	// As defined by TLS standard.
+	if (section->dport_filter && ntohs(tcph->dest) != 443) {
+		goto accept;
+	}
+
 	if (tcph->syn && section->synfake) {
 		lgtrace_addp("TCP syn alter");
 

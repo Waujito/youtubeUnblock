@@ -92,6 +92,8 @@ struct section_config_t {
 	unsigned int fk_winsize;
 	int fakeseq_offset;
 
+	int dport_filter;
+
 #define SNI_DETECTION_PARSE 0
 #define SNI_DETECTION_BRUTE 1
 	int sni_detection;
@@ -244,6 +246,7 @@ enum {
 	.synfake = 0,                                           \
 	.synfake_len = 0,                                       \
                                                                 \
+	.dport_filter = 1,	                                \
 	.seg2_delay = 0,                                        \
                                                                 \
 	.sni_detection = SNI_DETECTION_PARSE,                   \
