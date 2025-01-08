@@ -478,7 +478,15 @@ int yparse_args(int argc, char *argv[]) {
 #endif
 			break;
 		case OPT_NO_IPV6:
+#ifndef KERNEL_SPACE
 			rep_config.use_ipv6 = 0;
+#else
+			lgerr("--no-ipv6 argument is not available "
+				"in the kernel module. "
+				"If you want to disable ipv6, compile with "
+				"make kmake EXTRA_CFLAGS=\"-DNO_IPV6\".");
+			goto invalid_opt;
+#endif
 			break;
 		case OPT_DAEMONIZE:
 			rep_config.daemonize = 1;
