@@ -788,7 +788,9 @@ int init_queue(int queue_num) {
 	if (config.use_gso) {
 		cfg_mask |= NFQA_CFG_F_GSO;
 	}
-	cfg_mask |= NFQA_CFG_F_CONNTRACK;
+	if (config.use_conntrack) {
+		cfg_mask |= NFQA_CFG_F_CONNTRACK;
+	}
 	cfg_mask |= NFQA_CFG_F_FAIL_OPEN;
 
 	mnl_attr_put_u32(nlh, NFQA_CFG_FLAGS, htonl(cfg_flags));

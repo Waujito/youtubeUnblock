@@ -113,6 +113,7 @@ struct config_t {
 	int threads;
 	int use_gso;
 	int use_ipv6;
+	int use_conntrack;
 	unsigned int mark;
 	int daemonize;
 	// Same as daemon() noclose
@@ -269,6 +270,7 @@ enum {
                                                                 \
 	.verbose = VERBOSE_DEBUG,                               \
 	.use_gso = 1,                                           \
+	.use_conntrack = 1,					\
                                                                 \
 	.first_section = NULL,					\
 	.last_section = NULL,					\

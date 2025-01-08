@@ -273,6 +273,7 @@ enum {
 	OPT_THREADS,
 	OPT_SILENT,
 	OPT_NO_GSO,
+	OPT_NO_CONNTRACK,
 	OPT_QUEUE_NUM,
 	OPT_UDP_MODE,
 	OPT_UDP_FAKE_SEQ_LEN,
@@ -322,6 +323,7 @@ static struct option long_opt[] = {
 	{"trace",		0, 0, OPT_TRACE},
 	{"instaflush",		0, 0, OPT_INSTAFLUSH},
 	{"no-gso",		0, 0, OPT_NO_GSO},
+	{"no-conntrack",	0, 0, OPT_NO_CONNTRACK},
 	{"no-ipv6",		0, 0, OPT_NO_IPV6},
 	{"daemonize",		0, 0, OPT_DAEMONIZE},
 	{"noclose",		0, 0, OPT_NOCLOSE},
@@ -386,6 +388,7 @@ void print_usage(const char *argv0) {
 	printf("\t--trace\n");
 	printf("\t--instaflush\n");
 	printf("\t--no-gso\n");
+	printf("\t--no-conntrack\n");
 	printf("\t--no-ipv6\n");
 	printf("\t--daemonize\n");
 	printf("\t--noclose\n");
@@ -459,7 +462,20 @@ int yparse_args(int argc, char *argv[]) {
 			rep_config.verbose = VERBOSE_INFO;
 			break;
 		case OPT_NO_GSO:
+#ifndef KERNEL_SPACE
 			rep_config.use_gso = 0;
+#else
+			lgerr("--no-gso is not supported in kernel space");
+			goto invalid_opt;
+#endif
+			break;
+		case OPT_NO_CONNTRACK:
+#ifndef KERNEL_SPACE
+			rep_config.use_conntrack = 0;
+#else
+			lgerr("--no-conntrack is not supported in kernel space. Compile with make kmake EXTRA_CFLAGS=\"-DNO_CONNTRACK\" instead." );
+			goto invalid_opt;
+#endif
 			break;
 		case OPT_NO_IPV6:
 			rep_config.use_ipv6 = 0;
@@ -1016,6 +1032,9 @@ size_t print_config(char *buffer, size_t buffer_size) {
 	}
 	if (!config.use_gso) {
 		print_cnf_buf("--no-gso");
+	}
+	if (!config.use_conntrack) {
+		print_cnf_buf("--no-conntrack");
 	}
 #endif
 

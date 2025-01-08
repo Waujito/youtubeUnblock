@@ -198,7 +198,9 @@ Flags that do not scoped to a specific section, used over all the youtubeUnblock
 
 - `--instaflush` Used with tracing. Flushes the buffer instantly, without waiting for explicit new line. Highly useful for debugging crushes.
 
-- `--no-gso` Disables support for Google Chrome fat packets which uses GSO. This feature is well tested now, so this flag probably won't fix anything.
+- `--no-gso` Disables support for TCP fat packets which uses GSO. This feature is well tested now, so this flag probably won't fix anything.
+
+- `--no-conntrack` Disables support for conntrack in youtubeUnblock.
 
 - `--no-ipv6` Disables support for ipv6. May be useful if you don't want for ipv6 socket to be opened.
 
