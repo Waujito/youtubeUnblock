@@ -154,7 +154,9 @@ int ip4_payload_split(uint8_t *pkt, size_t buflen,
 	size_t hdr_len = hdr->ihl * 4;
 	size_t pktlen = ntohs(hdr->tot_len);
 	if (buflen < pktlen || hdr_len > pktlen) {
-		lgerror(-EINVAL, "ip4_payload_split: buflen cmp pktlen");
+		lgerror(-EINVAL, "ip4_payload_split: buflen cmp pktlen: "
+			"buflen = %zu pktlen = %zu hdr_len = %zu", 
+			buflen, pktlen, hdr_len);
 		return -EINVAL;
 	}
 
@@ -229,7 +231,8 @@ int ip6_payload_split(uint8_t *pkt, size_t buflen,
 	size_t hdr_len = sizeof(struct ip6_hdr);
 	size_t pktlen = ntohs(hdr->ip6_plen);
 	if (buflen < pktlen) {
-		lgerror(-EINVAL, "ip6_payload_split: buflen cmp pktlen: %zu %zu", buflen, pktlen);
+		lgerror(-EINVAL, "ip6_payload_split: buflen cmp pktlen: "
+			"buflen = %zu pktlen = %zu", buflen, pktlen);
 		return -EINVAL;
 	}
 
