@@ -71,7 +71,7 @@ int bruteforce_analyze_sni_str(
 
 		z_function((char *)buf, zbuf, domain_len + 1 + dlen);
 
-		for (unsigned int k = 0; k < dlen; k++) {
+		for (size_t k = 0; k < domain_len + 1 + dlen; k++) {
 			if (zbuf[k] == domain_len) {
 				vrd->target_sni = 1;
 				vrd->sni_len = domain_len;
