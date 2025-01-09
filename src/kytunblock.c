@@ -385,11 +385,11 @@ static int conntrack_parse(const struct sk_buff *skb,
 
 #endif /* RHEL or not RHEL */
 
-
-
 static NF_CALLBACK(ykb_nf_hook, skb) {
 	int ret;
 	struct packet_data pd = {0};
+	uint8_t *data_buf = NULL;
+	int nf_verdict = NF_ACCEPT;
 
 	spin_lock(&hot_config_spinlock);
 	// if set flag to disable processing, 
@@ -402,14 +402,17 @@ static NF_CALLBACK(ykb_nf_hook, skb) {
 	}
 	spin_unlock(&hot_config_spinlock);
 
-	if ((skb->mark & config.mark) == config.mark) 
-		goto accept;
+	if ((skb->mark & config.mark) == config.mark)  {
+		goto send_verdict;
+	}
 	
-	if (skb->head == NULL) 
-		goto accept;
+	if (skb->head == NULL) {
+		goto send_verdict;
+	}
 	
-	if (skb->len > MAX_PACKET_SIZE)
-		goto accept;
+	if (skb->len >= MAX_PACKET_SIZE) {
+		goto send_verdict;
+	}
 
 	ret = conntrack_parse(skb, &pd.yct);
 	if (ret < 0) {
@@ -417,34 +420,43 @@ static NF_CALLBACK(ykb_nf_hook, skb) {
 	}
 
 	if (config.connbytes_limit != 0 && yct_is_mask_attr(YCTATTR_ORIG_PACKETS, &pd.yct) && pd.yct.orig_packets > config.connbytes_limit)
-		goto accept;
+		goto send_verdict;
 
 
-	ret = skb_linearize(skb);
-	if (ret < 0) {
-		lgerror(ret, "Cannot linearize");
-		goto accept;
+	if (skb_is_nonlinear(skb)) {
+		data_buf = kmalloc(skb->len, GFP_KERNEL);
+		if (data_buf == NULL) {
+			lgerror(-ENOMEM, "Cannot allocate packet buffer");
+		}
+		ret = skb_copy_bits(skb, 0, data_buf, skb->len);
+		if (ret) {
+			lgerror(ret, "Cannot copy bits");
+			goto send_verdict;
+		}
+
+		pd.payload = data_buf;	
+	} else {
+		pd.payload = skb->data;
 	}
 
-	pd.payload = skb->data;
 	pd.payload_len = skb->len;
 
 	int vrd = process_packet(&pd);
 
 	switch(vrd) {
 		case PKT_ACCEPT:
-			goto accept;
+			nf_verdict = NF_ACCEPT;
+			break;
 		case PKT_DROP:
-			goto drop;
+			nf_verdict = NF_STOLEN;
+			kfree_skb(skb);
+			break;
 	}
 
-accept:
+send_verdict:
+	kfree(data_buf);
 	atomic_dec(&hot_config_counter);
-	return NF_ACCEPT;
-drop:
-	atomic_dec(&hot_config_counter);
-	kfree_skb(skb);
-	return NF_STOLEN;
+	return nf_verdict;
 }
 
 
