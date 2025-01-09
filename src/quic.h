@@ -234,11 +234,11 @@ int parse_quic_decrypted(
 // Like fail_packet for TCP
 int udp_fail_packet(struct udp_failing_strategy strategy, uint8_t *payload, size_t *plen, size_t avail_buflen);
 
-// Like gen_fake_sni for TCP
+// Like gen_fake_sni for TCP, Allocates and generates udp fake
 int gen_fake_udp(struct udp_fake_type type,
 		const void *ipxh, size_t iph_len, 
 		const struct udphdr *udph,
-		uint8_t *buf, size_t *buflen);
+		uint8_t **buf, size_t *buflen);
 
 int detect_udp_filtered(const struct section_config_t *section,
 			const uint8_t *payload, size_t plen);

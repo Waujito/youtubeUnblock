@@ -195,21 +195,21 @@ static int send_raw_socket(const uint8_t *pkt, size_t pktlen) {
 	int ret;
 
 	if (pktlen > AVAILABLE_MTU) {
-		lgdebug("The packet is too big and may cause issues!");
+		lgtrace("Split packet!");
 
-		NETBUF_ALLOC(buff1, MAX_PACKET_SIZE);
-		if (!NETBUF_CHECK(buff1)) {
+		size_t buff1_size = pktlen;
+		uint8_t *buff1 = malloc(buff1_size);
+		if (buff1 == NULL) {
 			lgerror(-ENOMEM, "Allocation error");
 			return -ENOMEM;
 		}
-		NETBUF_ALLOC(buff2, MAX_PACKET_SIZE);
-		if (!NETBUF_CHECK(buff2)) {
+		size_t buff2_size = pktlen;
+		uint8_t *buff2 = malloc(buff2_size);
+		if (buff2 == NULL) {
 			lgerror(-ENOMEM, "Allocation error");
-			NETBUF_FREE(buff2);
+			free(buff1);
 			return -ENOMEM;
 		}
-		size_t buff1_size = MAX_PACKET_SIZE;
-		size_t buff2_size = MAX_PACKET_SIZE;
 
 		if ((ret = tcp_frag(pkt, pktlen, AVAILABLE_MTU-128,
 			buff1, &buff1_size, buff2, &buff2_size)) < 0) {
@@ -231,12 +231,12 @@ static int send_raw_socket(const uint8_t *pkt, size_t pktlen) {
 			goto erret_lc;
 		}
 
-		NETBUF_FREE(buff1);
-		NETBUF_FREE(buff2);
+		free(buff1);
+		free(buff2);
 		return sent;
 erret_lc:
-		NETBUF_FREE(buff1);
-		NETBUF_FREE(buff2);
+		free(buff1);
+		free(buff2);
 		return ret;
 	}
 	

@@ -75,11 +75,11 @@ struct tls_verdict analyze_tls_data(const struct section_config_t *section, cons
 
 
 /**
- * Generates the fake client hello message
+ * Allocates and generates the fake client hello message
  */
 int gen_fake_sni(struct fake_type type,
 		const void *iph, size_t iph_len, 
 		const struct tcphdr *tcph, size_t tcph_len, 
-		uint8_t *buf, size_t *buflen);
+		uint8_t **ubuf, size_t *ubuflen);
 
 #endif /* TLS_H */
