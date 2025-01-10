@@ -459,91 +459,91 @@ send_verdict:
 	return nf_verdict;
 }
 
-
-static struct nf_hook_ops ykb_nf_reg __read_mostly = {
+static struct nf_hook_ops ykb_hook_ops[] = {
+{
 	.hook		= ykb_nf_hook,
 	.pf		= NFPROTO_IPV4,
 	.hooknum	= NF_INET_POST_ROUTING,
 	.priority	= NF_IP_PRI_MANGLE,
-};
-
-static struct nf_hook_ops ykb6_nf_reg __read_mostly = {
+}
+#ifndef NO_IPV6
+,{
 	.hook		= ykb_nf_hook,
 	.pf		= NFPROTO_IPV6,
 	.hooknum	= NF_INET_POST_ROUTING,
 	.priority	= NF_IP6_PRI_MANGLE,
+}
+#endif
 };
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 3, 0)
+static int ykb_net_init(struct net *net)
+{
+	return nf_register_net_hooks(net, ykb_hook_ops, sizeof(ykb_hook_ops));
+}
+
+static void ykb_net_exit(struct net *net)
+{
+	nf_unregister_net_hooks(net, ykb_hook_ops, sizeof(ykb_hook_ops));
+}
+
+static struct pernet_operations ykb_pernet_ops = {
+	.init = ykb_net_init,
+	.exit = ykb_net_exit
+};
+#endif /* LINUX_VERSION_CODE >= KERNEL_VERSION(4, 3, 0) */
+
 static int __init ykb_init(void) {
+	int ret;
+
 #ifdef NO_CONNTRACK
 	lgwarning("Conntrack is disabled.");
 #endif
 #ifdef NO_IPV6
 	lgwarning("IPv6 is disabled.");
 #endif
-
-	int ret = 0;
-	struct net *n;
+	
 	ret = init_config(&config);
 	if (ret < 0) goto err;
 
 	ret = open_raw_socket();
-	if (ret < 0) goto err;
-
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(4,13,0)
-	for_each_net(n) {
-		ret = nf_register_net_hook(n, &ykb_nf_reg);
-		if (ret < 0) { 
-			lgerror(ret, "register net_hook");
-		}
-	}
-#else
-	ret = nf_register_hook(&ykb_nf_reg);
 	if (ret < 0) {
-		lgerror(ret, "register net_hook");
+		lgerror(ret, "ipv4 rawsocket initialization failed!");
+		goto err;
 	}
-#endif
-
 
 #ifndef NO_IPV6
 	ret = open_raw6_socket();
 	if (ret < 0) {
-		lgerror(ret, "ipv6 initialization failed!");
-
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(4,13,0)
-		for_each_net(n)
-			nf_unregister_net_hook(n, &ykb_nf_reg);
-#else
-		nf_unregister_hook(&ykb_nf_reg);
-#endif
-		goto err;
+		lgerror(ret, "ipv6 rawsocket initialization failed!");
+		goto err_close4_sock;
 	}
-
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(4,13,0)
-	for_each_net(n) {
-		ret = nf_register_net_hook(n, &ykb6_nf_reg);
-		if (ret < 0) {
-			lgerror(ret, "register net6_hook");
-		}
-	}
-#else
-	ret = nf_register_hook(&ykb6_nf_reg);
-	if (ret < 0) {
-		lgerror(ret, "register net6_hook");
-	}
-#endif
 #endif /* NO_IPV6 */
+
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 3, 0)
+	ret = register_pernet_subsys(&ykb_pernet_ops);
+#else
+	ret = nf_register_hooks(ykb_hook_ops, sizeof(ykb_hook_ops));
+#endif
+
+	if (ret < 0)
+		goto err_close_sock;
+
 
 	lginfo("youtubeUnblock kernel module started.\n");
 	return 0;
 
+err_close_sock:
+#ifndef NO_IPV6
+	close_raw6_socket();
+#endif
+err_close4_sock:
+	close_raw_socket();
 err:
 	return ret;
 }
 
 static void __exit ykb_destroy(void) {
-	struct net *n;
-
 	mutex_lock(&config_free_mutex);
 	// acquire all locks.
 	spin_lock(&hot_config_spinlock);
@@ -555,22 +555,13 @@ static void __exit ykb_destroy(void) {
 	// netfilter callbacks keep running
 	while (atomic_read(&hot_config_counter) > 0) {}
 
-#ifndef NO_IPV6
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(4,13,0)
-	for_each_net(n)
-		nf_unregister_net_hook(n, &ykb6_nf_reg);
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 3, 0)
+	unregister_pernet_subsys(&ykb_pernet_ops);
 #else
-	nf_unregister_hook(&ykb6_nf_reg);
+	nf_unregister_hooks(ykb_hook_ops, sizeof(ykb_hook_ops));
 #endif
-#endif /* NO_IPV6 */
 
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(4,13,0)
-	for_each_net(n)
-		nf_unregister_net_hook(n, &ykb_nf_reg);
-#else
-	nf_unregister_hook(&ykb_nf_reg);
-#endif
-	
+
 #ifndef NO_IPV6
 	close_raw6_socket();
 #endif
