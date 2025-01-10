@@ -45,7 +45,7 @@ int bruteforce_analyze_sni_str(
 
 	for (struct domains_list *sne = section->sni_domains; sne != NULL; 
 	sne = sne->next) {
-		max_domain_len = max(sne->domain_len, max_domain_len);
+		max_domain_len = max((int)sne->domain_len, max_domain_len);
 	}
 
 	size_t buf_size = max_domain_len + dlen + 1;
@@ -274,7 +274,7 @@ struct tls_verdict analyze_tls_data(
 		if (tls_vmajor != 0x03) break;
 		message_ptr++;
 
-		uint8_t tls_vminor = *message_ptr;
+		// uint8_t tls_vminor = *message_ptr;
 		message_ptr++;
 
 		uint16_t message_length = ntohs(*(const uint16_t *)message_ptr);
@@ -283,7 +283,7 @@ struct tls_verdict analyze_tls_data(
 
 		const uint8_t *tls_message_data = message_ptr;
 		// Since real length may be truncated use minimum of two
-		size_t tls_message_length = min(message_length, data_end - message_ptr);
+		size_t tls_message_length = min((int)message_length, (int)(data_end - message_ptr));
 
 		if (tls_content_type != TLS_CONTENT_TYPE_HANDSHAKE) 
 			goto nextMessage;

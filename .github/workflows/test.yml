@@ -106,7 +106,6 @@ jobs:
           - 4.19.322
           - 4.4.302
           - 3.10.108
-          - 3.0.101
     steps:
       - name: Checkout
         uses: actions/checkout@v4

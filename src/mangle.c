@@ -142,7 +142,7 @@ int process_packet(const struct packet_data *pd) {
 		lgtrace_write();
 
 		lgtrace_wr("Transport payload: [ ");
-		for (int i = 0; i < min(16, transport_payload_len); i++) {
+		for (int i = 0; i < min((int)16, (int)transport_payload_len); i++) {
 			lgtrace_wr("%02x ", transport_payload[i]);
 		}
 		lgtrace_wr("]");
@@ -224,7 +224,7 @@ int process_tcp_packet(const struct section_config_t *section, const uint8_t *ra
 
 		size_t fake_len = section->fake_sni_pkt_sz;
 		if (section->synfake_len) 
-			fake_len = min(section->synfake_len, fake_len);
+			fake_len = min((int)section->synfake_len, (int)fake_len);
 
 
 		size_t payload_len = iph_len + tcph_len + fake_len;
@@ -279,7 +279,6 @@ int process_tcp_packet(const struct section_config_t *section, const uint8_t *ra
 
 	if (vrd.target_sni) {
 		lgdebug("Target SNI detected: %.*s", vrd.sni_len, vrd.sni_ptr);
-		size_t sni_offset = vrd.sni_ptr - data;
 		size_t target_sni_offset = vrd.target_sni_ptr - data;
 
 		size_t payload_len = raw_payload_len;

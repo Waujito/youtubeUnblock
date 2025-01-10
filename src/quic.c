@@ -366,8 +366,6 @@ int parse_quic_decrypted(
 	const uint8_t *curptr = decrypted_message;
 	ssize_t curptr_len = decrypted_message_len;
 	ssize_t fret;
-	int ret;
-	struct tls_verdict tlsv = {0};
 	struct quic_frame_crypto fr_cr;
 
 	uint8_t *crypto_message = calloc(AVAILABLE_MTU, 1);

@@ -63,12 +63,85 @@ MODULE_DESCRIPTION("Linux kernel module for youtubeUnblock");
 static struct socket *rawsocket;
 static struct socket *raw6socket;
 
-DEFINE_SPINLOCK(hot_config_spinlock);
-DEFINE_MUTEX(config_free_mutex);
-atomic_t hot_config_counter = ATOMIC_INIT(0);
+static DEFINE_SPINLOCK(hot_config_spinlock);
+static DEFINE_MUTEX(config_free_mutex);
+static atomic_t hot_config_counter = ATOMIC_INIT(0);
 // boolean flag for hot config replacement
 // if 1, youtubeUnblock should stop processing
-atomic_t hot_config_rep = ATOMIC_INIT(0);
+static atomic_t hot_config_rep = ATOMIC_INIT(0);
+
+#define MAX_ARGC 1024
+static char *argv[MAX_ARGC];
+
+static int params_set(const char *cval, const struct kernel_param *kp) {
+	int ret;
+	ret = mutex_trylock(&config_free_mutex);
+	if (ret == 0) 
+		return -EBUSY;
+
+
+	int cv_len = strlen(cval);
+	if (cv_len >= 1 && cval[cv_len - 1] == '\n') {
+		cv_len--;
+	}
+
+	const char *ytb_prefix = "youtubeUnblock ";
+	int ytbp_len = strlen(ytb_prefix);
+	int len = cv_len + ytbp_len; 
+
+	char *val = kmalloc(len + 1, GFP_KERNEL); // 1 for null-terminator
+	strncpy(val, ytb_prefix, ytbp_len);
+	strncpy(val + ytbp_len, cval, cv_len);
+	val[len] = '\0';
+
+	int argc = 0;
+	argv[argc++] = val;
+	
+	for (int i = 0; i < len; i++) {
+		if (val[i] == ' ') {
+			val[i] = '\0';
+
+			// safe because of null-terminator
+			if (val[i + 1] != ' ' && val[i + 1] != '\0') {
+				argv[argc++] = val + i + 1;
+			}
+		}
+	}
+
+	spin_lock(&hot_config_spinlock);
+	// lock netfilter youtubeUnblock
+	atomic_set(&hot_config_rep, 1);
+	spin_unlock(&hot_config_spinlock);
+
+	// lock config hot replacement process until all 
+	// netfilter callbacks keep running
+	while (atomic_read(&hot_config_counter) > 0) {}
+
+	ret = yparse_args(argc, argv);
+
+	spin_lock(&hot_config_spinlock);
+	// relaunch youtubeUnblock
+	atomic_set(&hot_config_rep, 0);
+	spin_unlock(&hot_config_spinlock);
+
+	kfree(val);
+
+	mutex_unlock(&config_free_mutex);
+	return ret;
+}
+
+static int params_get(char *buffer, const struct kernel_param *kp) {
+	size_t len = print_config(buffer, 4000);
+	return len;
+}
+
+static const struct kernel_param_ops params_ops = {
+	.set = params_set,
+	.get = params_get,
+};
+
+module_param_cb(parameters, &params_ops, NULL, 0664);
+
 
 static int open_raw_socket(void) {
 	int ret = 0;
@@ -475,16 +548,22 @@ static struct nf_hook_ops ykb_hook_ops[] = {
 }
 #endif
 };
+static const size_t ykb_hooks_sz = sizeof(ykb_hook_ops) / sizeof(struct nf_hook_ops);
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 3, 0)
 static int ykb_net_init(struct net *net)
 {
-	return nf_register_net_hooks(net, ykb_hook_ops, sizeof(ykb_hook_ops));
+	int ret;
+	ret = nf_register_net_hooks(net, ykb_hook_ops, ykb_hooks_sz);
+	if (ret < 0)
+		return ret;
+
+	return 0;
 }
 
 static void ykb_net_exit(struct net *net)
 {
-	nf_unregister_net_hooks(net, ykb_hook_ops, sizeof(ykb_hook_ops));
+	nf_unregister_net_hooks(net, ykb_hook_ops, ykb_hooks_sz);
 }
 
 static struct pernet_operations ykb_pernet_ops = {
@@ -504,12 +583,14 @@ static int __init ykb_init(void) {
 #endif
 	
 	ret = init_config(&config);
-	if (ret < 0) goto err;
+	if (ret < 0) {
+		goto err;
+	}
 
 	ret = open_raw_socket();
 	if (ret < 0) {
 		lgerror(ret, "ipv4 rawsocket initialization failed!");
-		goto err;
+		goto err_config;
 	}
 
 #ifndef NO_IPV6
@@ -523,7 +604,7 @@ static int __init ykb_init(void) {
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 3, 0)
 	ret = register_pernet_subsys(&ykb_pernet_ops);
 #else
-	ret = nf_register_hooks(ykb_hook_ops, sizeof(ykb_hook_ops));
+	ret = nf_register_hooks(ykb_hook_ops, ykb_hooks_sz);
 #endif
 
 	if (ret < 0)
@@ -539,6 +620,8 @@ err_close_sock:
 #endif
 err_close4_sock:
 	close_raw_socket();
+err_config:
+	free_config(config);
 err:
 	return ret;
 }
@@ -558,7 +641,7 @@ static void __exit ykb_destroy(void) {
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 3, 0)
 	unregister_pernet_subsys(&ykb_pernet_ops);
 #else
-	nf_unregister_hooks(ykb_hook_ops, sizeof(ykb_hook_ops));
+	nf_unregister_hooks(ykb_hook_ops, ykb_hooks_sz);
 #endif
 
 
