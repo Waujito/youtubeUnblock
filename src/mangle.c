@@ -65,7 +65,9 @@ int process_packet(const struct config_t *config, const struct packet_data *pd) 
 
 		transport_proto = iph->protocol;
 
-	} else if (ipver == IP6VERSION && config->use_ipv6) {
+	} 
+#ifndef NO_IPV6
+	else if (ipver == IP6VERSION && config->use_ipv6) {
 		ret = ip6_payload_split((uint8_t *)raw_payload, raw_payload_len,
 			 (struct ip6_hdr **)&ip6h, &iph_len, 
 			 (uint8_t **)&ip_payload, &ip_payload_len);
@@ -75,7 +77,9 @@ int process_packet(const struct config_t *config, const struct packet_data *pd) 
 
 		transport_proto = ip6h->ip6_nxt;
 
-	} else {
+	} 
+#endif
+	else {
 		lgtrace("Unknown layer 3 protocol version: %d", ipver);
 		goto accept;
 	}
