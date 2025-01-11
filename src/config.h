@@ -39,6 +39,14 @@ struct instance_config_t {
 };
 extern struct instance_config_t instance_config;
 
+
+struct logging_config_t {
+	int verbose;
+	int instaflush;
+	int syslog;
+};
+extern struct logging_config_t logging_conf;
+
 struct udp_dport_range {
 	uint16_t start;
 	uint16_t end;
@@ -132,9 +140,12 @@ struct config_t {
 
 	struct section_config_t *first_section;
 	struct section_config_t *last_section;
+
+#ifdef KERNEL_SPACE
+	struct kref refcount;
+#endif
 };
 
-extern struct config_t config;
 
 #define ITER_CONFIG_SECTIONS(config, section) \
 for (struct section_config_t *section = (config)->last_section; section != NULL; section = section->prev)
@@ -208,7 +219,7 @@ if ((fake_bitmask) & strategy)
 
 #define DEFAULT_QUEUE_NUM 537
 
-#define MAX_PACKET_SIZE 8192
+#define MAX_PACKET_SIZE (1 << 16)
 
 #define DEFAULT_SNISTR "googlevideo.com,ggpht.com,ytimg.com,youtube.com,play.google.com,youtu.be,youtubei.googleapis.com,youtube.googleapis.com,youtubeembeddedplayer.googleapis.com,googleusercontent.com,gstatic.com,l.google.com"
 
@@ -284,10 +295,11 @@ enum {
 	.instaflush = 0,                                        \
 }
 
-#define CONFIG_SET(config)			\
-struct config_t config = default_config_set;	\
-config->last_section = &(config.default_config) \
-
+#define default_logging_config_set {				\
+	.verbose = VERBOSE_DEBUG,				\
+	.syslog = 0,						\
+	.instaflush = 0,					\
+}
 
 struct ytb_conntrack {
 	uint32_t mask;

@@ -59,6 +59,8 @@ int rawsocket = -2;
 pthread_mutex_t raw6socket_lock;
 int raw6socket = -2;
 
+static struct config_t *cur_config = NULL;
+
 static int open_socket(struct mnl_socket **_nl) {
 	struct mnl_socket *nl = NULL;
 	nl = mnl_socket_open(NETLINK_NETFILTER);
@@ -106,7 +108,7 @@ static int open_raw_socket(void) {
 		return -1;
 	}
 
-	int mark = config.mark;
+	int mark = cur_config->mark;
 	if (setsockopt(rawsocket, SOL_SOCKET, SO_MARK, &mark, sizeof(mark)) < 0)
 	{
 		lgerror(-errno, "setsockopt(SO_MARK, %d) failed", mark);
@@ -158,7 +160,7 @@ static int open_raw6_socket(void) {
 		return -1;
 	}
 
-	int mark = config.mark;
+	int mark = cur_config->mark;
 	if (setsockopt(raw6socket, SOL_SOCKET, SO_MARK, &mark, sizeof(mark)) < 0)
 	{
 		lgerror(-errno, "setsockopt(SO_MARK, %d) failed", mark);
@@ -442,14 +444,14 @@ static int send_raw_ipv4(const uint8_t *pkt, size_t pktlen) {
 		}
 	};
 
-	if (config.threads != 1)
+	if (cur_config->threads != 1)
 		pthread_mutex_lock(&rawsocket_lock);
 
 	int sent = sendto(rawsocket, 
 	    pkt, pktlen, MSG_DONTWAIT, 
 	    (struct sockaddr *)&daddr, sizeof(daddr));
 
-	if (config.threads != 1)
+	if (cur_config->threads != 1)
 		pthread_mutex_unlock(&rawsocket_lock);
 
 	/* The function will return -errno on error as well as errno value set itself */
@@ -477,7 +479,7 @@ static int send_raw_ipv6(const uint8_t *pkt, size_t pktlen) {
 		.sin6_addr = iph->ip6_dst
 	};
 
-	if (config.threads != 1)
+	if (cur_config->threads != 1)
 		pthread_mutex_lock(&rawsocket_lock);
 
 	int sent = sendto(raw6socket, 
@@ -486,7 +488,7 @@ static int send_raw_ipv6(const uint8_t *pkt, size_t pktlen) {
 
 	lgtrace_addp("rawsocket sent %d", sent);
 
-	if (config.threads != 1)
+	if (cur_config->threads != 1)
 		pthread_mutex_unlock(&rawsocket_lock);
 
 	/* The function will return -errno on error as well as errno value set itself */
@@ -666,8 +668,8 @@ static int queue_cb(const struct nlmsghdr *nlh, void *data) {
 
 	if (attr[NFQA_MARK] != NULL) {
 		// Skip packets sent by rawsocket to escape infinity loop.
-		if ((ntohl(mnl_attr_get_u32(attr[NFQA_MARK])) & config.mark) == 
-			config.mark) {
+		if ((ntohl(mnl_attr_get_u32(attr[NFQA_MARK])) & cur_config->mark) == 
+			cur_config->mark) {
 			return fallback_accept_packet(id, *qdata);
 		}
 	}
@@ -690,7 +692,7 @@ static int queue_cb(const struct nlmsghdr *nlh, void *data) {
 ct_out:
 	verdnlh = nfq_nlmsg_put(buf, NFQNL_MSG_VERDICT, qdata->queue_num);
 
-	ret = process_packet(&packet);
+	ret = process_packet(cur_config, &packet);
 
 	switch (ret) {
 		case PKT_DROP:
@@ -748,7 +750,7 @@ int init_queue(int queue_num) {
 		goto die;
 	}
 
-	if (config.use_ipv6) {
+	if (cur_config->use_ipv6) {
 		nlh = nfq_nlmsg_put(buf, NFQNL_MSG_CONFIG, queue_num);
 		nfq_nlmsg_cfg_put_cmd(nlh, PF_INET6, NFQNL_CFG_CMD_PF_UNBIND);
 
@@ -781,10 +783,10 @@ int init_queue(int queue_num) {
 	unsigned int cfg_flags = NFQA_CFG_F_GSO | NFQA_CFG_F_CONNTRACK | NFQA_CFG_F_FAIL_OPEN;
 	unsigned int cfg_mask = 0;
 
-	if (config.use_gso) {
+	if (cur_config->use_gso) {
 		cfg_mask |= NFQA_CFG_F_GSO;
 	}
-	if (config.use_conntrack) {
+	if (cur_config->use_conntrack) {
 		cfg_mask |= NFQA_CFG_F_CONNTRACK;
 	}
 	cfg_mask |= NFQA_CFG_F_FAIL_OPEN;
@@ -875,7 +877,9 @@ struct instance_config_t instance_config = {
 
 int main(int argc, char *argv[]) {
 	int ret;
-	if ((ret = yparse_args(argc, argv)) != 0) {
+	struct config_t config;
+
+	if ((ret = yparse_args(&config, argc, argv)) != 0) {
 		if (ret < 0) {
 			lgerror(-errno, "Unable to parse args");
 			exit(EXIT_FAILURE);
@@ -884,7 +888,10 @@ int main(int argc, char *argv[]) {
 	}
 
 	print_version();
-	print_welcome();
+	print_welcome(&config);
+
+	parse_global_lgconf(&config);
+	cur_config = &config;
 
 
 	if (open_raw_socket() < 0) {

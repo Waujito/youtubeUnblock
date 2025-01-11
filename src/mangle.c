@@ -32,7 +32,7 @@
 #include "linux/inet.h"
 #endif
 
-int process_packet(const struct packet_data *pd) {
+int process_packet(const struct config_t *config, const struct packet_data *pd) {
 	const uint8_t *raw_payload = pd->payload;
 	uint32_t raw_payload_len = pd->payload_len;
 
@@ -65,7 +65,7 @@ int process_packet(const struct packet_data *pd) {
 
 		transport_proto = iph->protocol;
 
-	} else if (ipver == IP6VERSION && config.use_ipv6) {
+	} else if (ipver == IP6VERSION && config->use_ipv6) {
 		ret = ip6_payload_split((uint8_t *)raw_payload, raw_payload_len,
 			 (struct ip6_hdr **)&ip6h, &iph_len, 
 			 (uint8_t **)&ip_payload, &ip_payload_len);
@@ -151,7 +151,7 @@ int process_packet(const struct packet_data *pd) {
 
 	int verdict = PKT_CONTINUE;
 
-	ITER_CONFIG_SECTIONS(&config, section) {
+	ITER_CONFIG_SECTIONS(config, section) {
 		lgtrace_wr("Section #%d: ", CONFIG_SECTION_NUMBER(section));
 
 		switch (transport_proto) {

@@ -63,22 +63,21 @@ MODULE_DESCRIPTION("Linux kernel module for youtubeUnblock");
 static struct socket *rawsocket;
 static struct socket *raw6socket;
 
-static DEFINE_SPINLOCK(hot_config_spinlock);
-static DEFINE_MUTEX(config_free_mutex);
-static atomic_t hot_config_counter = ATOMIC_INIT(0);
-// boolean flag for hot config replacement
-// if 1, youtubeUnblock should stop processing
-static atomic_t hot_config_rep = ATOMIC_INIT(0);
-
 #define MAX_ARGC 1024
 static char *argv[MAX_ARGC];
 
+static struct config_t *cur_config;
+
+static void config_release(struct kref *ref)
+{
+	struct config_t *config = container_of(ref, struct config_t, refcount);
+	free_config(config);
+	kfree(config);
+	pr_warn("Config release\n");
+}
+
 static int params_set(const char *cval, const struct kernel_param *kp) {
 	int ret;
-	ret = mutex_trylock(&config_free_mutex);
-	if (ret == 0) 
-		return -EBUSY;
-
 
 	int cv_len = strlen(cval);
 	if (cv_len >= 1 && cval[cv_len - 1] == '\n') {
@@ -108,30 +107,36 @@ static int params_set(const char *cval, const struct kernel_param *kp) {
 		}
 	}
 
-	spin_lock(&hot_config_spinlock);
-	// lock netfilter youtubeUnblock
-	atomic_set(&hot_config_rep, 1);
-	spin_unlock(&hot_config_spinlock);
 
-	// lock config hot replacement process until all 
-	// netfilter callbacks keep running
-	while (atomic_read(&hot_config_counter) > 0) {}
+	struct config_t *config;
 
-	ret = yparse_args(argc, argv);
+	config = kmalloc(sizeof(*config), GFP_KERNEL);
+	if (!config) {
+		ret = -ENOMEM;
+		goto ret_fval;
+	}
 
-	spin_lock(&hot_config_spinlock);
-	// relaunch youtubeUnblock
-	atomic_set(&hot_config_rep, 0);
-	spin_unlock(&hot_config_spinlock);
+	ret = yparse_args(config, argc, argv);
 
+	if (ret < 0) {
+		kfree(config);
+		goto ret_fval;
+	}
+	kref_init(&config->refcount);
+
+	struct config_t *old_config = cur_config;
+	cur_config = config;
+	parse_global_lgconf(cur_config);
+
+	kref_put(&old_config->refcount, config_release);
+	
+ret_fval:
 	kfree(val);
-
-	mutex_unlock(&config_free_mutex);
 	return ret;
 }
 
 static int params_get(char *buffer, const struct kernel_param *kp) {
-	size_t len = print_config(buffer, 4000);
+	size_t len = print_config(cur_config, buffer, 4000);
 	return len;
 }
 
@@ -154,7 +159,7 @@ static int open_raw_socket(void) {
 
 	// That's funny, but this is how it is done in the kernel
 	// https://elixir.bootlin.com/linux/v3.17.7/source/net/core/sock.c#L916
-	rawsocket->sk->sk_mark=config.mark;
+	rawsocket->sk->sk_mark=cur_config->mark;
 
 	return 0;
 
@@ -164,10 +169,15 @@ err:
 
 static void close_raw_socket(void) {
 	sock_release(rawsocket);
+	rawsocket = NULL;
 }
 
 static int send_raw_ipv4(const uint8_t *pkt, size_t pktlen) {
 	int ret = 0;
+	if (rawsocket == NULL) {
+		return -ENOTSOCK;
+
+	}
 	if (pktlen > AVAILABLE_MTU) return -ENOMEM;
 
 	struct iphdr *iph;
@@ -216,7 +226,7 @@ static int open_raw6_socket(void) {
 
 	// That's funny, but this is how it is done in the kernel
 	// https://elixir.bootlin.com/linux/v3.17.7/source/net/core/sock.c#L916
-	raw6socket->sk->sk_mark=config.mark;
+	raw6socket->sk->sk_mark=cur_config->mark;
 
 	return 0;
 
@@ -226,10 +236,16 @@ err:
 
 static void close_raw6_socket(void) {
 	sock_release(raw6socket);
+	raw6socket = NULL;
 }
 
 static int send_raw_ipv6(const uint8_t *pkt, size_t pktlen) {
 	int ret = 0;
+	if (raw6socket == NULL) {
+		return -ENOTSOCK;
+
+	}
+
 	if (pktlen > AVAILABLE_MTU) return -ENOMEM;
 
 	struct ip6_hdr *iph;
@@ -303,7 +319,7 @@ static int send_raw_socket(const uint8_t *pkt, size_t pktlen) {
 		else {
 			goto erret_lc;
 		}
-
+		 
 		free(buff1);
 		free(buff2);
 		return sent;
@@ -464,18 +480,10 @@ static NF_CALLBACK(ykb_nf_hook, skb) {
 	uint8_t *data_buf = NULL;
 	int nf_verdict = NF_ACCEPT;
 
-	spin_lock(&hot_config_spinlock);
-	// if set flag to disable processing, 
-	// explicitly accept all packets
-	if (atomic_read(&hot_config_rep)) {
-		spin_unlock(&hot_config_spinlock);
-		return NF_ACCEPT;
-	} else {
-		atomic_inc(&hot_config_counter);
-	}
-	spin_unlock(&hot_config_spinlock);
+	struct config_t *config = cur_config;
+	kref_get(&config->refcount);
 
-	if ((skb->mark & config.mark) == config.mark)  {
+	if ((skb->mark & config->mark) == config->mark)  {
 		goto send_verdict;
 	}
 	
@@ -492,7 +500,7 @@ static NF_CALLBACK(ykb_nf_hook, skb) {
 		lgtrace("[TRACE] conntrack_parse error code\n");
 	}
 
-	if (config.connbytes_limit != 0 && yct_is_mask_attr(YCTATTR_ORIG_PACKETS, &pd.yct) && pd.yct.orig_packets > config.connbytes_limit)
+	if (config->connbytes_limit != 0 && yct_is_mask_attr(YCTATTR_ORIG_PACKETS, &pd.yct) && pd.yct.orig_packets > config->connbytes_limit)
 		goto send_verdict;
 
 
@@ -514,7 +522,7 @@ static NF_CALLBACK(ykb_nf_hook, skb) {
 
 	pd.payload_len = skb->len;
 
-	int vrd = process_packet(&pd);
+	int vrd = process_packet(config, &pd);
 
 	switch(vrd) {
 		case PKT_ACCEPT:
@@ -528,7 +536,7 @@ static NF_CALLBACK(ykb_nf_hook, skb) {
 
 send_verdict:
 	kfree(data_buf);
-	atomic_dec(&hot_config_counter);
+	kref_put(&config->refcount, config_release);
 	return nf_verdict;
 }
 
@@ -581,11 +589,17 @@ static int __init ykb_init(void) {
 #ifdef NO_IPV6
 	lgwarning("IPv6 is disabled.");
 #endif
-	
-	ret = init_config(&config);
+	cur_config = kmalloc(sizeof(*cur_config), GFP_KERNEL);
+	if (!cur_config) {
+		return -ENOMEM;
+	}
+	ret = init_config(cur_config);
 	if (ret < 0) {
+		kfree(cur_config);
 		goto err;
 	}
+
+	kref_init(&cur_config->refcount);
 
 	ret = open_raw_socket();
 	if (ret < 0) {
@@ -621,36 +635,24 @@ err_close_sock:
 err_close4_sock:
 	close_raw_socket();
 err_config:
-	free_config(config);
+	kref_put(&cur_config->refcount, config_release);
 err:
 	return ret;
 }
 
-static void __exit ykb_destroy(void) {
-	mutex_lock(&config_free_mutex);
-	// acquire all locks.
-	spin_lock(&hot_config_spinlock);
-	// lock netfilter youtubeUnblock
-	atomic_set(&hot_config_rep, 1);
-	spin_unlock(&hot_config_spinlock);
-
-	// wait until all 
-	// netfilter callbacks keep running
-	while (atomic_read(&hot_config_counter) > 0) {}
-
+static void __exit ykb_destroy(void) {	
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 3, 0)
 	unregister_pernet_subsys(&ykb_pernet_ops);
 #else
 	nf_unregister_hooks(ykb_hook_ops, ykb_hooks_sz);
 #endif
 
-
 #ifndef NO_IPV6
 	close_raw6_socket();
 #endif
 
 	close_raw_socket();
-	free_config(config);
+	kref_put(&cur_config->refcount, config_release);
 	lginfo("youtubeUnblock kernel module destroyed.\n");
 }
 
