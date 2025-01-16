@@ -126,31 +126,6 @@ free((item));			\
 
 #endif /* not a KERNEL_SPACE */
 
-/* An alternative memory allocation strategy for userspace app */
-// #define ALLOC_MALLOC
-
-/**
- * Use NETBUF_ALLOC and NETBUF_FREE as an abstraction of memory allocation.
- * Do not use it within expressions, consider these defines as separate statements.
- *
- * Use NETBUF_CHECK to check that buffer was properly allocated.
- */
-#ifdef KERNEL_SPACE
-#include <linux/gfp.h>
-#define NETBUF_ALLOC(buf, buf_len) __u8* buf = kmalloc(buf_len, GFP_KERNEL);
-#define NETBUF_CHECK(buf) ((buf) != NULL)
-#define NETBUF_FREE(buf) kfree(buf);
-#elif defined(ALLOC_MALLOC)
-#include <stdlib.h>
-#define NETBUF_ALLOC(buf, buf_len) __u8* buf = malloc(buf_len);
-#define NETBUF_CHECK(buf) ((buf) != NULL)
-#define NETBUF_FREE(buf) free(buf);
-#else
-#define NETBUF_ALLOC(buf, buf_len) __u8 buf[buf_len];
-#define NETBUF_CHECK(buf) (1)
-#define NETBUF_FREE(buf) ;
-#endif
-
 static inline int randint(void) {
 	int rnd;
 	

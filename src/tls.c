@@ -41,26 +41,27 @@ int bruteforce_analyze_sni_str(
 		vrd->sni_ptr = data + dlen / 2;
 		return 0;
 	}
+	int max_domain_len = 0;
 
+	for (struct domains_list *sne = section->sni_domains; sne != NULL; 
+	sne = sne->next) {
+		max_domain_len = max((int)sne->domain_len, max_domain_len);
+	}
+
+	size_t buf_size = max_domain_len + dlen + 1;
+	uint8_t *buf = malloc(buf_size);
+	if (buf == NULL) {
+		return -ENOMEM;
+	}
+	int *nzbuf = malloc(buf_size * sizeof(int));
+	if (nzbuf == NULL) {
+		free(buf);
+		return -ENOMEM;
+	}
+	
 	for (struct domains_list *sne = section->sni_domains; sne != NULL; sne = sne->next) {
 		const char *domain_startp = sne->domain_name;
 		int domain_len = sne->domain_len;
-
-		if (sne->domain_len + dlen + 1 > MAX_PACKET_SIZE) { 
-			continue;
-		}
-
-		NETBUF_ALLOC(buf, MAX_PACKET_SIZE);
-		if (!NETBUF_CHECK(buf)) {
-			lgerror(-ENOMEM, "Allocation error");
-			return -ENOMEM;
-		}
-		NETBUF_ALLOC(nzbuf, MAX_PACKET_SIZE * sizeof(int));
-		if (!NETBUF_CHECK(nzbuf)) {
-			lgerror(-ENOMEM, "Allocation error");
-			NETBUF_FREE(buf);
-			return -ENOMEM;
-		}
 
 		int *zbuf = (void *)nzbuf;
 
@@ -70,24 +71,20 @@ int bruteforce_analyze_sni_str(
 
 		z_function((char *)buf, zbuf, domain_len + 1 + dlen);
 
-		for (unsigned int k = 0; k < dlen; k++) {
+		for (size_t k = 0; k < domain_len + 1 + dlen; k++) {
 			if (zbuf[k] == domain_len) {
 				vrd->target_sni = 1;
 				vrd->sni_len = domain_len;
 				vrd->sni_ptr = data + (k - domain_len - 1);
 				vrd->target_sni_ptr = vrd->sni_ptr;
 				vrd->target_sni_len = vrd->sni_len;
-				NETBUF_FREE(buf);
-				NETBUF_FREE(nzbuf);
-				return 0;
+				goto return_vrd;
 			}
 		}
-
-
-		NETBUF_FREE(buf);
-		NETBUF_FREE(nzbuf);
 	}
-
+return_vrd:
+	free(buf);
+	free(nzbuf);
 	return 0;
 }
 static int analyze_sni_str(
@@ -277,7 +274,7 @@ struct tls_verdict analyze_tls_data(
 		if (tls_vmajor != 0x03) break;
 		message_ptr++;
 
-		uint8_t tls_vminor = *message_ptr;
+		// uint8_t tls_vminor = *message_ptr;
 		message_ptr++;
 
 		uint16_t message_length = ntohs(*(const uint16_t *)message_ptr);
@@ -286,7 +283,7 @@ struct tls_verdict analyze_tls_data(
 
 		const uint8_t *tls_message_data = message_ptr;
 		// Since real length may be truncated use minimum of two
-		size_t tls_message_length = min(message_length, data_end - message_ptr);
+		size_t tls_message_length = min((int)message_length, (int)(data_end - message_ptr));
 
 		if (tls_content_type != TLS_CONTENT_TYPE_HANDSHAKE) 
 			goto nextMessage;
@@ -319,17 +316,30 @@ out:
 int gen_fake_sni(struct fake_type type,
 		const void *ipxh, size_t iph_len, 
 		const struct tcphdr *tcph, size_t tcph_len,
-		uint8_t *buf, size_t *buflen) {
+		uint8_t **ubuf, size_t *ubuflen) {
 	size_t data_len = type.fake_len;
+	uint8_t *buf = NULL;
+	int ret;
 
 	if (type.type == FAKE_PAYLOAD_RANDOM && data_len == 0) {
 		data_len = (size_t)randint() % 1200;
 	}
 
-	if (!ipxh || !tcph || !buf || !buflen)
+	if (!ipxh || !tcph || !ubuf || !ubuflen)
 		return -EINVAL;
 
 	int ipxv = netproto_version(ipxh, iph_len);
+
+	if (ipxv == IP6VERSION) {
+		iph_len = sizeof(struct ip6_hdr);
+	}
+
+	size_t dlen = iph_len + tcph_len + data_len;
+	size_t buffer_len = dlen + 50;
+	buf = malloc(buffer_len);
+	if (buf == NULL) {
+		return -ENOMEM;
+	}
 
 	if (ipxv == IP4VERSION) {
 		const struct iphdr *iph = ipxh;
@@ -341,19 +351,14 @@ int gen_fake_sni(struct fake_type type,
 	} else if (ipxv == IP6VERSION) {
 		const struct ip6_hdr *iph = ipxh;
 
-		iph_len = sizeof(struct ip6_hdr);
 		memcpy(buf, iph, iph_len);
 		struct ip6_hdr *niph = (struct ip6_hdr *)buf;
 
 		niph->ip6_nxt = IPPROTO_TCP;
 	} else {
-		return -EINVAL;
+		ret = -EINVAL;
+		goto error;
 	}
-
-	size_t dlen = iph_len + tcph_len + data_len;
-
-	if (*buflen < dlen) 
-		return -ENOMEM;
 
 	memcpy(buf + iph_len, tcph, tcph_len);
 	uint8_t *bfdptr = buf + iph_len + tcph_len;
@@ -391,10 +396,19 @@ int gen_fake_sni(struct fake_type type,
 		niph->ip6_plen = htons(dlen - iph_len);
 	}
 
-	fail_packet(type.strategy, buf, &dlen, *buflen);
+	ret = fail_packet(type.strategy, buf, &dlen, buffer_len);
+	if (ret < 0) {
+		lgerror(ret, "fail_packet");
+		goto error;
+	}
 
-	*buflen = dlen;
+
+	*ubuflen = dlen;
+	*ubuf = buf;
 	
 	return 0;
+error:
+	free(buf);
+	return ret;
 }
 

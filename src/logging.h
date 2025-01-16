@@ -21,28 +21,9 @@
 #define LOGGING_H
 #include "config.h"
 
-#ifdef KERNEL_SPACE
-#include <linux/kernel.h>
-#include <linux/module.h>
-#define printf pr_info
-#define perror pr_err
-
 #define LOG_ERR KERN_ERR
 #define LOG_INFO KERN_INFO
 #define LOG_WARN KERN_WARNING
-
-#define print_message(level, msg, ...) \
-	(printk(level msg, ##__VA_ARGS__))
-
-#else
-#include <stdio.h> // IWYU pragma: export
-#include <errno.h>
-#include <syslog.h> 
-
-#define print_message(level, msg, ...) \
-	(config.syslog ? (void)(syslog((level), msg, ##__VA_ARGS__)) : (void)(printf(msg, ##__VA_ARGS__) + fflush(stdout)))
-
-#endif /* PROGRAM_SPACE */
 
 /**
  * Defined in args.c
@@ -53,7 +34,27 @@ extern size_t ylgh_leftbuf;
 extern char *ylgh_curptr;
 extern int ylgh_ndnl;
 
-#define LOG_LEVEL (config.verbose)
+#define LOG_LEVEL (logging_conf.verbose)
+#define DO_INSTAFLUSH (logging_conf.instaflush)
+#define DO_SYSLOG (logging_conf.syslog)
+
+#ifdef KERNEL_SPACE
+#include <linux/kernel.h>
+#include <linux/module.h>
+#define printf pr_info
+#define perror pr_err
+#define print_message(level, msg, ...) \
+	(printk(level msg, ##__VA_ARGS__))
+
+#else
+#include <stdio.h> // IWYU pragma: export
+#include <errno.h>
+#include <syslog.h> 
+
+#define print_message(level, msg, ...) \
+	(DO_SYSLOG ? (void)(syslog((level), msg, ##__VA_ARGS__)) : (void)(printf(msg, ##__VA_ARGS__) + fflush(stdout)))
+
+#endif /* PROGRAM_SPACE */
 
 /**
  * For flushing only. Use log_buf_write for writing.
@@ -128,7 +129,7 @@ extern int ylgh_ndnl;
 	if (LOG_LEVEL >= VERBOSE_TRACE) {			\
 		ylgh_ndnl = 1;					\
 		log_buf(LOG_INFO, msg, ##__VA_ARGS__);		\
-		if (config.instaflush) {			\
+		if (DO_INSTAFLUSH) {			\
 			log_buf_flush(LOG_INFO);		\
 		}						\
 	}							\

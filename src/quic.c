@@ -285,13 +285,25 @@ int udp_fail_packet(struct udp_failing_strategy strategy, uint8_t *payload, size
 int gen_fake_udp(struct udp_fake_type type,
 		const void *ipxh, size_t iph_len, 
 		const struct udphdr *udph,
-		uint8_t *buf, size_t *buflen) {
+		uint8_t **ubuf, size_t *ubuflen) {
 	size_t data_len = type.fake_len;
+	int ret;
 
-	if (!ipxh || !udph || !buf || !buflen)
+	if (!ipxh || !udph || !ubuf || !ubuflen)
 		return -EINVAL;
 
 	int ipxv = netproto_version(ipxh, iph_len);
+	
+	if (ipxv == IP6VERSION) {
+		iph_len = sizeof(struct ip6_hdr);
+	}
+
+	size_t dlen = iph_len + sizeof(struct udphdr) + data_len;
+	size_t buffer_len = dlen + 50;
+	uint8_t *buf = malloc(buffer_len);
+	if (buf == NULL) {
+		return -ENOMEM;
+	}
 
 	if (ipxv == IP4VERSION) {
 		const struct iphdr *iph = ipxh;
@@ -303,19 +315,14 @@ int gen_fake_udp(struct udp_fake_type type,
 	} else if (ipxv == IP6VERSION) {
 		const struct ip6_hdr *iph = ipxh;
 
-		iph_len = sizeof(struct ip6_hdr);
 		memcpy(buf, iph, iph_len);
 		struct ip6_hdr *niph = (struct ip6_hdr *)buf;
 
 		niph->ip6_nxt = IPPROTO_UDP;
 	} else {
-		return -EINVAL;
+		ret = -EINVAL;
+		goto error;
 	}
-
-	size_t dlen = iph_len + sizeof(struct udphdr) + data_len;
-
-	if (*buflen < dlen) 
-		return -ENOMEM;
 
 	memcpy(buf + iph_len, udph, sizeof(struct udphdr));
 	uint8_t *bfdptr = buf + iph_len + sizeof(struct udphdr);
@@ -336,11 +343,19 @@ int gen_fake_udp(struct udp_fake_type type,
 	
 	set_udp_checksum(nudph, buf, iph_len);
 
-	udp_fail_packet(type.strategy, buf, &dlen, *buflen);
+	ret = udp_fail_packet(type.strategy, buf, &dlen, buffer_len);
+	if (ret < 0) {
+		lgerror(ret, "udp_fail_packet");
+		goto error;
+	}
 
-	*buflen = dlen;
+	*ubuflen = dlen;
+	*ubuf = buf;
 	
 	return 0;
+error:
+	free(buf);
+	return ret;
 }
 
 int parse_quic_decrypted(
@@ -351,8 +366,6 @@ int parse_quic_decrypted(
 	const uint8_t *curptr = decrypted_message;
 	ssize_t curptr_len = decrypted_message_len;
 	ssize_t fret;
-	int ret;
-	struct tls_verdict tlsv = {0};
 	struct quic_frame_crypto fr_cr;
 
 	uint8_t *crypto_message = calloc(AVAILABLE_MTU, 1);
@@ -431,6 +444,10 @@ int detect_udp_filtered(const struct section_config_t *section,
 	}
 	
 	if (section->udp_filter_quic != UDP_FILTER_QUIC_DISABLED) {
+		if (section->dport_filter && ntohs(udph->dest) != 443)
+			goto match_port;
+
+
 		const struct quic_lhdr *qch;
 		size_t qch_len;
 		struct quic_cids qci;

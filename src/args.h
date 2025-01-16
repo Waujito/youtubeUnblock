@@ -24,8 +24,12 @@
 
 void print_version(void);
 void print_usage(const char *argv0);
-int  yparse_args(int argc, char *argv[]);
-size_t print_config(char *buffer, size_t buffer_size);
+/**
+ * Initializes _config_ and parses args to it.
+ */
+int  yparse_args(struct config_t *config, int argc, char *argv[]);
+size_t print_config(const struct config_t *config, char *buffer, size_t buffer_size);
+void parse_global_lgconf(const struct config_t *config);
 
 // Initializes configuration storage.
 int init_config(struct config_t *config);
@@ -34,9 +38,9 @@ int init_section_config(struct section_config_t **section, struct section_config
 // Frees configuration section
 void free_config_section(struct section_config_t *config);
 // Frees sections under config
-void free_config(struct config_t config);
+void free_config(struct config_t *config);
 
 /* Prints starting messages */
-void print_welcome(void);
+void print_welcome(const struct config_t *config);
 
 #endif /* ARGS_H */

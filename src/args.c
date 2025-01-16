@@ -34,12 +34,18 @@ size_t ylgh_leftbuf = LOGGING_BUFSIZE;
 char *ylgh_curptr = ylgh_buf;
 int ylgh_ndnl = 0;
 
+struct logging_config_t logging_conf = default_logging_config_set;
+
 #ifdef KERNEL_SPACE
 static int errno = 0;
 #define strtol kstrtol
 #endif
 
-struct config_t config = default_config_set; 
+void parse_global_lgconf(const struct config_t *config) {
+	logging_conf.syslog = config->syslog;
+	logging_conf.verbose = config->verbose;
+	logging_conf.instaflush = config->instaflush;
+}
 
 static int parse_sni_domains(struct domains_list **dlist, const char *domains_str, size_t domains_strlen) {
 	// Empty and shouldn't be used
@@ -269,6 +275,7 @@ enum {
 	OPT_PACKET_MARK,
 	OPT_SYNFAKE,
 	OPT_SYNFAKE_LEN,
+	OPT_NO_DPORT_FILTER,
 	OPT_SEG2DELAY,
 	OPT_THREADS,
 	OPT_SILENT,
@@ -318,6 +325,7 @@ static struct option long_opt[] = {
 	{"udp-faking-strategy",	1, 0, OPT_UDP_FAKING_STRATEGY},
 	{"udp-dport-filter",	1, 0, OPT_UDP_DPORT_FILTER},
 	{"udp-filter-quic",	1, 0, OPT_UDP_FILTER_QUIC},
+	{"no-dport-filter",	0, 0, OPT_NO_DPORT_FILTER},
 	{"threads",		1, 0, OPT_THREADS},
 	{"silent",		0, 0, OPT_SILENT},
 	{"trace",		0, 0, OPT_TRACE},
@@ -381,6 +389,7 @@ void print_usage(const char *argv0) {
 	printf("\t--udp-faking-strategy={checksum|ttl|none}\n");
 	printf("\t--udp-dport-filter=<5,6,200-500>\n");
 	printf("\t--udp-filter-quic={disabled|all|parse}\n");
+	printf("\t--no-dport-filter\n");
 	printf("\t--threads=<threads number>\n");
 	printf("\t--packet-mark=<mark>\n");
 	printf("\t--connbytes-limit=<pkts>\n");
@@ -398,20 +407,19 @@ void print_usage(const char *argv0) {
 	printf("\n");
 }
 
-int yparse_args(int argc, char *argv[]) {
+int yparse_args(struct config_t *config, int argc, char *argv[]) {
   	int opt;
 	int optIdx = 0;
 	optind=1, opterr=1, optreset=0;
 	long num;
 	int ret;
 
-	struct config_t rep_config;
-	ret = init_config(&rep_config);
+	ret = init_config(config);
 	if (ret < 0) 
 		return ret;
-	struct section_config_t *default_section = rep_config.last_section;
+	struct section_config_t *default_section = config->last_section;
 
-	struct section_config_t *sect_config = rep_config.last_section;
+	struct section_config_t *sect_config = config->last_section;
 	int sect_i = 0;
 	sect_config->id = sect_i++;
 	
@@ -424,13 +432,13 @@ int yparse_args(int argc, char *argv[]) {
 	while ((opt = getopt_long(argc, argv, "", long_opt, &optIdx)) != -1) {
 		switch (opt) {
 		case OPT_CLS:
-			free_config(rep_config);
-			ret = init_config(&rep_config);
+			free_config(config);
+			ret = init_config(config);
 			if (ret < 0) 
 				return ret;
-			default_section = rep_config.last_section;
+			default_section = config->last_section;
 
-			sect_config = rep_config.last_section;
+			sect_config = config->last_section;
 			sect_i = 0;
 			sect_config->id = sect_i++;
 			section_iter = SECT_ITER_DEFAULT;
@@ -453,17 +461,17 @@ int yparse_args(int argc, char *argv[]) {
 			break;
 #endif
 		case OPT_TRACE:
-			rep_config.verbose = VERBOSE_TRACE;
+			config->verbose = VERBOSE_TRACE;
 			break;
 		case OPT_INSTAFLUSH:
-			rep_config.instaflush = 1;
+			config->instaflush = 1;
 			break;
 		case OPT_SILENT:
-			rep_config.verbose = VERBOSE_INFO;
+			config->verbose = VERBOSE_INFO;
 			break;
 		case OPT_NO_GSO:
 #ifndef KERNEL_SPACE
-			rep_config.use_gso = 0;
+			config->use_gso = 0;
 #else
 			lgerr("--no-gso is not supported in kernel space");
 			goto invalid_opt;
@@ -471,23 +479,31 @@ int yparse_args(int argc, char *argv[]) {
 			break;
 		case OPT_NO_CONNTRACK:
 #ifndef KERNEL_SPACE
-			rep_config.use_conntrack = 0;
+			config->use_conntrack = 0;
 #else
 			lgerr("--no-conntrack is not supported in kernel space. Compile with make kmake EXTRA_CFLAGS=\"-DNO_CONNTRACK\" instead." );
 			goto invalid_opt;
 #endif
 			break;
 		case OPT_NO_IPV6:
-			rep_config.use_ipv6 = 0;
+#ifndef KERNEL_SPACE
+			config->use_ipv6 = 0;
+#else
+			lgerr("--no-ipv6 argument is not available "
+				"in the kernel module. "
+				"If you want to disable ipv6, compile with "
+				"make kmake EXTRA_CFLAGS=\"-DNO_IPV6\".");
+			goto invalid_opt;
+#endif
 			break;
 		case OPT_DAEMONIZE:
-			rep_config.daemonize = 1;
+			config->daemonize = 1;
 			break;
 		case OPT_NOCLOSE:
-			rep_config.noclose = 1;
+			config->noclose = 1;
 			break;
 		case OPT_SYSLOG:
-			rep_config.syslog = 1;
+			config->syslog = 1;
 			break;
 		case OPT_THREADS:
 			num = parse_numeric_option(optarg);
@@ -495,7 +511,7 @@ int yparse_args(int argc, char *argv[]) {
 				goto invalid_opt;
 			}
 
-			rep_config.threads = num;
+			config->threads = num;
 			break;
 		case OPT_QUEUE_NUM:
 			num = parse_numeric_option(optarg);
@@ -503,7 +519,7 @@ int yparse_args(int argc, char *argv[]) {
 				goto invalid_opt;
 			}
 
-			rep_config.queue_start_num = num;
+			config->queue_start_num = num;
 			break;
 		case OPT_PACKET_MARK:
 			num = parse_numeric_option(optarg);
@@ -511,24 +527,24 @@ int yparse_args(int argc, char *argv[]) {
 				goto invalid_opt;
 			}
 
-			rep_config.mark = num;
+			config->mark = num;
 			break;
 		case OPT_CONNBYTES_LIMIT:
 			num = parse_numeric_option(optarg);
 			if (errno != 0 || num < 0) {
 				goto invalid_opt;
 			}
-			rep_config.connbytes_limit = num;
+			config->connbytes_limit = num;
 			break;
 		case OPT_START_SECTION: 
 		{
 			struct section_config_t *nsect;
-			ret = init_section_config(&nsect, rep_config.last_section);
+			ret = init_section_config(&nsect, config->last_section);
 			if (ret < 0) {
 				goto error;
 			}
-			rep_config.last_section->next = nsect;
-			rep_config.last_section = nsect;
+			config->last_section->next = nsect;
+			config->last_section = nsect;
 			sect_config = nsect;
 			sect_config->id = sect_i++;
 			section_iter = SECT_ITER_INSIDE;
@@ -704,6 +720,9 @@ int yparse_args(int argc, char *argv[]) {
 			sect_config->fk_winsize = num;
 			break;
 
+		case OPT_NO_DPORT_FILTER:
+			sect_config->dport_filter = 0;
+			break;
 		case OPT_SEG2DELAY:
 			num = parse_numeric_option(optarg);
 			if (errno != 0 || num < 0) {
@@ -807,16 +826,12 @@ int yparse_args(int argc, char *argv[]) {
 
 	}
 
-	struct config_t old_config = config;
-	config = rep_config;
-	free_config(old_config);
-
 	errno = 0;
 	return 0;
 
 #ifndef KERNEL_SPACE
 stop_exec:
-	free_config(rep_config);
+	free_config(config);
 	errno = 0;
 	return 1;
 #endif
@@ -835,7 +850,7 @@ error:
 	}
 
 	errno = -ret;
-	free_config(rep_config);
+	free_config(config);
 	return ret;
 }
 
@@ -1006,59 +1021,63 @@ static size_t print_config_section(const struct section_config_t *section, char 
 		}
 	}
 
+	if (section->dport_filter == 0) {
+		print_cnf_buf("--no-dport-filter");	
+	}
+
 	return buffer_size - buf_sz;
 }
 // Returns written buffer length
-size_t print_config(char *buffer, size_t buffer_size) {
+size_t print_config(const struct config_t *config, char *buffer, size_t buffer_size) {
 	char *buf_ptr = buffer;
 	size_t buf_sz = buffer_size;
 	size_t sz;
 
 #ifndef KERNEL_SPACE
-	print_cnf_buf("--queue-num=%d", config.queue_start_num);
-	print_cnf_buf("--threads=%d", config.threads);
+	print_cnf_buf("--queue-num=%d", config->queue_start_num);
+	print_cnf_buf("--threads=%d", config->threads);
 #endif
-	print_cnf_buf("--packet-mark=%d", config.mark);
+	print_cnf_buf("--packet-mark=%d", config->mark);
 
 #ifndef KERNEL_SPACE
-	if (config.daemonize) {
+	if (config->daemonize) {
 		print_cnf_buf("--daemonize");
 	}
-	if (config.syslog) {
+	if (config->syslog) {
 		print_cnf_buf("--syslog");
 	}
-	if (config.noclose) {
+	if (config->noclose) {
 		print_cnf_buf("--noclose");
 	}
-	if (!config.use_gso) {
+	if (!config->use_gso) {
 		print_cnf_buf("--no-gso");
 	}
-	if (!config.use_conntrack) {
+	if (!config->use_conntrack) {
 		print_cnf_buf("--no-conntrack");
 	}
 #endif
 
 #ifdef KERNEL_SPACE
-	print_cnf_buf("--connbytes-limit=%d", config.connbytes_limit);
+	print_cnf_buf("--connbytes-limit=%d", config->connbytes_limit);
 #endif
-	if (!config.use_ipv6) {
+	if (!config->use_ipv6) {
 		print_cnf_buf("--no-ipv6");
 	}
-	if (config.verbose == VERBOSE_TRACE) {
+	if (config->verbose == VERBOSE_TRACE) {
 		print_cnf_buf("--trace");
 	}
-	if (config.instaflush) {
+	if (config->instaflush) {
 		print_cnf_buf("--instaflush");
 	}
-	if (config.verbose == VERBOSE_INFO) {
+	if (config->verbose == VERBOSE_INFO) {
 		print_cnf_buf("--silent");
 	}
 	
-	size_t wbuf_len = print_config_section(config.first_section, buf_ptr, buf_sz);
+	size_t wbuf_len = print_config_section(config->first_section, buf_ptr, buf_sz);
 	buf_ptr += wbuf_len;
 	buf_sz -= wbuf_len;
 
-	for (struct section_config_t *section = config.first_section->next; 
+	for (struct section_config_t *section = config->first_section->next; 
 		section != NULL; section = section->next) {
 		print_cnf_buf("--fbegin");
 		wbuf_len = print_config_section(section, buf_ptr, buf_sz);
@@ -1070,12 +1089,12 @@ size_t print_config(char *buffer, size_t buffer_size) {
 	return buffer_size - buf_sz;
 }
 
-void print_welcome(void) {
+void print_welcome(const struct config_t *config) {
 	char *welcome_message = malloc(4000);
 	if (welcome_message == NULL) 
 		return;
 
-	size_t sz = print_config(welcome_message, 4000);
+	size_t sz = print_config(config, welcome_message, 4000);
 	printf("Running with flags: %.*s\n", (int)sz, welcome_message);
 	free(welcome_message);
 }
@@ -1138,8 +1157,8 @@ void free_config_section(struct section_config_t *section) {
 	free(section);
 }
 
-void free_config(struct config_t config) {
-	for (struct section_config_t *sct = config.last_section; sct != NULL;) {
+void free_config(struct config_t *config) {
+	for (struct section_config_t *sct = config->last_section; sct != NULL;) {
 		struct section_config_t *psct = sct->prev;
 		free_config_section(sct);
 		sct = psct;

@@ -59,6 +59,8 @@ int rawsocket = -2;
 pthread_mutex_t raw6socket_lock;
 int raw6socket = -2;
 
+static struct config_t *cur_config = NULL;
+
 static int open_socket(struct mnl_socket **_nl) {
 	struct mnl_socket *nl = NULL;
 	nl = mnl_socket_open(NETLINK_NETFILTER);
@@ -106,7 +108,7 @@ static int open_raw_socket(void) {
 		return -1;
 	}
 
-	int mark = config.mark;
+	int mark = cur_config->mark;
 	if (setsockopt(rawsocket, SOL_SOCKET, SO_MARK, &mark, sizeof(mark)) < 0)
 	{
 		lgerror(-errno, "setsockopt(SO_MARK, %d) failed", mark);
@@ -158,7 +160,7 @@ static int open_raw6_socket(void) {
 		return -1;
 	}
 
-	int mark = config.mark;
+	int mark = cur_config->mark;
 	if (setsockopt(raw6socket, SOL_SOCKET, SO_MARK, &mark, sizeof(mark)) < 0)
 	{
 		lgerror(-errno, "setsockopt(SO_MARK, %d) failed", mark);
@@ -442,14 +444,14 @@ static int send_raw_ipv4(const uint8_t *pkt, size_t pktlen) {
 		}
 	};
 
-	if (config.threads != 1)
+	if (cur_config->threads != 1)
 		pthread_mutex_lock(&rawsocket_lock);
 
 	int sent = sendto(rawsocket, 
 	    pkt, pktlen, MSG_DONTWAIT, 
 	    (struct sockaddr *)&daddr, sizeof(daddr));
 
-	if (config.threads != 1)
+	if (cur_config->threads != 1)
 		pthread_mutex_unlock(&rawsocket_lock);
 
 	/* The function will return -errno on error as well as errno value set itself */
@@ -477,7 +479,7 @@ static int send_raw_ipv6(const uint8_t *pkt, size_t pktlen) {
 		.sin6_addr = iph->ip6_dst
 	};
 
-	if (config.threads != 1)
+	if (cur_config->threads != 1)
 		pthread_mutex_lock(&rawsocket_lock);
 
 	int sent = sendto(raw6socket, 
@@ -486,7 +488,7 @@ static int send_raw_ipv6(const uint8_t *pkt, size_t pktlen) {
 
 	lgtrace_addp("rawsocket sent %d", sent);
 
-	if (config.threads != 1)
+	if (cur_config->threads != 1)
 		pthread_mutex_unlock(&rawsocket_lock);
 
 	/* The function will return -errno on error as well as errno value set itself */
@@ -501,50 +503,46 @@ static int send_raw_socket(const uint8_t *pkt, size_t pktlen) {
 	if (pktlen > AVAILABLE_MTU) {
 		lgtrace("Split packet!");
 
-		NETBUF_ALLOC(buff1, MNL_SOCKET_BUFFER_SIZE);
-		if (!NETBUF_CHECK(buff1)) {
+		size_t buff1_size = pktlen;
+		uint8_t *buff1 = malloc(buff1_size);
+		if (buff1 == NULL) {
 			lgerror(-ENOMEM, "Allocation error");
 			return -ENOMEM;
 		}
-
-		NETBUF_ALLOC(buff2, MNL_SOCKET_BUFFER_SIZE);
-		if (!NETBUF_CHECK(buff2)) {
+		size_t buff2_size = pktlen;
+		uint8_t *buff2 = malloc(buff2_size);
+		if (buff2 == NULL) {
 			lgerror(-ENOMEM, "Allocation error");
-			NETBUF_FREE(buff1);
+			free(buff1);
 			return -ENOMEM;
 		}
-
-		size_t buff1_size = MNL_SOCKET_BUFFER_SIZE;
-		size_t buff2_size = MNL_SOCKET_BUFFER_SIZE;
 
 		if ((ret = tcp_frag(pkt, pktlen, AVAILABLE_MTU-128,
 			buff1, &buff1_size, buff2, &buff2_size)) < 0) {
 
-			errno = -ret;
-			goto free_buffs;
+			goto erret_lc;
 		}
 
 		int sent = 0;
-		int status = send_raw_socket(buff1, buff1_size);
+		ret = send_raw_socket(buff1, buff1_size);
 
-		if (status >= 0) sent += status;
+		if (ret >= 0) sent += ret;
 		else {
-			ret = status;
-			goto free_buffs;
+			goto erret_lc;
 		}
 
-		status = send_raw_socket(buff2, buff2_size);
-		if (status >= 0) sent += status;
+		ret = send_raw_socket(buff2, buff2_size);
+		if (ret >= 0) sent += ret;
 		else {
-			ret = status;
-			goto free_buffs;
+			goto erret_lc;
 		}
 
-		ret = sent;
-
-free_buffs:
-		NETBUF_FREE(buff1)
-		NETBUF_FREE(buff2)
+		free(buff1);
+		free(buff2);
+		return sent;
+erret_lc:
+		free(buff1);
+		free(buff2);
 		return ret;
 	}
 	
@@ -555,13 +553,14 @@ free_buffs:
 	} else if (ipvx == IP6VERSION) {
 		ret = send_raw_ipv6(pkt, pktlen);
 	} else {
-		lginfo("proto version %d is unsupported", ipvx);
+		printf("proto version %d is unsupported\n", ipvx);
 		return -EINVAL;
 	}
 
 	lgtrace_addp("raw_sock_send: %d", ret);
 	return ret;
 }
+
 
 // Per-queue data. Passed to queue_cb.
 struct queue_data {
@@ -669,8 +668,8 @@ static int queue_cb(const struct nlmsghdr *nlh, void *data) {
 
 	if (attr[NFQA_MARK] != NULL) {
 		// Skip packets sent by rawsocket to escape infinity loop.
-		if ((ntohl(mnl_attr_get_u32(attr[NFQA_MARK])) & config.mark) == 
-			config.mark) {
+		if ((ntohl(mnl_attr_get_u32(attr[NFQA_MARK])) & cur_config->mark) == 
+			cur_config->mark) {
 			return fallback_accept_packet(id, *qdata);
 		}
 	}
@@ -693,7 +692,7 @@ static int queue_cb(const struct nlmsghdr *nlh, void *data) {
 ct_out:
 	verdnlh = nfq_nlmsg_put(buf, NFQNL_MSG_VERDICT, qdata->queue_num);
 
-	ret = process_packet(&packet);
+	ret = process_packet(cur_config, &packet);
 
 	switch (ret) {
 		case PKT_DROP:
@@ -725,12 +724,11 @@ int init_queue(int queue_num) {
 	uint32_t portid = mnl_socket_get_portid(nl);
 
 	struct nlmsghdr *nlh;
-	NETBUF_ALLOC(bbuf, BUF_SIZE);
-	if (!NETBUF_CHECK(bbuf)) {
+	char *buf = malloc(BUF_SIZE);
+	if (buf == NULL) {
 		lgerror(-ENOMEM, "Allocation error");
 		goto die_alloc;
 	}
-	char *buf = (char *)bbuf;
 
 	/* Support for kernels versions < 3.8 */
 	// Obsolete and ignored in kernel version 3.8
@@ -752,7 +750,7 @@ int init_queue(int queue_num) {
 		goto die;
 	}
 
-	if (config.use_ipv6) {
+	if (cur_config->use_ipv6) {
 		nlh = nfq_nlmsg_put(buf, NFQNL_MSG_CONFIG, queue_num);
 		nfq_nlmsg_cfg_put_cmd(nlh, PF_INET6, NFQNL_CFG_CMD_PF_UNBIND);
 
@@ -785,10 +783,10 @@ int init_queue(int queue_num) {
 	unsigned int cfg_flags = NFQA_CFG_F_GSO | NFQA_CFG_F_CONNTRACK | NFQA_CFG_F_FAIL_OPEN;
 	unsigned int cfg_mask = 0;
 
-	if (config.use_gso) {
+	if (cur_config->use_gso) {
 		cfg_mask |= NFQA_CFG_F_GSO;
 	}
-	if (config.use_conntrack) {
+	if (cur_config->use_conntrack) {
 		cfg_mask |= NFQA_CFG_F_CONNTRACK;
 	}
 	cfg_mask |= NFQA_CFG_F_FAIL_OPEN;
@@ -837,12 +835,12 @@ int init_queue(int queue_num) {
 	}
 
 
-	NETBUF_FREE(bbuf)
+	free(buf);
 	close_socket(&nl);
 	return 0;
 
 die:
-	NETBUF_FREE(bbuf)
+	free(buf);
 die_alloc:
 	close_socket(&nl);
 	return -1;
@@ -879,7 +877,9 @@ struct instance_config_t instance_config = {
 
 int main(int argc, char *argv[]) {
 	int ret;
-	if ((ret = yparse_args(argc, argv)) != 0) {
+	struct config_t config;
+
+	if ((ret = yparse_args(&config, argc, argv)) != 0) {
 		if (ret < 0) {
 			lgerror(-errno, "Unable to parse args");
 			exit(EXIT_FAILURE);
@@ -888,7 +888,10 @@ int main(int argc, char *argv[]) {
 	}
 
 	print_version();
-	print_welcome();
+	print_welcome(&config);
+
+	parse_global_lgconf(&config);
+	cur_config = &config;
 
 
 	if (open_raw_socket() < 0) {

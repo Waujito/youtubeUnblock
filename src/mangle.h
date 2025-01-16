@@ -33,7 +33,7 @@
  * Processes the packet and returns verdict.
  * This is the primary function that traverses the packet.
  */
-int process_packet(const struct packet_data *pd);
+int process_packet(const struct config_t *config, const struct packet_data *pd);
 
 
 /**

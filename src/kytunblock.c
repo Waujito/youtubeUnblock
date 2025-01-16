@@ -61,8 +61,92 @@ MODULE_AUTHOR("Vadim Vetrov <vetrovvd@gmail.com>");
 MODULE_DESCRIPTION("Linux kernel module for youtubeUnblock");
 
 static struct socket *rawsocket;
-
 static struct socket *raw6socket;
+
+#define MAX_ARGC 1024
+static char *argv[MAX_ARGC];
+
+static struct config_t *cur_config;
+
+static void config_release(struct kref *ref)
+{
+	struct config_t *config = container_of(ref, struct config_t, refcount);
+	free_config(config);
+	kfree(config);
+	pr_warn("Config release\n");
+}
+
+static int params_set(const char *cval, const struct kernel_param *kp) {
+	int ret;
+
+	int cv_len = strlen(cval);
+	if (cv_len >= 1 && cval[cv_len - 1] == '\n') {
+		cv_len--;
+	}
+
+	const char *ytb_prefix = "youtubeUnblock ";
+	int ytbp_len = strlen(ytb_prefix);
+	int len = cv_len + ytbp_len; 
+
+	char *val = kmalloc(len + 1, GFP_KERNEL); // 1 for null-terminator
+	strncpy(val, ytb_prefix, ytbp_len);
+	strncpy(val + ytbp_len, cval, cv_len);
+	val[len] = '\0';
+
+	int argc = 0;
+	argv[argc++] = val;
+	
+	for (int i = 0; i < len; i++) {
+		if (val[i] == ' ') {
+			val[i] = '\0';
+
+			// safe because of null-terminator
+			if (val[i + 1] != ' ' && val[i + 1] != '\0') {
+				argv[argc++] = val + i + 1;
+			}
+		}
+	}
+
+
+	struct config_t *config;
+
+	config = kmalloc(sizeof(*config), GFP_KERNEL);
+	if (!config) {
+		ret = -ENOMEM;
+		goto ret_fval;
+	}
+
+	ret = yparse_args(config, argc, argv);
+
+	if (ret < 0) {
+		kfree(config);
+		goto ret_fval;
+	}
+	kref_init(&config->refcount);
+
+	struct config_t *old_config = cur_config;
+	cur_config = config;
+	parse_global_lgconf(cur_config);
+
+	kref_put(&old_config->refcount, config_release);
+	
+ret_fval:
+	kfree(val);
+	return ret;
+}
+
+static int params_get(char *buffer, const struct kernel_param *kp) {
+	size_t len = print_config(cur_config, buffer, 4000);
+	return len;
+}
+
+static const struct kernel_param_ops params_ops = {
+	.set = params_set,
+	.get = params_get,
+};
+
+module_param_cb(parameters, &params_ops, NULL, 0664);
+
 
 static int open_raw_socket(void) {
 	int ret = 0;
@@ -75,7 +159,7 @@ static int open_raw_socket(void) {
 
 	// That's funny, but this is how it is done in the kernel
 	// https://elixir.bootlin.com/linux/v3.17.7/source/net/core/sock.c#L916
-	rawsocket->sk->sk_mark=config.mark;
+	rawsocket->sk->sk_mark=cur_config->mark;
 
 	return 0;
 
@@ -85,10 +169,15 @@ err:
 
 static void close_raw_socket(void) {
 	sock_release(rawsocket);
+	rawsocket = NULL;
 }
 
 static int send_raw_ipv4(const uint8_t *pkt, size_t pktlen) {
 	int ret = 0;
+	if (rawsocket == NULL) {
+		return -ENOTSOCK;
+
+	}
 	if (pktlen > AVAILABLE_MTU) return -ENOMEM;
 
 	struct iphdr *iph;
@@ -137,7 +226,7 @@ static int open_raw6_socket(void) {
 
 	// That's funny, but this is how it is done in the kernel
 	// https://elixir.bootlin.com/linux/v3.17.7/source/net/core/sock.c#L916
-	raw6socket->sk->sk_mark=config.mark;
+	raw6socket->sk->sk_mark=cur_config->mark;
 
 	return 0;
 
@@ -147,10 +236,16 @@ err:
 
 static void close_raw6_socket(void) {
 	sock_release(raw6socket);
+	raw6socket = NULL;
 }
 
 static int send_raw_ipv6(const uint8_t *pkt, size_t pktlen) {
 	int ret = 0;
+	if (raw6socket == NULL) {
+		return -ENOTSOCK;
+
+	}
+
 	if (pktlen > AVAILABLE_MTU) return -ENOMEM;
 
 	struct ip6_hdr *iph;
@@ -189,21 +284,21 @@ static int send_raw_socket(const uint8_t *pkt, size_t pktlen) {
 	int ret;
 
 	if (pktlen > AVAILABLE_MTU) {
-		lgdebug("The packet is too big and may cause issues!");
+		lgtrace("Split packet!");
 
-		NETBUF_ALLOC(buff1, MAX_PACKET_SIZE);
-		if (!NETBUF_CHECK(buff1)) {
+		size_t buff1_size = pktlen;
+		uint8_t *buff1 = malloc(buff1_size);
+		if (buff1 == NULL) {
 			lgerror(-ENOMEM, "Allocation error");
 			return -ENOMEM;
 		}
-		NETBUF_ALLOC(buff2, MAX_PACKET_SIZE);
-		if (!NETBUF_CHECK(buff2)) {
+		size_t buff2_size = pktlen;
+		uint8_t *buff2 = malloc(buff2_size);
+		if (buff2 == NULL) {
 			lgerror(-ENOMEM, "Allocation error");
-			NETBUF_FREE(buff2);
+			free(buff1);
 			return -ENOMEM;
 		}
-		size_t buff1_size = MAX_PACKET_SIZE;
-		size_t buff2_size = MAX_PACKET_SIZE;
 
 		if ((ret = tcp_frag(pkt, pktlen, AVAILABLE_MTU-128,
 			buff1, &buff1_size, buff2, &buff2_size)) < 0) {
@@ -224,13 +319,13 @@ static int send_raw_socket(const uint8_t *pkt, size_t pktlen) {
 		else {
 			goto erret_lc;
 		}
-
-		NETBUF_FREE(buff1);
-		NETBUF_FREE(buff2);
+		 
+		free(buff1);
+		free(buff2);
 		return sent;
 erret_lc:
-		NETBUF_FREE(buff1);
-		NETBUF_FREE(buff2);
+		free(buff1);
+		free(buff2);
 		return ret;
 	}
 	
@@ -379,154 +474,185 @@ static int conntrack_parse(const struct sk_buff *skb,
 
 #endif /* RHEL or not RHEL */
 
-
-
 static NF_CALLBACK(ykb_nf_hook, skb) {
 	int ret;
 	struct packet_data pd = {0};
+	uint8_t *data_buf = NULL;
+	int nf_verdict = NF_ACCEPT;
 
-	if ((skb->mark & config.mark) == config.mark) 
-		goto accept;
+	struct config_t *config = cur_config;
+	kref_get(&config->refcount);
+
+	if ((skb->mark & config->mark) == config->mark)  {
+		goto send_verdict;
+	}
 	
-	if (skb->head == NULL) 
-		goto accept;
+	if (skb->head == NULL) {
+		goto send_verdict;
+	}
 	
-	if (skb->len > MAX_PACKET_SIZE)
-		goto accept;
+	if (skb->len >= MAX_PACKET_SIZE) {
+		goto send_verdict;
+	}
 
 	ret = conntrack_parse(skb, &pd.yct);
 	if (ret < 0) {
 		lgtrace("[TRACE] conntrack_parse error code\n");
 	}
 
-	if (config.connbytes_limit != 0 && yct_is_mask_attr(YCTATTR_ORIG_PACKETS, &pd.yct) && pd.yct.orig_packets > config.connbytes_limit)
-		goto accept;
+	if (config->connbytes_limit != 0 && yct_is_mask_attr(YCTATTR_ORIG_PACKETS, &pd.yct) && pd.yct.orig_packets > config->connbytes_limit)
+		goto send_verdict;
 
 
-	ret = skb_linearize(skb);
-	if (ret < 0) {
-		lgerror(ret, "Cannot linearize");
-		goto accept;
+	if (skb_is_nonlinear(skb)) {
+		data_buf = kmalloc(skb->len, GFP_KERNEL);
+		if (data_buf == NULL) {
+			lgerror(-ENOMEM, "Cannot allocate packet buffer");
+		}
+		ret = skb_copy_bits(skb, 0, data_buf, skb->len);
+		if (ret) {
+			lgerror(ret, "Cannot copy bits");
+			goto send_verdict;
+		}
+
+		pd.payload = data_buf;	
+	} else {
+		pd.payload = skb->data;
 	}
 
-	pd.payload = skb->data;
 	pd.payload_len = skb->len;
 
-	int vrd = process_packet(&pd);
+	int vrd = process_packet(config, &pd);
 
 	switch(vrd) {
 		case PKT_ACCEPT:
-			goto accept;
+			nf_verdict = NF_ACCEPT;
+			break;
 		case PKT_DROP:
-			goto drop;
+			nf_verdict = NF_STOLEN;
+			kfree_skb(skb);
+			break;
 	}
 
-accept:
-	return NF_ACCEPT;
-drop:
-	kfree_skb(skb);
-	return NF_STOLEN;
+send_verdict:
+	kfree(data_buf);
+	kref_put(&config->refcount, config_release);
+	return nf_verdict;
 }
 
-
-static struct nf_hook_ops ykb_nf_reg __read_mostly = {
+static struct nf_hook_ops ykb_hook_ops[] = {
+{
 	.hook		= ykb_nf_hook,
 	.pf		= NFPROTO_IPV4,
 	.hooknum	= NF_INET_POST_ROUTING,
 	.priority	= NF_IP_PRI_MANGLE,
-};
-
-static struct nf_hook_ops ykb6_nf_reg __read_mostly = {
+}
+#ifndef NO_IPV6
+,{
 	.hook		= ykb_nf_hook,
 	.pf		= NFPROTO_IPV6,
 	.hooknum	= NF_INET_POST_ROUTING,
 	.priority	= NF_IP6_PRI_MANGLE,
+}
+#endif
 };
+static const size_t ykb_hooks_sz = sizeof(ykb_hook_ops) / sizeof(struct nf_hook_ops);
+
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 3, 0)
+static int ykb_net_init(struct net *net)
+{
+	int ret;
+	ret = nf_register_net_hooks(net, ykb_hook_ops, ykb_hooks_sz);
+	if (ret < 0)
+		return ret;
+
+	return 0;
+}
+
+static void ykb_net_exit(struct net *net)
+{
+	nf_unregister_net_hooks(net, ykb_hook_ops, ykb_hooks_sz);
+}
+
+static struct pernet_operations ykb_pernet_ops = {
+	.init = ykb_net_init,
+	.exit = ykb_net_exit
+};
+#endif /* LINUX_VERSION_CODE >= KERNEL_VERSION(4, 3, 0) */
 
 static int __init ykb_init(void) {
-#ifdef NO_CONNTRACK
-	lgwarning("Conntrack disabled.");
-#endif
+	int ret;
 
-	int ret = 0;
-	ret = init_config(&config);
-	if (ret < 0) goto err;
+#ifdef NO_CONNTRACK
+	lgwarning("Conntrack is disabled.");
+#endif
+#ifdef NO_IPV6
+	lgwarning("IPv6 is disabled.");
+#endif
+	cur_config = kmalloc(sizeof(*cur_config), GFP_KERNEL);
+	if (!cur_config) {
+		return -ENOMEM;
+	}
+	ret = init_config(cur_config);
+	if (ret < 0) {
+		kfree(cur_config);
+		goto err;
+	}
+
+	kref_init(&cur_config->refcount);
 
 	ret = open_raw_socket();
-	if (ret < 0) goto err;
-
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(4,13,0)
-	struct net *n;
-
-	for_each_net(n) {
-		ret = nf_register_net_hook(n, &ykb_nf_reg);
-		if (ret < 0) { 
-			lgerror(ret, "register net_hook");
-		}
-	}
-#else
-	ret = nf_register_hook(&ykb_nf_reg);
 	if (ret < 0) {
-		lgerror(ret, "register net_hook");
+		lgerror(ret, "ipv4 rawsocket initialization failed!");
+		goto err_config;
 	}
-#endif
 
+#ifndef NO_IPV6
+	ret = open_raw6_socket();
+	if (ret < 0) {
+		lgerror(ret, "ipv6 rawsocket initialization failed!");
+		goto err_close4_sock;
+	}
+#endif /* NO_IPV6 */
 
-	if (config.use_ipv6) {
-		ret = open_raw6_socket();
-		if (ret < 0) {
-			config.use_ipv6 = 0;
-			lgwarning("ipv6 disabled!");
-			goto ipv6_fallback;
-		}
-
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(4,13,0)
-		struct net *n;
-		for_each_net(n) {
-			ret = nf_register_net_hook(n, &ykb6_nf_reg);
-			if (ret < 0) {
-				lgerror(ret, "register net6_hook");
-			}
-		}
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 3, 0)
+	ret = register_pernet_subsys(&ykb_pernet_ops);
 #else
-		ret = nf_register_hook(&ykb6_nf_reg);
-		if (ret < 0) {
-			lgerror(ret, "register net6_hook");
-		}
+	ret = nf_register_hooks(ykb_hook_ops, ykb_hooks_sz);
 #endif
-	}
 
-ipv6_fallback:
+	if (ret < 0)
+		goto err_close_sock;
+
+
 	lginfo("youtubeUnblock kernel module started.\n");
 	return 0;
 
+err_close_sock:
+#ifndef NO_IPV6
+	close_raw6_socket();
+#endif
+err_close4_sock:
+	close_raw_socket();
+err_config:
+	kref_put(&cur_config->refcount, config_release);
 err:
 	return ret;
 }
 
-static void __exit ykb_destroy(void) {
-	if (config.use_ipv6) {
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(4,13,0)
-		struct net *n;
-		for_each_net(n)
-			nf_unregister_net_hook(n, &ykb6_nf_reg);
+static void __exit ykb_destroy(void) {	
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 3, 0)
+	unregister_pernet_subsys(&ykb_pernet_ops);
 #else
-		nf_unregister_hook(&ykb6_nf_reg);
+	nf_unregister_hooks(ykb_hook_ops, ykb_hooks_sz);
 #endif
-		close_raw6_socket();
-	}
 
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(4,13,0)
-	struct net *n;
-	for_each_net(n)
-		nf_unregister_net_hook(n, &ykb_nf_reg);
-#else
-	nf_unregister_hook(&ykb_nf_reg);
+#ifndef NO_IPV6
+	close_raw6_socket();
 #endif
 
 	close_raw_socket();
-
-	free_config(config);
+	kref_put(&cur_config->refcount, config_release);
 	lginfo("youtubeUnblock kernel module destroyed.\n");
 }
 
