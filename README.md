@@ -58,6 +58,8 @@ For Windows use [GoodbyeDPI by ValdikSS](https://github.com/ValdikSS/GoodbyeDPI)
 
 When you got the release package, you should install it. Go to your router interface, to *System->Software*, do *Update lists* and install youtubeUnblock via *install_package* button. Then, you should go to *System-Startup* menu and reload the firewall (You may also do it within *Services->youtubeUnblock* menu). 
 
+Since OpenWRT **main** branch switched to apk instead of opkg, but this is not released yet, here is not deploys for apk in **Releases**. But **apk is supported** in PR #196.
+
 To make it work you should register an iptables rule and install required kernel modules. The list of modules depends on the version of OpenWRT and which firewall do you use (iptables or nftables). For most modern versions of OpenWRT (v23.x, v22.x) you should use nftables rules, for older ones it depends, but typically iptables.
 
 The common dependency is
@@ -306,7 +308,7 @@ nft insert rule inet fw4 forward ip saddr 192.168.. udp dport 443 counter drop
 
 For **iptables**
 ```
-iptables -I OUTPUT --src 192.168.. -p udp --dport 443 -j DROP
+iptables -I FORWARD --src 192.168.. -p udp --dport 443 -j DROP
 ```
 
 Where you have to replace 192.168.. with ip of your television.
