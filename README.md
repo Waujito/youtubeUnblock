@@ -9,7 +9,7 @@
     - [IPv6](#ipv6)
   - [Check it](#check-it)
   - [Flags](#flags)
-  - [UDP](#udp)
+  - [UDP/QUIC](#udp/quic)
   - [Troubleshooting](#troubleshooting)
     - [TV](#tv)
     - [Troubleshooting EPERMS (Operation not permitted)](#troubleshooting-eperms-operation-not-permitted)
@@ -198,7 +198,11 @@ Flags that do not scoped to a specific section, used over all the youtubeUnblock
 
 - `--trace` Maximum verbosity for debugging purposes.
 
-- `--no-gso` Disables support for Google Chrome fat packets which uses GSO. This feature is well tested now, so this flag probably won't fix anything.
+- `--instaflush` Used with tracing. Flushes the buffer instantly, without waiting for explicit new line. Highly useful for debugging crushes.
+
+- `--no-gso` Disables support for TCP fat packets which uses GSO. This feature is well tested now, so this flag probably won't fix anything.
+
+- `--no-conntrack` Disables support for conntrack in youtubeUnblock.
 
 - `--no-ipv6` Disables support for ipv6. May be useful if you don't want for ipv6 socket to be opened.
 
@@ -272,13 +276,23 @@ Flags that do not scoped to a specific section, used over all the youtubeUnblock
 
 - `--udp-faking-strategy={checksum|ttl|none}` Faking strategy for udp. `checksum` will fake UDP checksum, `ttl` won't fake but will make UDP content relatively small, `none` is no faking. Defaults to none.
 
-- `--udp-filter-quic={disabled|all}` Enables QUIC filtering for UDP handler. If disabled, quic won't be processed, if all, all quic initial packets will be handled. Defaults to disabled.
+- `--udp-filter-quic={disabled|all|parse}` Enables QUIC filtering for UDP handler. If disabled, quic won't be processed, if all, all quic initial packets will be handled. `parse` will decrypt and parse QUIC initial message and match it with `--sni-domains`. Defaults to disabled.
 
 - `--quic-drop` Drop all QUIC packets which goes to youtubeUnblock. Won't affect any other UDP packets. Just an alias for `--udp-filter-quic=all --udp-mode=drop`.
 
-## UDP
+- `--no-dport-filter` By default, youtubeUnblock will filter for TLS and QUIC 443. If you want to disable it, pass this flag. (this does not affect `--udp-dport-filter`)
 
-UDP is another communication protocol. Well-known technologies that use it are DNS, QUIC, voice chats. UDP does not provide reliable connection and its header is much simpler than TCP thus fragmentation is limited. The support provided primarily by faking. For QUIC faking may not work well, so use `--quic-drop` if you want to drop all quic traffic. For other technologies I recommend to configure UDP support in the separate section from TCP, like `--fbegin --udp-dport-filter=50000-50099 --tls=disabled`. See more in flags related to udp and [issues tagged with udp label](https://github.com/Waujito/youtubeUnblock/issues?q=label%3Audp+). 
+## UDP/QUIC
+
+UDP is another communication protocol. Well-known technologies that use it are DNS, QUIC, voice chats. UDP does not provide reliable connection and its header is much simpler than TCP thus fragmentation is limited. The support provided primarily by faking. 
+
+Right now, QUIC faking may not work well, so use `--udp-mode=drop` option.
+
+QUIC is enabled with `--udp-filter-quic` flag. The flag supports two modes: `all` will handle all the QUIC initial messages and `parse` will decrypt and parse the QUIC initial message, and then compare it with `--sni-domains` flag.
+
+**I recommend to use** `--udp-mode=drop --udp-filter-quic=parse`.
+
+For **other UDP protocols** I recommend to configure UDP support in the separate section from TCP, like `--fbegin --udp-dport-filter=50000-50099 --tls=disabled`. See more in flags related to udp and [tickets tagged with udp label](https://github.com/Waujito/youtubeUnblock/issues?q=label%3Audp+). 
 
 ## Troubleshooting
 
@@ -323,6 +337,11 @@ Where you have to replace 192.168.. with ip of your television.
     * raw_frags_send EPERM: just make sure outgoing traffic is allowed (RELATED,ESTABLISHED should work, if not, go to step 3)
     * send fake sni EPERM: Fake SNI is out-of-state thing and will likely corrupt the connection (the behavior is expected). conntrack considers it as an invalid packet. By default OpenWRT set up to drop outgoing packets like this one. You may delete nftables/iptables rule that drops packets with invalid conntrack state, but I don't recommend to do this. The step 3 is better solution.
     * Step 3, ultimate solution. Use mark (don't confuse with connmark). The youtubeUnblock uses mark internally to avoid infinity packet loops (when the packet is sent by youtubeUnblock but on next step handled by itself). Currently it uses mark (1 << 15) = 32768. You should put iptables/nftables that ultimately accepts such marks at the very start of the filter OUTPUT chain: `iptables -I OUTPUT -m mark --mark 32768/32768 -j ACCEPT` or `nft insert rule inet fw4 output mark and 0x8000 == 0x8000 counter accept`.
+
+### Conntrack
+
+youtubeUnblock *optionally* depends on conntrack. 
+For kernel module, if conntrack breaks dependencies, compile it with `make kmake EXTRA_CFLAGS="-DNO_CONNTRACK"` to disable it completly. 
 
 ## Compilation
 
