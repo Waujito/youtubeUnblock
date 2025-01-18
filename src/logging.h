@@ -21,10 +21,6 @@
 #define LOGGING_H
 #include "config.h"
 
-#define LOG_ERR KERN_ERR
-#define LOG_INFO KERN_INFO
-#define LOG_WARN KERN_WARNING
-
 /**
  * Defined in args.c
  */
@@ -39,6 +35,10 @@ extern int ylgh_ndnl;
 #define DO_SYSLOG (logging_conf.syslog)
 
 #ifdef KERNEL_SPACE
+#define LOG_ERR KERN_ERR
+#define LOG_INFO KERN_INFO
+#define LOG_WARNING KERN_WARNING
+
 #include <linux/kernel.h>
 #include <linux/module.h>
 #define printf pr_info
@@ -110,7 +110,7 @@ extern int ylgh_ndnl;
 (log_message(LOG_ERR, msg, ##__VA_ARGS__))
 
 #define lgwarning(msg, ...) \
-(log_message(LOG_WARN, msg, ##__VA_ARGS__))
+(log_message(LOG_WARNING, msg, ##__VA_ARGS__))
 
 
 #define lginfo(msg, ...) \

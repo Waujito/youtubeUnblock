@@ -401,9 +401,10 @@ pl_incr:
 				curptr += fret;
 				curptr_len -= fret;
 
+				
 				if (fr_cr.offset <= crypto_message_len && 
-					fr_cr.payload_length <= crypto_message_len && 
-					fr_cr.payload_length <= crypto_message_len
+				fr_cr.payload_length <= crypto_message_len &&
+				fr_cr.payload_length + fr_cr.offset <= crypto_message_len
 				) {
 
 					memcpy(crypto_message + fr_cr.offset, 
@@ -418,6 +419,7 @@ pl_incr:
 	}
 
 out:
+	lgtrace_addp("crypto message parsed");
 	*crypto_message_buf = crypto_message;
 	*crypto_message_buf_len = crypto_message_len;	
 
