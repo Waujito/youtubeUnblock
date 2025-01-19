@@ -35,10 +35,16 @@ int bruteforce_analyze_sni_str(
 ) {
 	*vrd = (struct tls_verdict){0};
 
+	if (dlen <= 1) {
+		return 0;
+	}
+
 	if (section->all_domains) {
 		vrd->target_sni = 1;
 		vrd->sni_len = 0;
 		vrd->sni_ptr = data + dlen / 2;
+		vrd->target_sni_ptr = vrd->sni_ptr;
+		vrd->target_sni_len = vrd->sni_len;
 		return 0;
 	}
 	int max_domain_len = 0;
