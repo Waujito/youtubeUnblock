@@ -284,7 +284,7 @@ enum {
                                                                 \
 	.verbose = VERBOSE_DEBUG,                               \
 	.use_gso = 1,                                           \
-	.use_conntrack = 1,					\
+	.use_conntrack = 0,					\
                                                                 \
 	.first_section = NULL,					\
 	.last_section = NULL,					\

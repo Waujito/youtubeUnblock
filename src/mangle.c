@@ -285,6 +285,7 @@ int process_tcp_packet(const struct section_config_t *section, const uint8_t *ra
 		lgdebug("Target SNI detected: %.*s", vrd.sni_len, vrd.sni_ptr);
 		size_t target_sni_offset = vrd.target_sni_ptr - data;
 
+
 		size_t payload_len = raw_payload_len;
 		uint8_t *payload = malloc(raw_payload_len);
 		if (payload == NULL) {

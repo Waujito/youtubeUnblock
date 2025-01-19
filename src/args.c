@@ -280,7 +280,7 @@ enum {
 	OPT_THREADS,
 	OPT_SILENT,
 	OPT_NO_GSO,
-	OPT_NO_CONNTRACK,
+	OPT_USE_CONNTRACK,
 	OPT_QUEUE_NUM,
 	OPT_UDP_MODE,
 	OPT_UDP_FAKE_SEQ_LEN,
@@ -331,7 +331,7 @@ static struct option long_opt[] = {
 	{"trace",		0, 0, OPT_TRACE},
 	{"instaflush",		0, 0, OPT_INSTAFLUSH},
 	{"no-gso",		0, 0, OPT_NO_GSO},
-	{"no-conntrack",	0, 0, OPT_NO_CONNTRACK},
+	{"use-conntrack",	0, 0, OPT_USE_CONNTRACK},
 	{"no-ipv6",		0, 0, OPT_NO_IPV6},
 	{"daemonize",		0, 0, OPT_DAEMONIZE},
 	{"noclose",		0, 0, OPT_NOCLOSE},
@@ -477,11 +477,11 @@ int yparse_args(struct config_t *config, int argc, char *argv[]) {
 			goto invalid_opt;
 #endif
 			break;
-		case OPT_NO_CONNTRACK:
+		case OPT_USE_CONNTRACK:
 #ifndef KERNEL_SPACE
-			config->use_conntrack = 0;
+			config->use_conntrack = 1;
 #else
-			lgerr("--no-conntrack is not supported in kernel space. Compile with make kmake EXTRA_CFLAGS=\"-DNO_CONNTRACK\" instead." );
+			lgerr("Conntrack is enabled by default in kernel space. If you want to disable it, compile with make kmake EXTRA_CFLAGS=\"-DNO_CONNTRACK\"." );
 			goto invalid_opt;
 #endif
 			break;
@@ -1052,8 +1052,8 @@ size_t print_config(const struct config_t *config, char *buffer, size_t buffer_s
 	if (!config->use_gso) {
 		print_cnf_buf("--no-gso");
 	}
-	if (!config->use_conntrack) {
-		print_cnf_buf("--no-conntrack");
+	if (config->use_conntrack) {
+		print_cnf_buf("--use-conntrack");
 	}
 #endif
 

@@ -202,7 +202,7 @@ Flags that do not scoped to a specific section, used over all the youtubeUnblock
 
 - `--no-gso` Disables support for TCP fat packets which uses GSO. This feature is well tested now, so this flag probably won't fix anything.
 
-- `--no-conntrack` Disables support for conntrack in youtubeUnblock.
+- `--use-conntrack` Enables support for conntrack in youtubeUnblock. Disabled by default. Enabled in kernel module.
 
 - `--no-ipv6` Disables support for ipv6. May be useful if you don't want for ipv6 socket to be opened.
 
