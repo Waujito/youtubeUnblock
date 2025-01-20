@@ -266,6 +266,10 @@ Flags that do not scoped to a specific section, used over all the youtubeUnblock
 
 - `--exclude-domains=<comma separated domain list>` List of domains to be excluded from targeting.
 
+- `--sni-domains-file=<file contains comma or new-line separated list>` Same as `--sni-domains` but accepts path to container file instead of inline domains list. The format is file may consist of both comma-separated domains list as well as new-line separated list.
+
+- `--exclude-domains-file=<file contains comma or new-line separated list>` Same as `--exclude-domains` but accepts path to container file instead of inline domains list. The format is file may consist of both comma-separated domains list as well as new-line separated list.
+
 - `--udp-mode={drop|fake}` This flag specifies udp handling strategy. If drop udp packets will be dropped (useful for quic when browser can fallback to tcp), if fake udp will be faked. Defaults to fake.
 
 - `--udp-fake-seq-len=<amount of faking packets sent>` Specifies how much faking packets will be sent over the network. Defaults to 6.

@@ -26,6 +26,7 @@
 #include "getopt.h"
 #include "raw_replacements.h"
 
+
 /**
  * Logging definitions
  */
@@ -47,6 +48,51 @@ void parse_global_lgconf(const struct config_t *config) {
 	logging_conf.instaflush = config->instaflush;
 }
 
+#ifndef KERNEL_SPACE
+#define MAX_FILE_LENGTH 8196
+static uint8_t glob_file_buffer[MAX_FILE_LENGTH];
+static size_t glob_file_size = 0;
+static int read_file(const char* filename) {
+	int ret;
+
+	FILE* fd = fopen(optarg, "r");
+	if (fd == NULL) {
+		return -errno;
+	}
+
+	ret = fseek(fd, 0, SEEK_END);
+	if (ret < 0) {
+		ret = -errno;
+		goto close_file;
+	}
+
+	size_t fsize = ftell(fd);
+	fseek(fd, 0, SEEK_SET);
+	if (ret < 0) {
+		ret = -errno;
+		goto close_file;
+	}
+
+	if (fsize > MAX_FILE_LENGTH) {
+		ret = -ENOMEM;
+		goto close_file;
+	}
+
+	glob_file_size = fsize;
+	unsigned long uret = fread(glob_file_buffer, sizeof(uint8_t), fsize, fd);
+	if (uret != fsize) {
+		ret = -EINVAL;
+		goto close_file;
+	}
+
+	ret = 0;
+
+close_file:
+	fclose(fd);	
+	return ret;
+}
+#endif
+
 static int parse_sni_domains(struct domains_list **dlist, const char *domains_str, size_t domains_strlen) {
 	// Empty and shouldn't be used
 	struct domains_list ndomain = {0};
@@ -57,7 +103,13 @@ static int parse_sni_domains(struct domains_list **dlist, const char *domains_st
 		if ((	i == domains_strlen	||	
 			domains_str[i] == '\0'	||
 			domains_str[i] == ','	|| 
-			domains_str[i] == '\n'	)) {
+			domains_str[i] == '\n'	||
+			(
+				i < domains_strlen - 1	&&
+				domains_str[i] == '\r'	&&
+				domains_str[i + 1] == '\n'
+			)
+		)) {
 
 			if (i == j) {
 				j++;
@@ -249,6 +301,8 @@ static int parse_fake_custom_payload(
 enum {
 	OPT_SNI_DOMAINS,
 	OPT_EXCLUDE_DOMAINS,
+	OPT_SNI_DOMAINS_FILE,
+	OPT_EXCLUDE_DOMAINS_FILE,
 	OPT_FAKE_SNI,
 	OPT_FAKING_TTL,
 	OPT_FAKING_STRATEGY,
@@ -300,6 +354,8 @@ static struct option long_opt[] = {
 	{"version",		0, 0, OPT_VERSION},
 	{"sni-domains",		1, 0, OPT_SNI_DOMAINS},
 	{"exclude-domains",	1, 0, OPT_EXCLUDE_DOMAINS},
+	{"sni-domains-file",	1, 0, OPT_SNI_DOMAINS_FILE},
+	{"exclude-domains-file",1, 0, OPT_EXCLUDE_DOMAINS_FILE},
 	{"fake-sni",		1, 0, OPT_FAKE_SNI},
 	{"synfake",		1, 0, OPT_SYNFAKE},
 	{"synfake-len",		1, 0, OPT_SYNFAKE_LEN},
@@ -364,6 +420,8 @@ void print_usage(const char *argv0) {
 	printf("\t--queue-num=<number of netfilter queue>\n");
 	printf("\t--sni-domains=<comma separated domain list>|all\n");
 	printf("\t--exclude-domains=<comma separated domain list>\n");
+	printf("\t--sni-domains-file=<file contains comma or new-line separated list>\n");
+	printf("\t--exclude-domains-file=<file contains comma or new-line separated list>\n");
 	printf("\t--tls={enabled|disabled}\n");
 	printf("\t--fake-sni={1|0}\n");
 	printf("\t--fake-sni-seq-len=<length>\n");
@@ -581,6 +639,24 @@ int yparse_args(struct config_t *config, int argc, char *argv[]) {
 			if (ret < 0)
 				goto error;
 			break;
+		case OPT_SNI_DOMAINS_FILE:
+#ifdef KERNEL_SPACE
+			lgerr("--sni-domains-file is not allowed in kernel space. Use --sni-domains argument instead");
+			goto error;
+#else
+		{
+			free_sni_domains(sect_config->sni_domains);
+			ret = read_file(optarg);
+			if (ret < 0) {
+				goto error;
+			}
+			
+			ret = parse_sni_domains(&sect_config->sni_domains, (char *)glob_file_buffer, glob_file_size);
+			if (ret < 0)
+				goto error;
+			break;
+		}
+#endif
 		case OPT_EXCLUDE_DOMAINS:
 			free_sni_domains(sect_config->exclude_sni_domains);
 			ret = parse_sni_domains(&sect_config->exclude_sni_domains, optarg, strlen(optarg));
@@ -588,6 +664,24 @@ int yparse_args(struct config_t *config, int argc, char *argv[]) {
 				goto error;
 
 			break;
+		case OPT_EXCLUDE_DOMAINS_FILE:
+#ifdef KERNEL_SPACE
+			lgerr("--sni-domains-file is not allowed in kernel space. Use --sni-domains argument instead");
+			goto error;
+#else
+		{
+			free_sni_domains(sect_config->exclude_sni_domains);
+			ret = read_file(optarg);
+			if (ret < 0) {
+				goto error;
+			}
+			
+			ret = parse_sni_domains(&sect_config->exclude_sni_domains, (char *)glob_file_buffer, glob_file_size);
+			if (ret < 0)
+				goto error;
+			break;
+		}
+#endif
 		case OPT_FRAG:
 			if (strcmp(optarg, "tcp") == 0) {
 				sect_config->fragmentation_strategy = FRAG_STRAT_TCP;
