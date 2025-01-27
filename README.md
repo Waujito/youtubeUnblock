@@ -9,7 +9,7 @@
     - [IPv6](#ipv6)
   - [Check it](#check-it)
   - [Flags](#flags)
-  - [UDP/QUIC/Voice Chats](#udp/quic/voice-chats)
+  - [UDP/QUIC/Voice Chats](#udpquicvoice-chats)
   - [Troubleshooting](#troubleshooting)
     - [TV](#tv)
     - [Troubleshooting EPERMS (Operation not permitted)](#troubleshooting-eperms-operation-not-permitted)
