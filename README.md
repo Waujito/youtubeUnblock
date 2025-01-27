@@ -13,6 +13,8 @@
   - [Troubleshooting](#troubleshooting)
     - [TV](#tv)
     - [Troubleshooting EPERMS (Operation not permitted)](#troubleshooting-eperms-operation-not-permitted)
+    - [Conntrack](#conntrack-troubleshooting)
+    - [NAT Hardware/Software offloading](#nat-hardware-software-offloading)
   - [Compilation](#compilation)
   - [OpenWRT case](#openwrt-case)
     - [Building OpenWRT .ipk package](#building-openwrt-ipk-package)
@@ -338,10 +340,27 @@ Where you have to replace 192.168.. with ip of your television.
     * send fake sni EPERM: Fake SNI is out-of-state thing and will likely corrupt the connection (the behavior is expected). conntrack considers it as an invalid packet. By default OpenWRT set up to drop outgoing packets like this one. You may delete nftables/iptables rule that drops packets with invalid conntrack state, but I don't recommend to do this. The step 3 is better solution.
     * Step 3, ultimate solution. Use mark (don't confuse with connmark). The youtubeUnblock uses mark internally to avoid infinity packet loops (when the packet is sent by youtubeUnblock but on next step handled by itself). Currently it uses mark (1 << 15) = 32768. You should put iptables/nftables that ultimately accepts such marks at the very start of the filter OUTPUT chain: `iptables -I OUTPUT -m mark --mark 32768/32768 -j ACCEPT` or `nft insert rule inet fw4 output mark and 0x8000 == 0x8000 counter accept`.
 
-### Conntrack
+### Conntrack troubleshooting
 
 youtubeUnblock *optionally* depends on conntrack. 
 For kernel module, if conntrack breaks dependencies, compile it with `make kmake EXTRA_CFLAGS="-DNO_CONNTRACK"` to disable it completly. 
+
+If you want to be able to use connbytes in custom stack where conntrack is broken, check #220 and #213 for possible references.
+
+### NAT Hardware/Software offloading
+
+youtubeUnblock will conflict with offloading. But hopefully youtubeUnblock need to process only a bunch of first packets in the connection. So, on some devices it is indeed possible to use youtubeUnblock alongside with offloading, especially on ones driven by nftables (OpenWRT 23+). Note, that this is not tested by me but [reported as a workaround](https://github.com/Waujito/youtubeUnblock/issues/199#issuecomment-2519418553) by users:
+
+Edit `/usr/share/firewall4/templates/ruleset.uc` by replacing
+```
+meta l4proto { tcp, udp } flow offload @ft;
+```
+with
+```
+meta l4proto { tcp, udp } ct original packets ge 30 flow offload @ft;
+```
+
+And restart firewall with `service firewall restart`
 
 ## Compilation
 
