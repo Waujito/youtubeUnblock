@@ -14,7 +14,7 @@
     - [TV](#tv)
     - [Troubleshooting EPERMS (Operation not permitted)](#troubleshooting-eperms-operation-not-permitted)
     - [Conntrack](#conntrack-troubleshooting)
-    - [NAT Hardware/Software offloading](#nat-hardware-software-offloading)
+    - [NAT Hardware/Software offloading](#nat-hardwaresoftware-offloading)
   - [Compilation](#compilation)
   - [OpenWRT case](#openwrt-case)
     - [Building OpenWRT .ipk package](#building-openwrt-ipk-package)
