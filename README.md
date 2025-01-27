@@ -9,7 +9,7 @@
     - [IPv6](#ipv6)
   - [Check it](#check-it)
   - [Flags](#flags)
-  - [UDP/QUIC](#udp/quic)
+  - [UDP/QUIC/Voice Chats](#udp/quic/voice-chats)
   - [Troubleshooting](#troubleshooting)
     - [TV](#tv)
     - [Troubleshooting EPERMS (Operation not permitted)](#troubleshooting-eperms-operation-not-permitted)
@@ -210,7 +210,7 @@ Flags that do not scoped to a specific section, used over all the youtubeUnblock
 
 - `--threads=<threads number>` Specifies the amount of threads you want to be running for your program. This defaults to **1** and shouldn't be edited for normal use. But if you really want multiple queue instances of youtubeUnblock, note that you should change --queue-num to --queue balance. For example, with 4 threads, use `--queue-balance 537:540` on iptables and `queue num 537-540` on nftables.
 
-- `--connbytes-limit=<pkts>` **Kernel module only!** Specify how much packets of connection should be processed by kyoutubeUnblock. Pass 0 if you want for each packet to be processed. This flag may be useful for UDP traffic since unlimited youtubeUnblock may lead to traffic flood and unexpected bans. Defaults to 5. In most cases you don't want to change it.
+- `--connbytes-limit=<pkts>` **Kernel module only!** Specify how much packets of connection should be processed by kyoutubeUnblock. Pass 0 if you want for each packet to be processed. This flag may be useful for UDP traffic since unlimited youtubeUnblock may lead to traffic flood and unexpected bans. Defaults to 19. In most cases you don't want to change it.
 
 - `--daemonize` Daemonizes the youtubeUnblock (forks and detaches it from the shell). Terminate the program with `killall youtubeUnblock`. If you want to track the logs of youtubeUnblock in logread or journalctl, use **--syslog** flag.
 
@@ -284,9 +284,11 @@ Flags that do not scoped to a specific section, used over all the youtubeUnblock
 
 - `--no-dport-filter` By default, youtubeUnblock will filter for TLS and QUIC 443. If you want to disable it, pass this flag. (this does not affect `--udp-dport-filter`)
 
-## UDP/QUIC
+## UDP/QUIC/Voice Chats
 
 UDP is another communication protocol. Well-known technologies that use it are DNS, QUIC, voice chats. UDP does not provide reliable connection and its header is much simpler than TCP thus fragmentation is limited. The support provided primarily by faking. 
+
+**For UDP faking in kernel module** Make sure to decrease `--connbytes-limit` up to 5. This will allow not to process additional packets and prevent network flood.
 
 Right now, QUIC faking may not work well, so use `--udp-mode=drop` option.
 
@@ -361,6 +363,7 @@ meta l4proto { tcp, udp } ct original packets ge 30 flow offload @ft;
 ```
 
 And restart firewall with `service firewall restart`
+
 
 ## Compilation
 

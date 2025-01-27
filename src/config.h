@@ -280,7 +280,7 @@ enum {
 	.queue_start_num = DEFAULT_QUEUE_NUM,                   \
 	.mark = DEFAULT_RAWSOCKET_MARK,                         \
 	.use_ipv6 = 1,                                          \
-	.connbytes_limit = 8,                                   \
+	.connbytes_limit = 19,                                  \
                                                                 \
 	.verbose = VERBOSE_DEBUG,                               \
 	.use_gso = 1,                                           \
