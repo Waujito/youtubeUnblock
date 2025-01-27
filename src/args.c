@@ -309,6 +309,7 @@ enum {
 	OPT_FAKE_SNI_SEQ_LEN,
 	OPT_FAKE_SNI_TYPE,
 	OPT_FAKE_CUSTOM_PAYLOAD,
+	OPT_FAKE_CUSTOM_PAYLOAD_FILE,
 	OPT_START_SECTION,
 	OPT_END_SECTION,
 	OPT_DAEMONIZE,
@@ -363,6 +364,7 @@ static struct option long_opt[] = {
 	{"fake-sni-seq-len",	1, 0, OPT_FAKE_SNI_SEQ_LEN},
 	{"fake-sni-type",	1, 0, OPT_FAKE_SNI_TYPE},
 	{"fake-custom-payload", 1, 0, OPT_FAKE_CUSTOM_PAYLOAD},
+	{"fake-custom-payload-file", 1, 0, OPT_FAKE_CUSTOM_PAYLOAD_FILE},
 	{"faking-strategy",	1, 0, OPT_FAKING_STRATEGY},
 	{"fake-seq-offset",	1, 0, OPT_FAKE_SEQ_OFFSET},
 	{"faking-ttl",		1, 0, OPT_FAKING_TTL},
@@ -427,6 +429,7 @@ void print_usage(const char *argv0) {
 	printf("\t--fake-sni-seq-len=<length>\n");
 	printf("\t--fake-sni-type={default|random|custom}\n");
 	printf("\t--fake-custom-payload=<hex payload>\n");
+	printf("\t--fake-custom-payload-file=<binary file containing TLS message>\n");
 	printf("\t--fake-seq-offset=<offset>\n");
 	printf("\t--faking-ttl=<ttl>\n");
 	printf("\t--faking-strategy={randseq|ttl|tcp_check|pastseq|md5sum}\n");
@@ -796,6 +799,7 @@ int yparse_args(struct config_t *config, int argc, char *argv[]) {
 			break;
 		case OPT_FAKE_CUSTOM_PAYLOAD: 			
 			SFREE(sect_config->fake_custom_pkt);
+			sect_config->fake_custom_pkt_sz = 0;
 
 			ret = parse_fake_custom_payload(optarg, &sect_config->fake_custom_pkt, &sect_config->fake_custom_pkt_sz);
 			if (ret == -EINVAL) {
@@ -805,6 +809,36 @@ int yparse_args(struct config_t *config, int argc, char *argv[]) {
 			}
 
 			break;
+		case OPT_FAKE_CUSTOM_PAYLOAD_FILE:
+#ifdef KERNEL_SPACE
+			lgerr("--fake-custom-payload-file is not allowed in kernel space. Use --fake-custom-payload argument instead");
+			goto error;
+#else
+		{
+			SFREE(sect_config->fake_custom_pkt);
+			sect_config->fake_custom_pkt_sz = 0;
+
+			ret = read_file(optarg);
+			if (ret < 0) {
+				goto error;
+			}
+
+
+			if (glob_file_size > MAX_FAKE_SIZE) {
+				goto invalid_opt;
+			}
+			sect_config->fake_custom_pkt = malloc(glob_file_size);
+			if (sect_config->fake_custom_pkt != NULL) {
+				memcpy(sect_config->fake_custom_pkt, glob_file_buffer, glob_file_size);
+				sect_config->fake_custom_pkt_sz = glob_file_size;
+			} else {
+				goto error;
+			}
+			
+			break;
+		}
+#endif
+
 		case OPT_FK_WINSIZE:
 			num = parse_numeric_option(optarg);
 			if (errno != 0 || num < 0) {
@@ -931,7 +965,8 @@ stop_exec:
 #endif
 
 invalid_opt:
-	printf("Invalid option %s\n", long_opt[optIdx].name);
+	if (optind > 0 && optind <= argc)
+		lgerr("Invalid option %s\n", argv[optind - 1]);
 	ret = -EINVAL;
 error:
 #ifndef KERNEL_SPACE
@@ -939,7 +974,11 @@ error:
 #endif
 	if (errno) ret = -errno;
 	if (ret != -EINVAL) {
-		lgerror(ret, "argparse: error thrown in %s", long_opt[optIdx].name);
+		if (optind > 0 && optind <= argc)
+			lgerror(
+				ret == 0 ? EINVAL : -ret, 
+				"argparse: error thrown in %s", argv[optind - 1]
+			);
 		ret = -EINVAL;
 	}
 
@@ -1030,6 +1069,7 @@ static size_t print_config_section(const struct section_config_t *section, char 
 		print_cnf_buf("--sni-domains=all");
 	} else if (section->sni_domains != NULL) {
 		print_cnf_raw("--sni-domains=");
+
 		for (struct domains_list *sne = section->sni_domains; sne != NULL; sne = sne->next) {
 			print_cnf_raw("%s,", sne->domain_name);
 		}
