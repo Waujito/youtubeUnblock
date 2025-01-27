@@ -231,7 +231,10 @@ Flags that do not scoped to a specific section, used over all the youtubeUnblock
 - `--fake-sni-seq-len=<length>` This flag specifies **youtubeUnblock** to build a complicated construction of fake client hello packets. length determines how much fakes will be sent. Defaults to **1**.
 
 - `--fake-sni-type={default|custom|random}` This flag specifies which faking message type should be used for fake packets. For `random`, the message of random length and with random payload will be sent. For `default` the default payload (sni=www.google.com) is used. And for the `custom` option, the payload from `--fake-custom-payload` section utilized. Defaults to `default`.
+
 - `--fake-custom-payload=<payload>` Useful with `--fake-sni-type=custom`. You should specify the payload for fake message manually. Use hex format: `--fake-custom-payload=0001020304` mean that 5 bytes sequence: `0x00`, `0x01`, `0x02`, `0x03`, `0x04` used as fake.
+
+- `--fake-custom-payload-file=<binary file containing TLS message>` Same as `--fake-custom-payload` but binary file instead of hex. The file should contain raw binary TLS message (TCP payload).
 
 - `--faking-strategy={randseq|ttl|tcp_check|pastseq|md5sum}` This flag determines the strategy of fake packets invalidation. Defaults to `randseq`
   - `randseq` specifies that random sequence/acknowledgment random will be set. This option may be handled by provider which uses *conntrack* with drop on invalid *conntrack* state firewall rule enabled. 
@@ -267,6 +270,10 @@ Flags that do not scoped to a specific section, used over all the youtubeUnblock
 - `--sni-domains=<comma separated domain list>|all` List of domains you want to be handled by SNI. Use this string if you want to change default domain list. Defaults to `googlevideo.com,ggpht.com,ytimg.com,youtube.com,play.google.com,youtu.be,googleapis.com,googleusercontent.com,gstatic.com,l.google.com`. You can pass **all** if you want for every *ClientHello* to be handled. You can exclude some domains with `--exclude-domains` flag.
 
 - `--exclude-domains=<comma separated domain list>` List of domains to be excluded from targeting.
+
+- `--sni-domains-file=<file contains comma or new-line separated list>` Same as `--sni-domains` but accepts path to container file instead of inline domains list. The format is file may consist of both comma-separated domains list as well as new-line separated list.
+
+- `--exclude-domains-file=<file contains comma or new-line separated list>` Same as `--exclude-domains` but accepts path to container file instead of inline domains list. The format is file may consist of both comma-separated domains list as well as new-line separated list.
 
 - `--udp-mode={drop|fake}` This flag specifies udp handling strategy. If drop udp packets will be dropped (useful for quic when browser can fallback to tcp), if fake udp will be faked. Defaults to fake.
 

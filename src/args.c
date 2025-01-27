@@ -26,6 +26,7 @@
 #include "getopt.h"
 #include "raw_replacements.h"
 
+
 /**
  * Logging definitions
  */
@@ -47,6 +48,51 @@ void parse_global_lgconf(const struct config_t *config) {
 	logging_conf.instaflush = config->instaflush;
 }
 
+#ifndef KERNEL_SPACE
+#define MAX_FILE_LENGTH 8196
+static uint8_t glob_file_buffer[MAX_FILE_LENGTH];
+static size_t glob_file_size = 0;
+static int read_file(const char* filename) {
+	int ret;
+
+	FILE* fd = fopen(optarg, "r");
+	if (fd == NULL) {
+		return -errno;
+	}
+
+	ret = fseek(fd, 0, SEEK_END);
+	if (ret < 0) {
+		ret = -errno;
+		goto close_file;
+	}
+
+	size_t fsize = ftell(fd);
+	fseek(fd, 0, SEEK_SET);
+	if (ret < 0) {
+		ret = -errno;
+		goto close_file;
+	}
+
+	if (fsize > MAX_FILE_LENGTH) {
+		ret = -ENOMEM;
+		goto close_file;
+	}
+
+	glob_file_size = fsize;
+	unsigned long uret = fread(glob_file_buffer, sizeof(uint8_t), fsize, fd);
+	if (uret != fsize) {
+		ret = -EINVAL;
+		goto close_file;
+	}
+
+	ret = 0;
+
+close_file:
+	fclose(fd);	
+	return ret;
+}
+#endif
+
 static int parse_sni_domains(struct domains_list **dlist, const char *domains_str, size_t domains_strlen) {
 	// Empty and shouldn't be used
 	struct domains_list ndomain = {0};
@@ -57,7 +103,13 @@ static int parse_sni_domains(struct domains_list **dlist, const char *domains_st
 		if ((	i == domains_strlen	||	
 			domains_str[i] == '\0'	||
 			domains_str[i] == ','	|| 
-			domains_str[i] == '\n'	)) {
+			domains_str[i] == '\n'	||
+			(
+				i < domains_strlen - 1	&&
+				domains_str[i] == '\r'	&&
+				domains_str[i + 1] == '\n'
+			)
+		)) {
 
 			if (i == j) {
 				j++;
@@ -249,12 +301,15 @@ static int parse_fake_custom_payload(
 enum {
 	OPT_SNI_DOMAINS,
 	OPT_EXCLUDE_DOMAINS,
+	OPT_SNI_DOMAINS_FILE,
+	OPT_EXCLUDE_DOMAINS_FILE,
 	OPT_FAKE_SNI,
 	OPT_FAKING_TTL,
 	OPT_FAKING_STRATEGY,
 	OPT_FAKE_SNI_SEQ_LEN,
 	OPT_FAKE_SNI_TYPE,
 	OPT_FAKE_CUSTOM_PAYLOAD,
+	OPT_FAKE_CUSTOM_PAYLOAD_FILE,
 	OPT_START_SECTION,
 	OPT_END_SECTION,
 	OPT_DAEMONIZE,
@@ -300,6 +355,8 @@ static struct option long_opt[] = {
 	{"version",		0, 0, OPT_VERSION},
 	{"sni-domains",		1, 0, OPT_SNI_DOMAINS},
 	{"exclude-domains",	1, 0, OPT_EXCLUDE_DOMAINS},
+	{"sni-domains-file",	1, 0, OPT_SNI_DOMAINS_FILE},
+	{"exclude-domains-file",1, 0, OPT_EXCLUDE_DOMAINS_FILE},
 	{"fake-sni",		1, 0, OPT_FAKE_SNI},
 	{"synfake",		1, 0, OPT_SYNFAKE},
 	{"synfake-len",		1, 0, OPT_SYNFAKE_LEN},
@@ -307,6 +364,7 @@ static struct option long_opt[] = {
 	{"fake-sni-seq-len",	1, 0, OPT_FAKE_SNI_SEQ_LEN},
 	{"fake-sni-type",	1, 0, OPT_FAKE_SNI_TYPE},
 	{"fake-custom-payload", 1, 0, OPT_FAKE_CUSTOM_PAYLOAD},
+	{"fake-custom-payload-file", 1, 0, OPT_FAKE_CUSTOM_PAYLOAD_FILE},
 	{"faking-strategy",	1, 0, OPT_FAKING_STRATEGY},
 	{"fake-seq-offset",	1, 0, OPT_FAKE_SEQ_OFFSET},
 	{"faking-ttl",		1, 0, OPT_FAKING_TTL},
@@ -364,11 +422,14 @@ void print_usage(const char *argv0) {
 	printf("\t--queue-num=<number of netfilter queue>\n");
 	printf("\t--sni-domains=<comma separated domain list>|all\n");
 	printf("\t--exclude-domains=<comma separated domain list>\n");
+	printf("\t--sni-domains-file=<file contains comma or new-line separated list>\n");
+	printf("\t--exclude-domains-file=<file contains comma or new-line separated list>\n");
 	printf("\t--tls={enabled|disabled}\n");
 	printf("\t--fake-sni={1|0}\n");
 	printf("\t--fake-sni-seq-len=<length>\n");
 	printf("\t--fake-sni-type={default|random|custom}\n");
 	printf("\t--fake-custom-payload=<hex payload>\n");
+	printf("\t--fake-custom-payload-file=<binary file containing TLS message>\n");
 	printf("\t--fake-seq-offset=<offset>\n");
 	printf("\t--faking-ttl=<ttl>\n");
 	printf("\t--faking-strategy={randseq|ttl|tcp_check|pastseq|md5sum}\n");
@@ -581,6 +642,24 @@ int yparse_args(struct config_t *config, int argc, char *argv[]) {
 			if (ret < 0)
 				goto error;
 			break;
+		case OPT_SNI_DOMAINS_FILE:
+#ifdef KERNEL_SPACE
+			lgerr("--sni-domains-file is not allowed in kernel space. Use --sni-domains argument instead");
+			goto error;
+#else
+		{
+			free_sni_domains(sect_config->sni_domains);
+			ret = read_file(optarg);
+			if (ret < 0) {
+				goto error;
+			}
+			
+			ret = parse_sni_domains(&sect_config->sni_domains, (char *)glob_file_buffer, glob_file_size);
+			if (ret < 0)
+				goto error;
+			break;
+		}
+#endif
 		case OPT_EXCLUDE_DOMAINS:
 			free_sni_domains(sect_config->exclude_sni_domains);
 			ret = parse_sni_domains(&sect_config->exclude_sni_domains, optarg, strlen(optarg));
@@ -588,6 +667,24 @@ int yparse_args(struct config_t *config, int argc, char *argv[]) {
 				goto error;
 
 			break;
+		case OPT_EXCLUDE_DOMAINS_FILE:
+#ifdef KERNEL_SPACE
+			lgerr("--sni-domains-file is not allowed in kernel space. Use --sni-domains argument instead");
+			goto error;
+#else
+		{
+			free_sni_domains(sect_config->exclude_sni_domains);
+			ret = read_file(optarg);
+			if (ret < 0) {
+				goto error;
+			}
+			
+			ret = parse_sni_domains(&sect_config->exclude_sni_domains, (char *)glob_file_buffer, glob_file_size);
+			if (ret < 0)
+				goto error;
+			break;
+		}
+#endif
 		case OPT_FRAG:
 			if (strcmp(optarg, "tcp") == 0) {
 				sect_config->fragmentation_strategy = FRAG_STRAT_TCP;
@@ -702,6 +799,7 @@ int yparse_args(struct config_t *config, int argc, char *argv[]) {
 			break;
 		case OPT_FAKE_CUSTOM_PAYLOAD: 			
 			SFREE(sect_config->fake_custom_pkt);
+			sect_config->fake_custom_pkt_sz = 0;
 
 			ret = parse_fake_custom_payload(optarg, &sect_config->fake_custom_pkt, &sect_config->fake_custom_pkt_sz);
 			if (ret == -EINVAL) {
@@ -711,6 +809,36 @@ int yparse_args(struct config_t *config, int argc, char *argv[]) {
 			}
 
 			break;
+		case OPT_FAKE_CUSTOM_PAYLOAD_FILE:
+#ifdef KERNEL_SPACE
+			lgerr("--fake-custom-payload-file is not allowed in kernel space. Use --fake-custom-payload argument instead");
+			goto error;
+#else
+		{
+			SFREE(sect_config->fake_custom_pkt);
+			sect_config->fake_custom_pkt_sz = 0;
+
+			ret = read_file(optarg);
+			if (ret < 0) {
+				goto error;
+			}
+
+
+			if (glob_file_size > MAX_FAKE_SIZE) {
+				goto invalid_opt;
+			}
+			sect_config->fake_custom_pkt = malloc(glob_file_size);
+			if (sect_config->fake_custom_pkt != NULL) {
+				memcpy(sect_config->fake_custom_pkt, glob_file_buffer, glob_file_size);
+				sect_config->fake_custom_pkt_sz = glob_file_size;
+			} else {
+				goto error;
+			}
+			
+			break;
+		}
+#endif
+
 		case OPT_FK_WINSIZE:
 			num = parse_numeric_option(optarg);
 			if (errno != 0 || num < 0) {
@@ -837,7 +965,8 @@ stop_exec:
 #endif
 
 invalid_opt:
-	printf("Invalid option %s\n", long_opt[optIdx].name);
+	if (optind > 0 && optind <= argc)
+		lgerr("Invalid option %s\n", argv[optind - 1]);
 	ret = -EINVAL;
 error:
 #ifndef KERNEL_SPACE
@@ -845,7 +974,11 @@ error:
 #endif
 	if (errno) ret = -errno;
 	if (ret != -EINVAL) {
-		lgerror(ret, "argparse: error thrown in %s", long_opt[optIdx].name);
+		if (optind > 0 && optind <= argc)
+			lgerror(
+				ret == 0 ? EINVAL : -ret, 
+				"argparse: error thrown in %s", argv[optind - 1]
+			);
 		ret = -EINVAL;
 	}
 
@@ -936,6 +1069,7 @@ static size_t print_config_section(const struct section_config_t *section, char 
 		print_cnf_buf("--sni-domains=all");
 	} else if (section->sni_domains != NULL) {
 		print_cnf_raw("--sni-domains=");
+
 		for (struct domains_list *sne = section->sni_domains; sne != NULL; sne = sne->next) {
 			print_cnf_raw("%s,", sne->domain_name);
 		}
