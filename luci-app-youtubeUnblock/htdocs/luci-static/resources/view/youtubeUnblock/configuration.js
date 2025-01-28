@@ -148,7 +148,7 @@ return view.extend({
 		o.default = o.disabled;
 		o.rmempty = false;
 
-		o = s.option(form.ListValue, "udp_mode", _("UDP mode"), _("Faking strategy for udp. <code>checksum</code> will fake UDP checksum, <code>ttl</code> won't fake but will make UDP content relatively small, <code>none</code> is no faking."));
+		o = s.option(form.ListValue, "udp_mode", _("UDP mode"), _("This flag specifies udp handling strategy. If <code>drop</code> udp packets will be dropped (useful for quic when browser can fallback to tcp), if <code>fake</code> udp will be faked."));
 		o.widget = "radio"
 		o.depends("quic_drop", "0");
 		o.value("fake", "fake");
@@ -156,7 +156,7 @@ return view.extend({
 		o.default = "fake";
 		o.rmempty = false;
 
-		o = s.option(form.ListValue, "udp_faking_strategy", _("UDP faking strategy"), _("This flag specifies udp handling strategy. If drop udp packets will be dropped (useful for quic when browser can fallback to tcp), if fake udp will be faked."));
+		o = s.option(form.ListValue, "udp_faking_strategy", _("UDP faking strategy"), _("Faking strategy for udp. <code>checksum</code> will fake UDP checksum, <code>ttl</code> won't fake but will make UDP content relatively small, <code>none</code> is no faking."));
 		o.widget = "radio"
 		o.depends("quic_drop", "0");
 		o.value("none", "none");
