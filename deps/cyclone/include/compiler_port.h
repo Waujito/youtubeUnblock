@@ -157,7 +157,10 @@ typedef unsigned int uint_t;
 #elif defined(__GNUC__)
    int strcasecmp(const char *s1, const char *s2);
    int strncasecmp(const char *s1, const char *s2, size_t n);
+#if !(_SVID_SOURCE || _BSD_SOURCE || _POSIX_C_SOURCE >= 1 || _XOPEN_SOURCE || _POSIX_SOURCE)
    char *strtok_r(char *s, const char *delim, char **last);
+#endif
+
 //Tasking compiler?
 #elif defined(__TASKING__)
    char *strtok_r(char *s, const char *delim, char **last);
