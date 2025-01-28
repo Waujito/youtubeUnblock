@@ -6,7 +6,7 @@ include $(INCLUDE_DIR)/kernel.mk
 
 PKG_NAME:=youtubeUnblock
 PKG_VERSION:=1.0.0
-PKG_REV:=254b36359953c8cee61982543cf2ace8e7745273
+PKG_REV:=a03d05ca19af1711b2f13389d2ee422d0b14df97
 PKG_RELEASE:=6
 
 PKG_SOURCE_URL:=https://github.com/Waujito/youtubeUnblock.git
