@@ -589,7 +589,7 @@ static struct pernet_operations ykb_pernet_ops = {
 
 #ifdef CONFIG_PROC_FS
 
-static int stats_show(struct seq_file *s, void *v) {
+static int proc_stats_show(struct seq_file *s, void *v) {
 	seq_printf(s, "youtubeUnblock stats: \n"
 		"\tCatched: %ld packets\n"
 		"\tProcessed: %ld packets\n"
@@ -601,7 +601,22 @@ static int stats_show(struct seq_file *s, void *v) {
 	return 0;
 }
 
-#endif
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4,18,0)
+
+static int proc_stats_open(struct inode *inode, struct file *file)
+{
+	return single_open(file, proc_stats_show, NULL);
+}
+static const struct file_operations proc_stats_operations = {
+	.open		= proc_stats_open,
+	.read		= seq_read,
+	.llseek		= seq_lseek,
+	.release	= single_release,
+};
+
+#endif /* KERNEL_VERSION */
+
+#endif /* CONFIG_PROC_FS */
 
 static int __init ykb_init(void) {
 	int ret;
@@ -639,8 +654,13 @@ static int __init ykb_init(void) {
 #endif /* NO_IPV6 */
 
 #ifdef CONFIG_PROC_FS
-	if (!proc_create_single_data("kyoutubeUnblock", 0440, NULL,
-			stats_show, NULL)) {
+	if (!
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4,18,0)
+		proc_create_single("kyoutubeUnblock", 0, NULL, proc_stats_show)
+#else
+		proc_create("kyoutubeUnblock", 0, NULL, &proc_stats_operations)
+#endif
+	) {
 		lgwarning("kyoutubeUnblock procfs entry creation failed");
 	}
 #endif
