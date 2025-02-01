@@ -435,6 +435,12 @@ cat /sys/module/kyoutubeUnblock/parameters/parameters
 
 and check all the parameters configured.
 
+You can check up the statistics of youtubeUnblock with
+
+```sh
+sudo cat /proc/kyoutubeUnblock
+```
+
 ### Building kernel module
 
 #### Building on host system

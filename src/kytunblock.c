@@ -30,6 +30,7 @@
 #include <linux/net.h>
 #include <linux/kernel.h>
 #include <linux/version.h>
+#include <linux/proc_fs.h>
 
 #include <linux/netfilter.h>
 #include <linux/netfilter_ipv4.h>
@@ -329,6 +330,8 @@ erret_lc:
 		return ret;
 	}
 	
+	++global_stats.sent_counter;
+	
 	int ipvx = netproto_version(pkt, pktlen);
 
 	if (ipvx == IP4VERSION) {
@@ -483,6 +486,8 @@ static NF_CALLBACK(ykb_nf_hook, skb) {
 	struct config_t *config = cur_config;
 	kref_get(&config->refcount);
 
+	++global_stats.all_packet_counter;
+
 	if ((skb->mark & config->mark) == config->mark)  {
 		goto send_verdict;
 	}
@@ -523,12 +528,14 @@ static NF_CALLBACK(ykb_nf_hook, skb) {
 	pd.payload_len = skb->len;
 
 	int vrd = process_packet(config, &pd);
+	++global_stats.packet_counter;
 
 	switch(vrd) {
 		case PKT_ACCEPT:
 			nf_verdict = NF_ACCEPT;
 			break;
 		case PKT_DROP:
+			++global_stats.target_counter;
 			nf_verdict = NF_STOLEN;
 			kfree_skb(skb);
 			break;
@@ -580,6 +587,22 @@ static struct pernet_operations ykb_pernet_ops = {
 };
 #endif /* LINUX_VERSION_CODE >= KERNEL_VERSION(4, 3, 0) */
 
+#ifdef CONFIG_PROC_FS
+
+static int stats_show(struct seq_file *s, void *v) {
+	seq_printf(s, "youtubeUnblock stats: \n"
+		"\tCatched: %ld packets\n"
+		"\tProcessed: %ld packets\n"
+		"\tTargetted: %ld packets\n"
+		"\tSent over socket %ld packets\n",
+		global_stats.all_packet_counter, global_stats.packet_counter, 
+		global_stats.target_counter, global_stats.sent_counter);
+	
+	return 0;
+}
+
+#endif
+
 static int __init ykb_init(void) {
 	int ret;
 
@@ -615,6 +638,13 @@ static int __init ykb_init(void) {
 	}
 #endif /* NO_IPV6 */
 
+#ifdef CONFIG_PROC_FS
+	if (!proc_create_single_data("kyoutubeUnblock", 0440, NULL,
+			stats_show, NULL)) {
+		lgwarning("kyoutubeUnblock procfs entry creation failed");
+	}
+#endif
+
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 3, 0)
 	ret = register_pernet_subsys(&ykb_pernet_ops);
 #else
@@ -649,6 +679,10 @@ static void __exit ykb_destroy(void) {
 
 #ifndef NO_IPV6
 	close_raw6_socket();
+#endif
+
+#ifdef CONFIG_PROC_FS
+	remove_proc_entry("kyoutubeUnblock", NULL);
 #endif
 
 	close_raw_socket();

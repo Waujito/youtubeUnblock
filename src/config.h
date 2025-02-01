@@ -339,4 +339,13 @@ struct packet_data {
 	struct ytb_conntrack yct;
 };
 
+struct statistics_data {
+	unsigned long all_packet_counter;
+	unsigned long packet_counter;
+	unsigned long target_counter;
+	unsigned long sent_counter;
+};
+
+extern struct statistics_data global_stats;
+
 #endif /* YTB_CONFIG_H */

@@ -26,6 +26,7 @@
 #include "getopt.h"
 #include "raw_replacements.h"
 
+struct statistics_data global_stats;
 
 /**
  * Logging definitions

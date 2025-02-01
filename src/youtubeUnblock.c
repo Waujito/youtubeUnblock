@@ -46,6 +46,7 @@
 #include <linux/netfilter.h>
 #include <pthread.h>
 #include <sys/socket.h>
+#include <signal.h>
 
 #include "config.h"
 #include "mangle.h"
@@ -546,6 +547,7 @@ erret_lc:
 		return ret;
 	}
 	
+	++global_stats.sent_counter;
 	int ipvx = netproto_version(pkt, pktlen);
 
 	if (ipvx == IP4VERSION) {
@@ -640,6 +642,8 @@ static int queue_cb(const struct nlmsghdr *nlh, void *data) {
 	uint16_t l3num;	
 	uint32_t id;
 
+	++global_stats.all_packet_counter;
+
         if (nfq_nlmsg_parse(nlh, attr) < 0) {
                 lgerror(-errno, "Attr parse");
                 return MNL_CB_ERROR;
@@ -694,8 +698,11 @@ ct_out:
 
 	ret = process_packet(cur_config, &packet);
 
+	++global_stats.packet_counter;
+
 	switch (ret) {
 		case PKT_DROP:
+			++global_stats.target_counter;
 			nfq_nlmsg_verdict_put(verdnlh, id, NF_DROP);
 			break;
 		default:
@@ -875,6 +882,16 @@ struct instance_config_t instance_config = {
 	.send_delayed_packet = delay_packet_send,
 };
 
+void sigint_handler(int s) {
+	lginfo("youtubeUnblock stats: catched %ld packets, "
+		"processed %ld packets, "
+		"targetted %ld packets, sent over socket %ld packets",
+		global_stats.all_packet_counter, global_stats.packet_counter, 
+		global_stats.target_counter, global_stats.sent_counter);
+
+	exit(EXIT_SUCCESS);
+}
+
 int main(int argc, char *argv[]) {
 	int ret;
 	struct config_t config;
@@ -893,6 +910,8 @@ int main(int argc, char *argv[]) {
 	parse_global_lgconf(&config);
 	cur_config = &config;
 
+	signal(SIGINT, sigint_handler);
+	signal(SIGTERM, sigint_handler);
 
 	if (open_raw_socket() < 0) {
 		lgerror(-errno, "Unable to open raw socket");
