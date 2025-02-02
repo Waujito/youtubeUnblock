@@ -68,6 +68,7 @@ typedef __s16 int_least16_t;	/* integer of >= 16 bits */
 
 #define free kfree
 #define malloc(size) kmalloc((size), GFP_KERNEL)
+#define realloc(pt, size) krealloc((pt), (size), GFP_KERNEL)
 #define calloc(n, size) kcalloc((n), (size), GFP_KERNEL)
 
 #define ip6_hdr ipv6hdr
