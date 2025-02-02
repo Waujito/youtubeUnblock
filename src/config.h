@@ -25,6 +25,7 @@
 #endif
 
 #include "types.h"
+#include "trie.h"
 
 typedef int (*raw_send_t)(const unsigned char *data, size_t data_len);
 /**
@@ -64,8 +65,10 @@ struct section_config_t {
 	struct section_config_t *next;
 	struct section_config_t *prev;
 
-	struct domains_list *sni_domains;
-	struct domains_list *exclude_sni_domains;
+	// struct domains_list *sni_domains;
+	// struct domains_list *exclude_sni_domains;
+	struct trie_container sni_domains;
+	struct trie_container exclude_sni_domains;
 	unsigned int all_domains;
 
 	int tls_enabled;
@@ -237,8 +240,8 @@ enum {
 };
 
 #define default_section_config {				\
-	.sni_domains = NULL,					\
-	.exclude_sni_domains = NULL,				\
+	.sni_domains = {0},					\
+	.exclude_sni_domains = {0},				\
 	.all_domains = 0,					\
 	.tls_enabled = 1,					\
 	.frag_sni_reverse = 1,                                  \

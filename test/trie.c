@@ -95,10 +95,53 @@ TEST(TrieTest, Trie_string_finds_opt_end)
 	trie_destroy(&trie);
 }
 
+TEST(TrieTest, Trie_single_vertex)
+{
+	int ret;
+	size_t offset;
+	size_t offlen;
+	struct trie_container trie;
+
+	ret = trie_init(&trie);
+
+	ret = trie_process_str(&trie, 
+			(uint8_t *)tstr, sizeof(tstr) - 1,
+			0, 
+			&offset, &offlen
+	);
+	TEST_ASSERT_EQUAL(0, ret);
+
+	trie_destroy(&trie);
+
+}
+
+TEST(TrieTest, Trie_uninitialized)
+{
+	int ret;
+	size_t offset;
+	size_t offlen;
+	struct trie_container trie = {0};
+
+	// ret = trie_init(&trie);
+
+	ret = trie_add_string(&trie, (uint8_t *)ASTR, sizeof(ASTR) - 1);
+	TEST_ASSERT_EQUAL(-EINVAL, ret);
+
+	ret = trie_process_str(&trie, 
+			(uint8_t *)tstr, sizeof(tstr) - 1,
+			0, 
+			&offset, &offlen
+	);
+	TEST_ASSERT_EQUAL(0, ret);
+
+}
+
 
 TEST_GROUP_RUNNER(TrieTest)
 {
 	RUN_TEST_CASE(TrieTest, Trie_string_adds);
 	RUN_TEST_CASE(TrieTest, Trie_string_finds);
 	RUN_TEST_CASE(TrieTest, Trie_string_finds_opt_end);
+	RUN_TEST_CASE(TrieTest, Trie_single_vertex);
+	RUN_TEST_CASE(TrieTest, Trie_uninitialized);
 }

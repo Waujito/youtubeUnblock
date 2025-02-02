@@ -52,7 +52,13 @@ void trie_destroy(struct trie_container *trie) {
 	trie->vx = NULL;
 }
 
-int trie_push_vertex(struct trie_container *trie) {
+/**
+ *
+ * Increases trie vertex container size.
+ * Returns new vertex index or ret < 0 on error
+ *
+ */
+static int trie_push_vertex(struct trie_container *trie) {
 	if (trie->sz == NMAX - 1) {
 		return -EINVAL;
 	}
@@ -74,6 +80,10 @@ int trie_push_vertex(struct trie_container *trie) {
 
 int trie_add_string(struct trie_container *trie, 
 	       const uint8_t *str, size_t strlen) {
+	if (trie == NULL || trie->vx == NULL) {
+		return -EINVAL;
+	}
+
 	int v = 0;
 	int nv;
 
@@ -145,6 +155,10 @@ int trie_process_str(
 	int flags,
 	size_t *offset, size_t *offlen
 ) {
+	if (trie == NULL || trie->vx == NULL) {
+		return 0;
+	}
+
 	int v = 0;
 	size_t i = 0;
 	uint8_t c;

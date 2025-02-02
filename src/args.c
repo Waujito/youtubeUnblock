@@ -94,11 +94,9 @@ close_file:
 }
 #endif
 
-static int parse_sni_domains(struct domains_list **dlist, const char *domains_str, size_t domains_strlen) {
-	// Empty and shouldn't be used
-	struct domains_list ndomain = {0};
-	struct domains_list *cdomain = &ndomain;
-
+static int parse_sni_domains(struct trie_container *trie, const char *domains_str, size_t domains_strlen) {
+	trie_init(trie);
+	
 	unsigned int j = 0;
 	for (unsigned int i = 0; i <= domains_strlen; i++) {
 		if ((	i == domains_strlen	||	
@@ -119,38 +117,17 @@ static int parse_sni_domains(struct domains_list **dlist, const char *domains_st
 
 			unsigned int domain_len = (i - j);
 			const char *domain_startp = domains_str + j;
-			struct domains_list *edomain = malloc(sizeof(struct domains_list));
-			*edomain = (struct domains_list){0};
-			if (edomain == NULL) {
-				return -ENOMEM;
-			}
-
-			edomain->domain_len = domain_len;
-			edomain->domain_name = malloc(domain_len + 1);
-			if (edomain->domain_name == NULL) {
-				return -ENOMEM;
-			}
-
-			strncpy(edomain->domain_name, domain_startp, domain_len);
-			edomain->domain_name[domain_len] = '\0';
-			cdomain->next = edomain;
-			cdomain = edomain;
+			trie_add_string(trie, (const uint8_t *)domain_startp, domain_len);
 
 			j = i + 1;
 		}
 	}
 
-	*dlist = ndomain.next;
 	return 0;
 }
 
-static void free_sni_domains(struct domains_list *dlist) {
-	for (struct domains_list *ldl = dlist; ldl != NULL;) {
-		struct domains_list *ndl = ldl->next;
-		SFREE(ldl->domain_name);
-		SFREE(ldl);
-		ldl = ndl;
-	}
+static void free_sni_domains(struct trie_container *trie) {
+	trie_destroy(trie);
 }
 
 static long parse_numeric_option(const char* value) {
@@ -633,7 +610,7 @@ int yparse_args(struct config_t *config, int argc, char *argv[]) {
 
 			break;
 		case OPT_SNI_DOMAINS:
-			free_sni_domains(sect_config->sni_domains);
+			free_sni_domains(&sect_config->sni_domains);
 			sect_config->all_domains = 0;
 			if (!strcmp(optarg, "all")) {
 				sect_config->all_domains = 1;
@@ -649,7 +626,7 @@ int yparse_args(struct config_t *config, int argc, char *argv[]) {
 			goto error;
 #else
 		{
-			free_sni_domains(sect_config->sni_domains);
+			free_sni_domains(&sect_config->sni_domains);
 			ret = read_file(optarg);
 			if (ret < 0) {
 				goto error;
@@ -662,7 +639,7 @@ int yparse_args(struct config_t *config, int argc, char *argv[]) {
 		}
 #endif
 		case OPT_EXCLUDE_DOMAINS:
-			free_sni_domains(sect_config->exclude_sni_domains);
+			free_sni_domains(&sect_config->exclude_sni_domains);
 			ret = parse_sni_domains(&sect_config->exclude_sni_domains, optarg, strlen(optarg));
 			if (ret < 0)
 				goto error;
@@ -674,7 +651,7 @@ int yparse_args(struct config_t *config, int argc, char *argv[]) {
 			goto error;
 #else
 		{
-			free_sni_domains(sect_config->exclude_sni_domains);
+			free_sni_domains(&sect_config->exclude_sni_domains);
 			ret = read_file(optarg);
 			if (ret < 0) {
 				goto error;
@@ -1068,20 +1045,11 @@ static size_t print_config_section(const struct section_config_t *section, char 
 
 	if (section->all_domains) {
 		print_cnf_buf("--sni-domains=all");
-	} else if (section->sni_domains != NULL) {
-		print_cnf_raw("--sni-domains=");
-
-		for (struct domains_list *sne = section->sni_domains; sne != NULL; sne = sne->next) {
-			print_cnf_raw("%s,", sne->domain_name);
-		}
-		print_cnf_raw(" ");
+	} else if (section->sni_domains.vx != NULL) {
+		print_cnf_buf("--sni-domains=<trie of %zu vertexes>", section->sni_domains.sz);
 	}
-	if (section->exclude_sni_domains != NULL) {
-		print_cnf_raw("--exclude-domains=");
-		for (struct domains_list *sne = section->exclude_sni_domains; sne != NULL; sne = sne->next) {
-			print_cnf_raw("%s,", sne->domain_name);
-		}
-		print_cnf_raw(" ");
+	if (section->exclude_sni_domains.vx != NULL) {
+		print_cnf_buf("--exclude-domains=<trie of %zu vertexes>", section->sni_domains.sz);
 	}
 
 	switch(section->sni_detection) {
@@ -1281,10 +1249,8 @@ void free_config_section(struct section_config_t *section) {
 		SFREE(section->udp_dport_range);
 	}
 
-	free_sni_domains(section->sni_domains);
-	section->sni_domains = NULL;
-	free_sni_domains(section->exclude_sni_domains);
-	section->exclude_sni_domains = NULL;
+	free_sni_domains(&section->sni_domains);
+	free_sni_domains(&section->exclude_sni_domains);
 
 	section->fake_custom_pkt_sz = 0;
 	SFREE(section->fake_custom_pkt);

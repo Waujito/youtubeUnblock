@@ -66,13 +66,6 @@ struct trie_container {
 int trie_init(struct trie_container *trie);
 void trie_destroy(struct trie_container *trie);
 
-/**
- *
- * Increases trie vertex container size.
- * Returns new vertex index or ret < 0 on error
- *
- */
-int trie_push_vertex(struct trie_container *trie);
 int trie_add_string(struct trie_container *trie, 
 	       const uint8_t *str, size_t strlen);
 

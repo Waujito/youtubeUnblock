@@ -33,6 +33,8 @@ int bruteforce_analyze_sni_str(
 	const uint8_t *data, size_t dlen,
 	struct tls_verdict *vrd
 ) {
+	size_t offset, offlen;
+	int ret;
 	*vrd = (struct tls_verdict){0};
 
 	if (dlen <= 1) {
@@ -47,50 +49,17 @@ int bruteforce_analyze_sni_str(
 		vrd->target_sni_len = vrd->sni_len;
 		return 0;
 	}
-	int max_domain_len = 0;
 
-	for (struct domains_list *sne = section->sni_domains; sne != NULL; 
-	sne = sne->next) {
-		max_domain_len = max((int)sne->domain_len, max_domain_len);
-	}
-
-	size_t buf_size = max_domain_len + dlen + 1;
-	uint8_t *buf = malloc(buf_size);
-	if (buf == NULL) {
-		return -ENOMEM;
-	}
-	int *nzbuf = malloc(buf_size * sizeof(int));
-	if (nzbuf == NULL) {
-		free(buf);
-		return -ENOMEM;
+	// It is safe for multithreading, so dp mutability is ok
+	ret = trie_process_str((struct trie_container *)&section->sni_domains, data, dlen, 0, &offset, &offlen);
+	if (ret) {
+		vrd->target_sni = 1;
+		vrd->sni_len = offlen;
+		vrd->sni_ptr = data + offset;
+		vrd->target_sni_ptr = vrd->sni_ptr;
+		vrd->target_sni_len = vrd->sni_len;
 	}
 	
-	for (struct domains_list *sne = section->sni_domains; sne != NULL; sne = sne->next) {
-		const char *domain_startp = sne->domain_name;
-		int domain_len = sne->domain_len;
-
-		int *zbuf = (void *)nzbuf;
-
-		memcpy(buf, domain_startp, domain_len);
-		memcpy(buf + domain_len, "#", 1);
-		memcpy(buf + domain_len + 1, data, dlen);
-
-		z_function((char *)buf, zbuf, domain_len + 1 + dlen);
-
-		for (size_t k = 0; k < domain_len + 1 + dlen; k++) {
-			if (zbuf[k] == domain_len) {
-				vrd->target_sni = 1;
-				vrd->sni_len = domain_len;
-				vrd->sni_ptr = data + (k - domain_len - 1);
-				vrd->target_sni_ptr = vrd->sni_ptr;
-				vrd->target_sni_len = vrd->sni_len;
-				goto return_vrd;
-			}
-		}
-	}
-return_vrd:
-	free(buf);
-	free(nzbuf);
 	return 0;
 }
 static int analyze_sni_str(
@@ -98,42 +67,35 @@ static int analyze_sni_str(
 	const char *sni_name, int sni_len, 
 	struct tls_verdict *vrd
 ) {
+	int ret;
+	size_t offset, offlen;
+
 	if (section->all_domains) {
 		vrd->target_sni = 1;
 		goto check_domain;
 	}
-		
-	for (struct domains_list *sne = section->sni_domains; sne != NULL; sne = sne->next) {
-		const char *sni_startp = sni_name + sni_len - sne->domain_len;
-		const char *domain_startp = sne->domain_name;
 
-		if (sni_len >= sne->domain_len &&
-			sni_len < 128 && 
-			!strncmp(sni_startp, 
-			domain_startp, 
-			sne->domain_len)) {
-				vrd->target_sni = 1;
-				vrd->target_sni_ptr = (const uint8_t *)sni_startp;
-				vrd->target_sni_len = sne->domain_len;
-				break;
-		}
+	lgtrace_addp("abacaba");
+
+	// It is safe for multithreading, so dp mutability is ok
+	ret = trie_process_str((struct trie_container *)&section->sni_domains, 
+			(const uint8_t *)sni_name, sni_len, TRIE_OPT_MAP_TO_END, &offset, &offlen);
+	if (ret) {
+		vrd->target_sni = 1;
+		vrd->target_sni_ptr = (const uint8_t *)sni_name + offset;
+		vrd->target_sni_len = offlen;
 	}
 
 check_domain:
 	if (vrd->target_sni == 1) {
-		for (struct domains_list *sne = section->exclude_sni_domains; sne != NULL; sne = sne->next) {
-			const char *sni_startp = sni_name + sni_len - sne->domain_len;
-			const char *domain_startp = sne->domain_name;
 
-			if (sni_len >= sne->domain_len &&
-				sni_len < 128 && 
-				!strncmp(sni_startp, 
-				domain_startp, 
-				sne->domain_len)) {
-					vrd->target_sni = 0;
-					lgdebug("Excluded SNI: %.*s", 
-						vrd->sni_len, vrd->sni_ptr);
-			}
+		// It is safe for multithreading, so dp mutability is ok
+		ret = trie_process_str((struct trie_container *)&section->exclude_sni_domains, 
+				(const uint8_t *)sni_name, sni_len, TRIE_OPT_MAP_TO_END, &offset, &offlen);
+		if (ret) {
+			vrd->target_sni = 0;
+			lgdebug("Excluded SNI: %.*s", 
+				vrd->sni_len, vrd->sni_ptr);
 		}
 	}
 
