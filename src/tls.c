@@ -75,8 +75,6 @@ static int analyze_sni_str(
 		goto check_domain;
 	}
 
-	lgtrace_addp("abacaba");
-
 	// It is safe for multithreading, so dp mutability is ok
 	ret = trie_process_str((struct trie_container *)&section->sni_domains, 
 			(const uint8_t *)sni_name, sni_len, TRIE_OPT_MAP_TO_END, &offset, &offlen);
