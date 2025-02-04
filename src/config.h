@@ -53,20 +53,11 @@ struct udp_dport_range {
 	uint16_t end;
 };
 
-struct domains_list {
-	char *domain_name;
-	uint16_t domain_len;
-
-	struct domains_list *next;
-};
-
 struct section_config_t {
 	int id;
 	struct section_config_t *next;
 	struct section_config_t *prev;
 
-	// struct domains_list *sni_domains;
-	// struct domains_list *exclude_sni_domains;
 	struct trie_container sni_domains;
 	struct trie_container exclude_sni_domains;
 	unsigned int all_domains;
