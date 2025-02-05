@@ -1246,9 +1246,9 @@ int init_section_config(struct section_config_t **section, struct section_config
 #else
 	def_section = malloc(sizeof(struct section_config_t));
 #endif
-	*def_section = (struct section_config_t)default_section_config;
 	if (def_section == NULL)
 		return -ENOMEM;
+	*def_section = (struct section_config_t)default_section_config;
 
 	def_section->prev = prev;
 
