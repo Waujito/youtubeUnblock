@@ -1243,10 +1243,10 @@ int init_section_config(struct section_config_t **section, struct section_config
 	def_section = malloc(sizeof(struct section_config_t));
 #endif
 	*def_section = (struct section_config_t)default_section_config;
-	def_section->prev = prev;
-
-	if (def_section == NULL) 
+	if (def_section == NULL)
 		return -ENOMEM;
+
+	def_section->prev = prev;
 
 	ret = parse_sni_domains(&def_section->sni_domains, default_snistr, sizeof(default_snistr));
 	if (ret < 0) {
