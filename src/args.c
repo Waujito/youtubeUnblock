@@ -120,10 +120,10 @@ static int parse_sni_domains(struct domains_list **dlist, const char *domains_st
 			unsigned int domain_len = (i - j);
 			const char *domain_startp = domains_str + j;
 			struct domains_list *edomain = malloc(sizeof(struct domains_list));
-			*edomain = (struct domains_list){0};
 			if (edomain == NULL) {
 				return -ENOMEM;
 			}
+			*edomain = (struct domains_list){0};
 
 			edomain->domain_len = domain_len;
 			edomain->domain_name = malloc(domain_len + 1);
