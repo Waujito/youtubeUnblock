@@ -62,7 +62,7 @@ static int read_file(const char* filename) {
 	}
 
 	ret = fseek(fd, 0, SEEK_END);
-	if (ret < 0) {
+	if (ret != 0) {
 		ret = -errno;
 		goto close_file;
 	}
