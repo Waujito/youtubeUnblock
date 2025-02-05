@@ -68,6 +68,10 @@ static int read_file(const char* filename) {
 	}
 
 	long fsize = ftell(fd);
+	if (fsize == -1L) {
+		ret = -errno;
+		goto close_file;
+	}
 	fseek(fd, 0, SEEK_SET);
 	if (ret < 0) {
 		ret = -errno;
