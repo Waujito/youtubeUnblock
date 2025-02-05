@@ -82,6 +82,10 @@ int quic_parse_initial_message(
 	ret = quic_parse_data(quic_payload, quic_plen,
 			&qch, &qch_len, &qci, &inpayload, &inplen
 	);
+	if (ret < 0) {
+		lgerror(ret, "quic_parse_data");
+		goto error_nfr;
+	}
 
 	ret = quic_get_version(&qversion, qch);
 	if (ret < 0) {
@@ -117,10 +121,6 @@ int quic_parse_initial_message(
 	}
 
 	quic_header_len = inpayload - quic_payload;
-	if (ret < 0) {
-		lgerror(ret, "quic_parse_data");
-		goto error_nfr;
-	}
 
 	ret = quic_parse_initial_header(inpayload, inplen, &qich);
 	if (ret < 0) {
