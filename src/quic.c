@@ -71,7 +71,7 @@ int quic_check_is_initial(const struct quic_lhdr *qch) {
 	uint32_t qversion;
 	int ret;
 	ret = quic_get_version(&qversion, qch);
-	if (qversion < 0) return 0;
+	if (ret < 0) return 0;
 
 	uint8_t qtype = qch->type;
 
