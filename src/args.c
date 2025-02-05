@@ -289,6 +289,9 @@ static int parse_fake_custom_payload(
 		return -EINVAL;
 	}
 	unsigned char *custom_buf = malloc(custom_len);
+	if (custom_buf == NULL) {
+		return -ENOMEM;
+	}
 
 	for (int i = 0; i < custom_len; i++) {
 		ret = sscanf(custom_hex_fake + (i << 1), "%2hhx", custom_buf + i);
