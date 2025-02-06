@@ -502,18 +502,11 @@ drop:
 
 int send_ip4_frags(const struct section_config_t *section, const uint8_t *packet, size_t pktlen, const size_t *poses, size_t poses_sz, size_t dvs) {
 	if (poses_sz == 0) {
+		lgtrace_addp("raw send packet of %zu bytes with %zu dvs", pktlen, dvs);
 		if (section->seg2_delay && ((dvs > 0) ^ section->frag_sni_reverse)) {
-			if (!instance_config.send_delayed_packet) {
-				return -EINVAL;
-			}
-
-			lgtrace_addp("Sent %zu delayed for %d", pktlen, section->seg2_delay);
-			instance_config.send_delayed_packet(
+			return instance_config.send_delayed_packet(
 				packet, pktlen, section->seg2_delay);
-
-			return 0;
 		} else {
-			lgtrace_addp("Sent %zu bytes", pktlen);
 			return instance_config.send_raw_packet(
 				packet, pktlen);
 		}
@@ -588,18 +581,11 @@ out:
 
 int send_tcp_frags(const struct section_config_t *section, const uint8_t *packet, size_t pktlen, const size_t *poses, size_t poses_sz, size_t dvs) {
 	if (poses_sz == 0) {
+		lgtrace_addp("raw send packet of %zu bytes with %zu dvs", pktlen, dvs);
 		if (section->seg2_delay && ((dvs > 0) ^ section->frag_sni_reverse)) {
-			if (!instance_config.send_delayed_packet) {
-				return -EINVAL;
-			}
-
-			instance_config.send_delayed_packet(
+			return instance_config.send_delayed_packet(
 				packet, pktlen, section->seg2_delay);
-
-			return 0;
 		} else {
-			lgtrace_addp("raw send packet of %zu bytes with %zu dvs", pktlen, dvs);
-
 			return instance_config.send_raw_packet(
 				packet, pktlen);
 		}

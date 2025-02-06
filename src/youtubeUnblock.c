@@ -614,14 +614,33 @@ void *delay_packet_send_fn(void *data) {
 }
 
 int delay_packet_send(const unsigned char *data, size_t data_len, unsigned int delay_ms) {
+	int ret;
+
 	struct dps_t *dpdt = malloc(sizeof(struct dps_t));
+	if (dpdt == NULL) {
+		return -ENOMEM;
+	}
+	*dpdt = (struct dps_t){0};
+
 	dpdt->pkt = malloc(data_len);
+	if (dpdt->pkt == NULL) {
+		free(dpdt);
+		return -ENOMEM;
+	}
 	memcpy(dpdt->pkt, data, data_len);
+
 	dpdt->pktlen = data_len;
 	dpdt->timer = delay_ms;
-	pthread_t thr;
-	pthread_create(&thr, NULL, delay_packet_send_fn, dpdt);
-	pthread_detach(thr);
+	pthread_t thr = {0};
+	ret = pthread_create(&thr, NULL, delay_packet_send_fn, dpdt);
+	if (ret != 0) {
+		free(dpdt->pkt);
+		free(dpdt);
+		return -ret;
+	}
+
+	ret = pthread_detach(thr);
+
 	lgtrace_addp("Scheduled packet send after %d ms", delay_ms);
 
 	return 0;
