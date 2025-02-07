@@ -62,14 +62,18 @@ static int read_file(const char* filename) {
 	}
 
 	ret = fseek(fd, 0, SEEK_END);
-	if (ret < 0) {
+	if (ret != 0) {
 		ret = -errno;
 		goto close_file;
 	}
 
-	size_t fsize = ftell(fd);
-	fseek(fd, 0, SEEK_SET);
-	if (ret < 0) {
+	long fsize = ftell(fd);
+	if (fsize == -1L) {
+		ret = -errno;
+		goto close_file;
+	}
+	ret = fseek(fd, 0, SEEK_SET);
+	if (ret != 0) {
 		ret = -errno;
 		goto close_file;
 	}
@@ -120,10 +124,10 @@ static int parse_sni_domains(struct domains_list **dlist, const char *domains_st
 			unsigned int domain_len = (i - j);
 			const char *domain_startp = domains_str + j;
 			struct domains_list *edomain = malloc(sizeof(struct domains_list));
-			*edomain = (struct domains_list){0};
 			if (edomain == NULL) {
 				return -ENOMEM;
 			}
+			*edomain = (struct domains_list){0};
 
 			edomain->domain_len = domain_len;
 			edomain->domain_name = malloc(domain_len + 1);
@@ -285,6 +289,9 @@ static int parse_fake_custom_payload(
 		return -EINVAL;
 	}
 	unsigned char *custom_buf = malloc(custom_len);
+	if (custom_buf == NULL) {
+		return -ENOMEM;
+	}
 
 	for (int i = 0; i < custom_len; i++) {
 		ret = sscanf(custom_hex_fake + (i << 1), "%2hhx", custom_buf + i);
@@ -1242,11 +1249,11 @@ int init_section_config(struct section_config_t **section, struct section_config
 #else
 	def_section = malloc(sizeof(struct section_config_t));
 #endif
-	*def_section = (struct section_config_t)default_section_config;
-	def_section->prev = prev;
-
-	if (def_section == NULL) 
+	if (def_section == NULL)
 		return -ENOMEM;
+	*def_section = (struct section_config_t)default_section_config;
+
+	def_section->prev = prev;
 
 	ret = parse_sni_domains(&def_section->sni_domains, default_snistr, sizeof(default_snistr));
 	if (ret < 0) {
