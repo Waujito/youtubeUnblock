@@ -36,21 +36,20 @@ TEST(TLSTest, Test_CHLO_message_detect)
 TEST(TLSTest, Test_Bruteforce_detects)
 {
 	struct tls_verdict tlsv;
-	struct domains_list dmns = {
-		.domain_name = "youtube.com",
-		.domain_len = 11,
-		.next = NULL
-	};
-	sconf.sni_domains = &dmns;
+	struct trie_container trie;
+	int ret;
+	ret = trie_init(&trie);
+	ret = trie_add_string(&trie, (uint8_t *)"youtube.com", 11);
+	sconf.sni_domains = trie;
 
-	int ret = bruteforce_analyze_sni_str(&sconf, (const uint8_t *)tls_bruteforce_message, sizeof(tls_bruteforce_message) - 1, &tlsv);
+	ret = bruteforce_analyze_sni_str(&sconf, (const uint8_t *)tls_bruteforce_message, sizeof(tls_bruteforce_message) - 1, &tlsv);
 	TEST_ASSERT_EQUAL(0, ret);
 	TEST_ASSERT_EQUAL(11, tlsv.sni_len);
 	TEST_ASSERT_EQUAL_STRING_LEN("youtube.com", tlsv.sni_ptr, 11);
 	TEST_ASSERT_EQUAL_PTR(tls_bruteforce_message + 
 			sizeof(tls_bruteforce_message) - 12, tlsv.sni_ptr);
+	trie_destroy(&trie);
 }
-
 
 TEST_GROUP_RUNNER(TLSTest)
 {
