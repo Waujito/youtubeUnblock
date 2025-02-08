@@ -320,6 +320,10 @@ If your browser is using QUIC it may not work properly. Disable it in Chrome in 
 
 It seems like some TSPUs started to block wrongseq packets, so you should play around with faking strategies. I personally recommend to start with `md5sum` faking strategy.
 
+#### youtube with `--sni-domains=all`
+
+I know about this issue but it is **basically not an youtubeUnblock problem**. The problem is behind the large `*.googlevideo.com` domain name. All you want is to create a new configuration section for only youtube. It should go after section for all domains. For plain string arguments just `--fbegin` at the end of args list will work. In luci you can create section interactively.
+
 ### TV
 
 Televisions are the biggest headache. 
