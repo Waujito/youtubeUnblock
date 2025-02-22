@@ -462,6 +462,12 @@ make kmake KERNEL_BUILDER_MAKEDIR=~/linux
 ```
 Note, that the kernel should be already configured and built. See linux kernel building manuals for more information about your specific case.
 
+**If you got a very large module, you can strip it and significiantly decrese the size:**
+
+```sh
+strip --strip-debug kyoutubeUnblock.ko
+```
+
 #### Building with openwrt SDK
 
 Building with openwrt SDK is not such a hard thing. The only thing you should do is to obtain the sdk. You can find it by looking to your architecture and version of the openwrt currently used. You should use the exactly your version of openwrt since kernels there change often. You can find the sdk in two ways: by downloading it from their site or by using the openwrt sdk docker container (recommended).
