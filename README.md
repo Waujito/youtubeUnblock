@@ -60,7 +60,7 @@ For Windows use [GoodbyeDPI by ValdikSS](https://github.com/ValdikSS/GoodbyeDPI)
 
 When you got the release package, you should install it. Go to your router interface, to *System->Software*, do *Update lists* and install youtubeUnblock via *install_package* button. Then, you should go to *System-Startup* menu and reload the firewall (You may also do it within *Services->youtubeUnblock* menu). 
 
-Since OpenWRT **main** branch switched to apk instead of opkg, but this is not released yet, here is not deploys for apk in **Releases**. But **apk is supported** in PR #196.
+Since OpenWRT **main** branch switched to apk instead of opkg, but this is not released yet, here is not deploys for apk in **Releases**. But **apk is supported** in PR #196. Note, that if you are on **24.10** you will get **UNTRUSTED SIGNATURE** error. Put youtubeUnblock.pem to `/etc/apk/keys/` or install youtubeUnblock with `--allow-untrusted` flag `apk add youtubeUnblock*.apk --allow-untrusted`.
 
 To make it work you should register an iptables rule and install required kernel modules. The list of modules depends on the version of OpenWRT and which firewall do you use (iptables or nftables). For most modern versions of OpenWRT (v23.x, v22.x) you should use nftables rules, for older ones it depends, but typically iptables.
 
