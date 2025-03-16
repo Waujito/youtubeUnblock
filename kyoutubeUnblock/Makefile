@@ -21,6 +21,7 @@ define KernelPackage/youtubeUnblock
 	TITLE:=kmod youtubeUnblock
 	VERSION:=$(LINUX_VERSION)$(if $(PKG_VERSION),.$(PKG_VERSION))~$(shell echo $(PKG_REV) | cut -c 1-7)-r$(if $(PKG_RELEASE),$(PKG_RELEASE),$(LINUX_RELEASE))
 	FILES:=$(PKG_BUILD_DIR)/kyoutubeUnblock.$(LINUX_KMOD_SUFFIX)
+	DEPENDS:=+kmod-nf-conntrack
 	URL:=https://github.com/Waujito/youtubeUnblock
 	MAINTAINER:=Vadim Vetrov <vetrovvd@gmail.com>
 endef
