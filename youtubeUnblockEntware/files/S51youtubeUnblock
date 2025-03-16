@@ -9,9 +9,7 @@ PATH=/opt/sbin:/opt/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:
 IPV6=1
 
 ACTION=$1
-CALLER=$2
-
-# . /opt/etc/nfqws/nfqws.conf
+CALLER=${2:-$0}
 
 ansi_red="\033[1;31m";
 ansi_white="\033[1;37m";
@@ -25,7 +23,7 @@ ansi_rev="\033[7m";
 ansi_ul="\033[4m";
 
 is_running() {
-	PID_RUNNING=$(pgrep -nx "$PROCS" 2>/dev/null)
+	PID_RUNNING=`pidof "$PROCS"`
 	
 	if [ -z "$PID_RUNNING" ]; then
 		return 1
@@ -50,17 +48,17 @@ start() {
 		ARGS="$ARGS --no-ipv6"
 	fi
 	
-	$PROCS $ARGS >/dev/null 2>&1 &
-	
+	$PROCS $ARGS --daemonize
+
 	firewall_start_v4
 	firewall_start_v6
 	system_config
 	
-        echo -e "$ansi_white Started $PROCS $ansi_std"
+	echo -e "$ansi_white Started $PROCS $ansi_std"
 }
 
 stop() {
-        echo -e "$ansi_white Shutting down $PROCS $ansi_std"
+	echo -e "$ansi_white Shutting down $PROCS $ansi_std"
 
 	firewall_stop_v4
 	firewall_stop_v6
@@ -70,9 +68,9 @@ stop() {
 
 _iptables()
 {
-	ARG="$@"	
-	CMD=$1 # iptables or ip6tables
-	ACTION=$2 # -I, -A, -D
+	ARGV="$@"
+	CMD=$1		# iptables or ip6tables
+	ACTION=$2	# -I, -A, -D
 	shift; shift;
 	RULE="$@"
 
@@ -82,11 +80,11 @@ _iptables()
 	if [ "$ACTION" = "-A" -o "$ACTION" = "-I" ]
 	then
 		if [ $exists -eq 0 ]; then
-			$ARG || exit 1
+			$ARGV || return 1
 		fi
 	else # -D
 		if [ $exists -ne 0 ]; then
-			$ARG
+			$ARGV
 		fi
 	fi
 }
