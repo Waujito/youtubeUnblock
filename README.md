@@ -9,7 +9,7 @@
     - [IPv6](#ipv6)
   - [Check it](#check-it)
   - [Flags](#flags)
-  - [UDP/QUIC/Voice Chats](#udpquicvoice-chats)
+  - [UDP/QUIC](#udpquic)
   - [Troubleshooting](#troubleshooting)
     - [TV](#tv)
     - [Troubleshooting EPERMS (Operation not permitted)](#troubleshooting-eperms-operation-not-permitted)
@@ -29,9 +29,21 @@
 
 # youtubeUnblock
 
-Bypasses Deep Packet Inspection (DPI) systems that relies on SNI. The package is for Linux only. It is also fully compatible with routers running [OpenWRT](https://github.com/openwrt). 
+Bypasses YouTube detection systems that relies on SNI. 
 
 The program was primarily developed to bypass YouTube Outage in Russia.
+
+The program should be used **only for the YouTube platform**. It is legal since access to YouTube **is not officially restricted in Russia**. You **MUST NOT** use the program for any other purpose. I respect all Russian laws and do not wish to break any.
+
+Starting with a YouTube speedup for my laptop, this project grew into a standalone tool that unblocks YouTube on a wide variety of devices. This project has fulfilled my dream of creating a massive, highly reliable, open-source GitHub project that helps people. I value all your feedback, and that is the reason I continue to maintain it. I learned many things while developing it, such as aspects of the Linux kernel networking stack. It is truly rewarding to explore new technologies while developing a project for people. This experience is incomparable to that of working on a mere pet project.
+
+**So, please use it only for YouTube and only in accordance with the laws of your country.**
+
+If you have any questions, suggestions, or problems, feel free to open an [issue](https://github.com/Waujito/youtubeUnblock/issues).
+
+You are also welcome to contact me directly using the links provided in my GitHub profile description; however, please contact me only if you have a special offer. For help with the program, it is preferable to make our conversation public by posting on [GitHub Discussions](https://github.com/Waujito/youtubeUnblock/discussions).
+
+The program is distributed under the GNU GPL v3 open-source license.
 
 ```
 This program is free software: you can redistribute it and/or modify
@@ -44,6 +56,8 @@ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 GNU General Public License for more details.
 ```
 
+The program is for Linux only. It is also fully compatible with routers running [OpenWRT](https://github.com/openwrt). 
+
 The program is distributed in two version:
 - A userspace application works on top of nfnetlink queue which requires nfnetlink modules in the kernel and firewall rules. This approach is default and normally should be used but it has some limitations on embedded devices which may have no nfnetlink support. Also this solution may break down the internet speed and CPU load on your device because of jumps between userspace and kernelspace for each packet (this behavior may be fixed with connbytes but it also requires conntrack kernel module).
 - A kernel module which integrates deeply within the netfilter stack and does not interact with the userspace firewall. The module requires only netfilter kernel support but it definetly present on every device connected to the Internet. The only difficulity is how to build it. I cannot provide modules within Github Actions for each single one kernel, even if we talk only about OpenWRT versions. If you want to learn more about the module, jump on [its section in the README](#kernel-module). Whats the benefits of the kernel module? The benefits come for some specific cases: the kernel module is the fastest thing that allows us to process every single packet sent to the linux network stack, while the normal youtubeUnblock requires connbytes to keep the internet speed. Speaking about connbytes, it also requires conntrack to operate, which may be a limitation on some transit-traffic machines. Also userspace youtubeUnblock requires modules for netlink queue, userspace firewall application and modules for it. The kernel module is much simpler and requires only the linux kernel with netfilter built in.
@@ -51,8 +65,6 @@ The program is distributed in two version:
 The program is compatible with routers based on OpenWRT, Entware(Keenetic/ASUS) and host machines. The program offers binaries via Github Actions. The binaries are also available via [github releases](https://github.com/Waujito/youtubeUnblock/releases). Use the latest pre-release for the most up to date build. Check out [Github Actions](https://github.com/Waujito/youtubeUnblock/actions/workflows/build-ci.yml) if you want to see all the binaries compiled ever. You should know the arcitecture of your hardware to use binaries. On OpenWRT you can check it with command `grep ARCH /etc/openwrt_release`.
 
 On both OpenWRT and Entware install the program with opkg. If you got read-only filesystem error you may unpack the binary manually or specify opkg path `opkg -o <destdir>`.
-
-For Windows use [GoodbyeDPI by ValdikSS](https://github.com/ValdikSS/GoodbyeDPI) (you can find how to use it for YouTube [here](https://github.com/ValdikSS/GoodbyeDPI/issues/378)) The same behavior is also implemented in [zapret package for linux](https://github.com/bol-van/zapret).
 
 ## Configuration
 
@@ -291,9 +303,9 @@ Flags that do not scoped to a specific section, used over all the youtubeUnblock
 
 - `--no-dport-filter` By default, youtubeUnblock will filter for TLS and QUIC 443. If you want to disable it, pass this flag. (this does not affect `--udp-dport-filter`)
 
-## UDP/QUIC/Voice Chats
+## UDP/QUIC
 
-UDP is another communication protocol. Well-known technologies that use it are DNS, QUIC, voice chats. UDP does not provide reliable connection and its header is much simpler than TCP thus fragmentation is limited. The support provided primarily by faking. 
+UDP is another communication protocol. Well-known technologies that use it are DNS, QUIC. UDP does not provide reliable connection and its header is much simpler than TCP thus fragmentation is limited. The support provided primarily by faking. 
 
 **For UDP faking in kernel module** Make sure to decrease `--connbytes-limit` up to 5. This will allow not to process additional packets and prevent network flood.
 
@@ -303,7 +315,7 @@ QUIC is enabled with `--udp-filter-quic` flag. The flag supports two modes: `all
 
 **I recommend to use** `--udp-mode=drop --udp-filter-quic=parse`.
 
-For **other UDP protocols** I recommend to configure UDP support in the separate section from TCP, like `--fbegin --udp-dport-filter=50000-50099 --tls=disabled`. See more in flags related to udp and [tickets tagged with udp label](https://github.com/Waujito/youtubeUnblock/issues?q=label%3Audp+). 
+For **other UDP protocols** I recommend to configure UDP support in the separate section from TCP, like `--fbegin --udp-dport-filter=50000-50099 --tls=disabled`.
 
 ## Troubleshooting
 
@@ -493,8 +505,3 @@ When the commands finish, the module is ready. Find it with `find bin -name "kmo
 
 ## Padavan
 YoutubeUnblock may also run on Padavan. [Check the manual here\[rus\]](Padavan.md)
-
-
- >If you have any questions/suggestions/problems feel free to open an [issue](https://github.com/Waujito/youtubeUnblock/issues).
-
-
