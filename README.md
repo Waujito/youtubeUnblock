@@ -29,7 +29,7 @@
 
 # youtubeUnblock
 
-Bypasses YouTube detection systems that relies on SNI. 
+Bypasses YouTube detection systems that rely on SNI. 
 
 The program was primarily developed to bypass YouTube Outage in Russia.
 
