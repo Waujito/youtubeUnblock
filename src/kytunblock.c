@@ -483,8 +483,8 @@ static NF_CALLBACK(ykb_nf_hook, skb) {
 	uint8_t *data_buf = NULL;
 	int nf_verdict = NF_ACCEPT;
 
+	kref_get(&cur_config->refcount);
 	struct config_t *config = cur_config;
-	kref_get(&config->refcount);
 
 	++global_stats.all_packet_counter;
 
