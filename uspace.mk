@@ -109,7 +109,10 @@ $(BUILD_DIR)/test/%.o: test/%.c $(REQ) $(INCLUDE_DIR)/config.h
 	@echo 'CC $@'
 	$(CC) -c $(CFLAGS) $(LDFLAGS) $(TEST_CFLAGS) $< -o $@
 
-install: all
+install:
+ifeq (,$(wildcard $(APP)))
+	$(error Make the binary first)
+endif
 	install -d $(DESTDIR)$(PREFIX)/bin/
 	install -m 755 $(APP) $(DESTDIR)$(PREFIX)/bin/
 	install -d $(DESTDIR)$(PREFIX)/lib/systemd/system/
