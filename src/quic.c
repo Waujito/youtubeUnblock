@@ -426,6 +426,35 @@ out:
 	return 0;
 }
 
+int is_stun_message(const uint8_t *data, size_t dlen) {
+	size_t left_len = dlen;
+	const uint8_t *data_ptr = data;
+	uint16_t message_type;
+	uint16_t message_length;
+
+	if (left_len < 2 + 2 + 4 + 12) {
+		return 0;
+	}
+
+	message_type = *(uint16_t *)data_ptr;
+	data_ptr += 2;
+	left_len -= 2;
+
+	message_length = *(uint16_t *)data_ptr;
+	data_ptr += 2;
+	left_len -= 2;
+
+	data_ptr += 4;
+	left_len -= 4;
+	data_ptr += 12;
+	left_len -= 12;
+
+	message_type = ntohs(message_type);
+	message_length = ntohs(message_length);
+
+	return (left_len == message_length);
+}
+
 int detect_udp_filtered(const struct section_config_t *section,
 			const uint8_t *payload, size_t plen) {
 	const void *iph;
@@ -542,6 +571,11 @@ match_port:
 			lgtrace_addp("matched to %d-%d", crange.start, crange.end);
 			goto approve;
 		}
+	}
+
+	if (section->udp_stun_filter && is_stun_message(data, dlen)) {
+		lgtrace_addp("STUN protocol detected");
+		goto approve;
 	}
 
 skip:

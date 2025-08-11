@@ -107,6 +107,7 @@ struct section_config_t {
 
 	struct udp_dport_range *udp_dport_range;
 	int udp_dport_range_len;
+	int udp_stun_filter;
 	int udp_filter_quic;
 };
 
