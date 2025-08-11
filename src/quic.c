@@ -452,7 +452,20 @@ int is_stun_message(const uint8_t *data, size_t dlen) {
 	message_type = ntohs(message_type);
 	message_length = ntohs(message_length);
 
-	return (left_len == message_length);
+	if (left_len != message_length) {
+		return 0;
+	}
+
+	if ((message_type & (1 << 15)) || (message_type & (1 << 14))) {
+		return 0;
+	}
+
+	// Filter request only
+	if ((message_type & (1 << 4)) || (message_type & (1 << 8))) {
+		return 0;
+	}
+
+	return 1;
 }
 
 int detect_udp_filtered(const struct section_config_t *section,
