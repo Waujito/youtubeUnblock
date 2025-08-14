@@ -293,13 +293,15 @@ Flags that do not scoped to a specific section, used over all the youtubeUnblock
 
 - `--udp-fake-len=<size of udp fake>` Size of udp fake payload (typically payload is zeroes). Defaults to 64.
 
-- `--udp-dport-filter=<5,6,200-500>` Filter the UDP destination ports. Defaults to no ports. Specifie the ports you want to be handled by youtubeUnblock.
+- `--udp-dport-filter=<5,6,200-500>` Filter the UDP destination ports. Defaults to no ports. Specifie the ports you want to be handled by youtubeUnblock. Please note, it may conflict with `--quic-drop` since `--quic-drop` setts `--udp-mode` to drop globally. So, make sure to handle it in a different config section.
+
+- `--udp-stun-filter` Filter all the UDP STUN request packets. Very useful for voice chats. Please note, it may conflict with `--quic-drop` since `--quic-drop` setts `--udp-mode` to drop globally. So, make sure to handle it in a different config section.
 
 - `--udp-faking-strategy={checksum|ttl|none}` Faking strategy for udp. `checksum` will fake UDP checksum, `ttl` won't fake but will make UDP content relatively small, `none` is no faking. Defaults to none.
 
 - `--udp-filter-quic={disabled|all|parse}` Enables QUIC filtering for UDP handler. If disabled, quic won't be processed, if all, all quic initial packets will be handled. `parse` will decrypt and parse QUIC initial message and match it with `--sni-domains`. Defaults to disabled.
 
-- `--quic-drop` Drop all QUIC packets which goes to youtubeUnblock. Won't affect any other UDP packets. Just an alias for `--udp-filter-quic=all --udp-mode=drop`.
+- `--quic-drop` Drop all QUIC packets which goes to youtubeUnblock. Won't affect any other UDP packets. Just an alias for `--udp-filter-quic=all --udp-mode=drop`. Please note, because of `--udp-mode=drop` it may conflict with other filter options. Make sure to use multiple sections.
 
 - `--no-dport-filter` By default, youtubeUnblock will filter for TLS and QUIC 443. If you want to disable it, pass this flag. (this does not affect `--udp-dport-filter`)
 
@@ -315,7 +317,7 @@ QUIC is enabled with `--udp-filter-quic` flag. The flag supports two modes: `all
 
 **I recommend to use** `--udp-mode=drop --udp-filter-quic=parse`.
 
-For **other UDP protocols** I recommend to configure UDP support in the separate section from TCP, like `--fbegin --udp-dport-filter=50000-50099 --tls=disabled`.
+For **other UDP protocols** I recommend to configure UDP support in the separate section from TCP, like `--fbegin --udp-dport-filter=50000-50099 --tls=disabled`. **You should not pass `--quic-drop` here unless you are sure what you are doing**
 
 ## Troubleshooting
 
