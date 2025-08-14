@@ -333,6 +333,7 @@ enum {
 	OPT_UDP_FAKE_PAYLOAD_LEN,
 	OPT_UDP_FAKING_STRATEGY,
 	OPT_UDP_DPORT_FILTER,
+	OPT_UDP_STUN_FILTER,
 	OPT_UDP_FILTER_QUIC,
 	OPT_TLS_ENABLED,
 	OPT_CLS,
@@ -373,6 +374,7 @@ static struct option long_opt[] = {
 	{"udp-fake-len",	1, 0, OPT_UDP_FAKE_PAYLOAD_LEN},
 	{"udp-faking-strategy",	1, 0, OPT_UDP_FAKING_STRATEGY},
 	{"udp-dport-filter",	1, 0, OPT_UDP_DPORT_FILTER},
+	{"udp-stun-filter",	0, 0, OPT_UDP_STUN_FILTER},
 	{"udp-filter-quic",	1, 0, OPT_UDP_FILTER_QUIC},
 	{"no-dport-filter",	0, 0, OPT_NO_DPORT_FILTER},
 	{"threads",		1, 0, OPT_THREADS},
@@ -440,6 +442,7 @@ void print_usage(const char *argv0) {
 	printf("\t--udp-fake-len=<size of upd fake>\n");
 	printf("\t--udp-faking-strategy={checksum|ttl|none}\n");
 	printf("\t--udp-dport-filter=<5,6,200-500>\n");
+	printf("\t--udp-stun-filter\n");
 	printf("\t--udp-filter-quic={disabled|all|parse}\n");
 	printf("\t--no-dport-filter\n");
 	printf("\t--threads=<threads number>\n");
@@ -927,6 +930,9 @@ int yparse_args(struct config_t *config, int argc, char *argv[]) {
 			}
 			break;
 		}
+		case OPT_UDP_STUN_FILTER:
+			sect_config->udp_stun_filter = 1;
+			break;
 		case OPT_UDP_FILTER_QUIC:
 			if (strcmp(optarg, "disabled") == 0) {
 				sect_config->udp_filter_quic = UDP_FILTER_QUIC_DISABLED;
@@ -1097,6 +1103,10 @@ static size_t print_config_section(const struct section_config_t *section, char 
 	case UDP_FILTER_QUIC_PARSED:
 		print_cnf_buf("--udp-filter-quic=parse");
 		break;
+	}
+
+	if (section->udp_stun_filter) {
+		print_cnf_buf("--udp-stun-filter");
 	}
 
 	if (section->udp_dport_range_len != 0) {
