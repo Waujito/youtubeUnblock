@@ -142,7 +142,7 @@ return view.extend({
 	renderSectionUDPConfigs: function(s) {
 		let o;
 
-		o = s.option(form.Flag, "quic_drop", _("QUIC drop"), _("Drop all QUIC packets which goes to youtubeUnblock. Won't affect any other UDP packets."));
+		o = s.option(form.Flag, "quic_drop", _("QUIC drop"), _("Drop all QUIC packets which goes to youtubeUnblock. Won't affect any other UDP packets. Please note, because of <code>--udp-mode=drop</code> it may conflict with other filter options. Make sure to use multiple sections."));
 		o.enabled = '1'
 		o.disabled = '0'
 		o.default = o.disabled;
@@ -176,8 +176,15 @@ return view.extend({
 		o.default = 64
 		o.rmempty = false;
 
-		o = s.option(form.DynamicList, "udp_dport_filter", _("UDP dport filter"), _("Filter the UDP destination ports. Specifie the ports you want to be handled by youtubeUnblock. Valid inputs are port number or port range (e.g. 200-500)."));
+		o = s.option(form.DynamicList, "udp_dport_filter", _("UDP dport filter"), _("Filter the UDP destination ports. Specify the ports you want to be handled by youtubeUnblock. Valid inputs are port number or port range (e.g. 200-500). Please note, it may conflict with <code>--quic-drop</code> since it setts <code>--udp-mode</code> to drop globally. So, make sure to handle it in a different config section."));
 		o.depends("quic_drop", "0");
+
+		o = s.option(form.Flag, "udp_stun_filter", _("UDP stun filter"), _("Filter all the UDP STUN request packets. Very useful for voice chats. Please note, it may conflict with <code>--quic-drop</code> since it setts <code>--udp-mode</code> to drop globally. So, make sure to handle it in a different config section."));
+		o.depends("quic_drop", "0");
+		o.enabled = '1'
+		o.disabled = '0'
+		o.default = o.disabled;
+		o.rmempty = false;
 
 		o = s.option(form.ListValue, "udp_filter_quic", _("UDP QUIC filter"), _("Enables QUIC filtering for UDP handler. If disabled, quic won't be processed, if all, all quic initial packets will be handled."));
 		o.widget = "radio"
