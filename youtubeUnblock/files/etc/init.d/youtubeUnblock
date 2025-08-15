@@ -91,7 +91,7 @@ parse_sections_options() {
         append_opts_boolean "$config" fake_sni frag_sni_reverse frag_sni_faked frag_middle_sni synfake 
 	append_opts "$config" fake_sni_seq_len fake_sni_type fake_custom_payload faking_strategy faking_ttl fake_seq_offset frag frag_sni_pos fk_winsize seg2delay synfake_len sni_detection udp_mode udp_fake_seq_len udp_fake_len udp_filter_quic udp_faking_strategy
         append_commasep_list "$config" exclude_domains udp_dport_filter
-        append_opts_btoggler "$config" quic_drop
+        append_opts_btoggler "$config" quic_drop udp_stun_filter
 
 	config_get value "$config" section_post_args
 	OPTS="$OPTS $value"
