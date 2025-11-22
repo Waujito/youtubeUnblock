@@ -345,6 +345,15 @@ int process_tcp_packet(const struct section_config_t *section, const uint8_t *ra
 			ipd_offset = target_sni_offset;
 			mid_offset = ipd_offset + vrd.target_sni_len / 2;
 
+			// hardcode googlevideo.com split
+			// googlevideo domains are very long, so
+			// it is possible for the entire domain to not be
+			// splitted (split goes for subdomain)
+			if (vrd.target_sni_len > 30) {
+				mid_offset = ipd_offset + 
+					vrd.target_sni_len - 12;
+			}
+
 			size_t poses[2];
 			int cnt = 0;
 
