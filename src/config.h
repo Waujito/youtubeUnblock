@@ -241,7 +241,7 @@ enum {
 	.fragmentation_strategy = FRAGMENTATION_STRATEGY,       \
 	.faking_strategy = FAKING_STRATEGY,                     \
 	.faking_ttl = FAKE_TTL,                                 \
-	.fake_sni = 1,                                          \
+	.fake_sni = 0,                                          \
 	.fake_sni_seq_len = 1,                                  \
 	.fake_sni_type = FAKE_PAYLOAD_DEFAULT,                  \
 	.fake_custom_pkt = NULL,				\

@@ -1057,6 +1057,8 @@ static size_t print_config_section(const struct section_config_t *section, char 
 			}	
 
 			print_cnf_buf("--seg2delay=%d", section->seg2_delay);
+		} else {
+			print_cnf_buf("--fake-sni=0");
 		}
 	} else {
 		print_cnf_buf("--tls=disabled");
