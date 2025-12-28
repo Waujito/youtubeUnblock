@@ -28,7 +28,7 @@ return view.extend({
 		o.depends('tls_enabled', '1');
 		o.enabled = '1'
 		o.disabled = '0'
-		o.default = o.enabled;
+		o.default = o.disabled;
 		o.rmempty = false;
 
 		o = s.option(form.ListValue, "faking_strategy", _("Faking strategy"), `

@@ -22,7 +22,7 @@ add youtubeUnblock section
 set youtubeUnblock.@section[0].name='Default section'
 set youtubeUnblock.@section[0].enabled='1'
 set youtubeUnblock.@section[0].tls_enabled='1'
-set youtubeUnblock.@section[0].fake_sni='1'
+set youtubeUnblock.@section[0].fake_sni='0'
 set youtubeUnblock.@section[0].faking_strategy='pastseq'
 set youtubeUnblock.@section[0].fake_sni_seq_len='1'
 set youtubeUnblock.@section[0].fake_sni_type='default'
