@@ -1,0 +1,23 @@
+Source: youtubeunblock
+Section: net
+Priority: optional
+Maintainer: Andrew Clark <andrewclarkii@gmail.com>
+Rules-Requires-Root: no
+Build-Depends:
+ debhelper-compat (= 13),
+Standards-Version: 4.7.2
+Homepage: https://github.com/Waujito/youtubeUnblock.git
+#Vcs-Browser: https://salsa.debian.org/debian/youtubeunblock
+#Vcs-Git: https://salsa.debian.org/debian/youtubeunblock.git
+
+Package: youtubeunblock
+Architecture: any
+Depends:
+ ${shlibs:Depends},
+ ${misc:Depends},
+ libnfnetlink-dev,
+ libmnl-dev,
+ libnetfilter-queue-dev
+Description: Bypasses YouTube detection systems that rely on SNI.
+ Bypasses YouTube detection systems that rely on SNI.
+ The program was primarily developed to bypass YouTube Outage in Russia.
