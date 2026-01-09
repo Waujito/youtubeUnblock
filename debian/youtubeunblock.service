@@ -1,0 +1,20 @@
+[Unit]
+Description=YouTubeUnblock
+Documentation=https://github.com/Waujito/youtubeUnblock
+Wants=network-online.target
+After=network-online.target nss-lookup.target
+
+[Service]
+NoNewPrivileges=yes
+StandardOutput=journal
+StandardError=journal
+EnvironmentFile=-/etc/youtubeunblock.conf
+EnvironmentFile=-%h/.config/youtubeunblock.conf
+ExecStart=youtubeunblock $YOUTUBEUNBLOCK_OPTIONS
+TimeoutStopSec=5s
+PrivateTmp=true
+ProtectSystem=full
+
+[Install]
+WantedBy=multi-user.target
+
