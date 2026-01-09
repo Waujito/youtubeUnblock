@@ -1,13 +1,20 @@
 [Unit]
-Description=youtubeUnblock
+Description=YouTubeUnblock
+Documentation=https://github.com/Waujito/youtubeUnblock
+Wants=network-online.target
+After=network-online.target nss-lookup.target
 
 [Service]
-StandardError=journal
+NoNewPrivileges=yes
 StandardOutput=journal
-StandardInput=null
-ExecStartPre=iptables -t mangle -A OUTPUT -p tcp -m tcp --dport 443 -m connbytes --connbytes-dir original --connbytes-mode packets --connbytes 0:19 -j NFQUEUE --queue-num 537 --queue-bypass
-ExecStart=$(PREFIX)/bin/youtubeUnblock
-ExecStop=iptables -t mangle -D OUTPUT -p tcp -m tcp --dport 443 -m connbytes --connbytes-dir original --connbytes-mode packets --connbytes 0:19 -j NFQUEUE --queue-num 537 --queue-bypass
+StandardError=journal
+EnvironmentFile=-/etc/youtubeunblock.conf
+EnvironmentFile=-%h/.config/youtubeunblock.conf
+ExecStart=youtubeunblock $YOUTUBEUNBLOCK_OPTIONS
+TimeoutStopSec=5s
+PrivateTmp=true
+ProtectSystem=full
 
 [Install]
 WantedBy=multi-user.target
+
