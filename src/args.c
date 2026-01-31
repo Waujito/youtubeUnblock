@@ -159,6 +159,62 @@ static long parse_numeric_option(const char* value) {
 	return result;
 }
 
+static int parse_faking_strategy(char *optarg, int *faking_strategy) {
+
+	*faking_strategy = 0;
+	char *p = optarg;
+	char *ep = p;
+	while (1) {
+		if (*ep == '\0' || *ep == ',') {
+			if (ep == p) {
+				if (*ep == '\0')
+					break;
+
+				p++, ep++;
+				continue;
+			}
+
+			char ep_endsym = *ep;
+			*ep = '\0';
+
+			if (strcmp(p, "randseq") == 0) {
+				*faking_strategy |= FAKE_STRAT_RAND_SEQ;
+			} else if (strcmp(p, "ttl") == 0) {
+				*faking_strategy |= FAKE_STRAT_TTL;
+			} else if (strcmp(p, "tcp_check") == 0) {
+				*faking_strategy |= FAKE_STRAT_TCP_CHECK;
+			} else if (strcmp(p, "pastseq") == 0) {
+				*faking_strategy |= FAKE_STRAT_PAST_SEQ;
+			} else if (strcmp(p, "md5sum") == 0) {
+				*faking_strategy |= FAKE_STRAT_TCP_MD5SUM;
+			} else if (strcmp(p, "timestamp") == 0) {
+				*faking_strategy |= FAKE_STRAT_TCP_TS;
+			} else {
+				return -1;
+			}
+
+			*ep = ep_endsym;
+
+			if (*ep == '\0') {
+				break;
+			} else {
+				p = ep + 1;
+				ep = p;
+			}
+		} else {
+			ep++;
+		}
+	}
+
+	if (	CHECK_BITFIELD(*faking_strategy, FAKE_STRAT_PAST_SEQ) &&
+		CHECK_BITFIELD(*faking_strategy, FAKE_STRAT_RAND_SEQ)) {
+		lgerr("Strategies pastseq and randseq are incompatible\n");
+		return -1;
+	}
+
+	return 0;
+}
+
 static int parse_udp_dport_range(char *str, struct udp_dport_range **udpr, int *udpr_len) {
 	int seclen = 1;
 	const char *p = str;
@@ -297,6 +353,7 @@ enum {
 	OPT_FAKE_SNI,
 	OPT_FAKING_TTL,
 	OPT_FAKING_STRATEGY,
+	OPT_FAKING_TIMESTAMP_DECREASE,
 	OPT_FAKE_SNI_SEQ_LEN,
 	OPT_FAKE_SNI_TYPE,
 	OPT_FAKE_CUSTOM_PAYLOAD,
@@ -360,6 +417,7 @@ static struct option long_opt[] = {
 	{"faking-strategy",	1, 0, OPT_FAKING_STRATEGY},
 	{"fake-seq-offset",	1, 0, OPT_FAKE_SEQ_OFFSET},
 	{"faking-ttl",		1, 0, OPT_FAKING_TTL},
+	{"faking-timestamp-decrease", 1, 0, OPT_FAKING_TIMESTAMP_DECREASE},
 	{"frag",		1, 0, OPT_FRAG},
 	{"frag-sni-reverse",	1, 0, OPT_FRAG_SNI_REVERSE},
 	{"frag-sni-faked",	1, 0, OPT_FRAG_SNI_FAKED},
@@ -425,7 +483,8 @@ void print_usage(const char *argv0) {
 	printf("\t--fake-custom-payload-file=<binary file containing TLS message>\n");
 	printf("\t--fake-seq-offset=<offset>\n");
 	printf("\t--faking-ttl=<ttl>\n");
-	printf("\t--faking-strategy={randseq|ttl|tcp_check|pastseq|md5sum}\n");
+	printf("\t--faking-timestamp-decrease=<val>\n");
+	printf("\t--faking-strategy={randseq|ttl|tcp_check|pastseq|md5sum|timestamp}\n");
 	printf("\t--synfake={1|0}\n");
 	printf("\t--synfake-len=<len>\n");
 	printf("\t--frag={tcp,ip,none}\n");
@@ -730,21 +789,11 @@ int yparse_args(struct config_t *config, int argc, char *argv[]) {
 			sect_config->frag_sni_pos = num;
 			break;
 		case OPT_FAKING_STRATEGY:
-			if (strcmp(optarg, "randseq") == 0) {
-				sect_config->faking_strategy = FAKE_STRAT_RAND_SEQ;
-			} else if (strcmp(optarg, "ttl") == 0) {
-				sect_config->faking_strategy = FAKE_STRAT_TTL;
-			} else if (strcmp(optarg, "tcp_check") == 0) {
-				sect_config->faking_strategy = FAKE_STRAT_TCP_CHECK;
-			} else if (strcmp(optarg, "pastseq") == 0) {
-				sect_config->faking_strategy = FAKE_STRAT_PAST_SEQ;
-			} else if (strcmp(optarg, "md5sum") == 0) {
-				sect_config->faking_strategy = FAKE_STRAT_TCP_MD5SUM;
-			} else {
+			if (parse_faking_strategy(
+					optarg, &sect_config->faking_strategy) < 0) {
 				goto invalid_opt;
 			}
-
-			break;
+			break;	
 		case OPT_FAKING_TTL:
 			num = parse_numeric_option(optarg);
 			if (errno != 0 || num < 0 || num > 255) {
@@ -752,6 +801,14 @@ int yparse_args(struct config_t *config, int argc, char *argv[]) {
 			}
 
 			sect_config->faking_ttl = num;
+			break;
+		case OPT_FAKING_TIMESTAMP_DECREASE:
+			num = parse_numeric_option(optarg);
+			if (errno != 0) {
+				goto invalid_opt;
+			}
+
+			sect_config->faking_timestamp_decrease = num;
 			break;
 		case OPT_FAKE_SEQ_OFFSET:
 			num = parse_numeric_option(optarg);
@@ -1033,32 +1090,65 @@ static size_t print_config_section(const struct section_config_t *section, char 
 			case FAKE_PAYLOAD_DEFAULT:
 				print_cnf_buf("--fake-sni-type=default");
 				break;
-			}
-
-			switch(section->faking_strategy) {
-			case FAKE_STRAT_TTL:
-				print_cnf_buf("--faking-strategy=ttl");
-				print_cnf_buf("--faking-ttl=%d", section->faking_ttl);
-				break;
-			case FAKE_STRAT_RAND_SEQ:
-				print_cnf_buf("--faking-strategy=randseq");
-				break;
-			case FAKE_STRAT_TCP_CHECK:
-				print_cnf_buf("--faking-strategy=tcp_check");
-				break;
-			case FAKE_STRAT_TCP_MD5SUM:
-				print_cnf_buf("--faking-strategy=md5sum");
-				break;
-			case FAKE_STRAT_PAST_SEQ:
-				print_cnf_buf("--faking-strategy=pastseq");
-				print_cnf_buf("--fake-seq-offset=%d", section->fakeseq_offset);
-				break;
-
 			}	
 
 			print_cnf_buf("--seg2delay=%d", section->seg2_delay);
 		} else {
 			print_cnf_buf("--fake-sni=0");
+		}
+
+		if (section->fake_sni && section->faking_strategy) {
+			int show_ttl = 0;
+			int show_seq_offset = 0;
+			int show_faking_ts_decr = 0;
+
+			print_cnf_raw("--faking-strategy=");
+			if (CHECK_BITFIELD(section->faking_strategy, FAKE_STRAT_TTL)) {
+				print_cnf_raw("ttl");
+				print_cnf_raw(",");
+				show_ttl = 1;
+			}
+
+			if (CHECK_BITFIELD(section->faking_strategy, FAKE_STRAT_RAND_SEQ)) {
+				print_cnf_raw("randseq");
+				print_cnf_raw(",");
+				show_ttl = 1;
+			}
+
+			if (CHECK_BITFIELD(section->faking_strategy, FAKE_STRAT_TCP_CHECK)) {
+				print_cnf_raw("tcp_check");
+				print_cnf_raw(",");
+			}
+
+			if (CHECK_BITFIELD(section->faking_strategy, FAKE_STRAT_TCP_MD5SUM)) {
+				print_cnf_raw("md5sum");
+				print_cnf_raw(",");
+			}
+
+			if (CHECK_BITFIELD(section->faking_strategy, FAKE_STRAT_TCP_TS)) {
+				print_cnf_raw("timestamp");
+				print_cnf_raw(",");
+				show_faking_ts_decr = 1;
+			}
+
+			if (CHECK_BITFIELD(section->faking_strategy, FAKE_STRAT_PAST_SEQ)) {
+				print_cnf_raw("pastseq");
+				print_cnf_raw(",");
+			}
+			// delete comma and write space
+			print_cnf_raw("\b ");
+
+			if (show_ttl) {
+				print_cnf_buf("--faking-ttl=%d", section->faking_ttl);
+			}
+
+			if (show_seq_offset) {
+				print_cnf_buf("--fake-seq-offset=%d", section->fakeseq_offset);
+			}
+			if (show_faking_ts_decr) {
+				print_cnf_buf("--faking-timestamp-decrease=%d",
+					section->faking_timestamp_decrease);
+			}
 		}
 	} else {
 		print_cnf_buf("--tls=disabled");
@@ -1247,8 +1337,8 @@ int init_section_config(struct section_config_t **section, struct section_config
 		return ret;
 	}
 
-	def_section->fake_sni_pkt = fake_sni_old; 
-	def_section->fake_sni_pkt_sz = sizeof(fake_sni_old) - 1;
+	def_section->fake_sni_pkt = fake_sni; 
+	def_section->fake_sni_pkt_sz = sizeof(fake_sni) - 1;
 
 	*section = def_section;
 	return 0;

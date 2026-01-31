@@ -198,6 +198,11 @@ It should return low speed without **youtubeUnblock** and faster with it. With *
 curl -o/dev/null -k --connect-to ::google.com -k -L -H Host:\ mirror.gcr.io https://mirror.gcr.io/v2/cimg/android/blobs/sha256:6fd8bdac3da660bde7bd0b6f2b6a46e1b686afb74b9a4614def32532b73f5eaa
 ```
 
+For ECH check it comes out to be more complicated, since it is still an experimental feature in CURL. If you want to test it, first of all, you should compile curl with ECH support. You can follow [this guide](https://github.com/curl/curl/blob/master/docs/ECH.md). Next, you can check it with
+```sh
+LD_LIBRARY_PATH=$HOME/code/openssl $HOME/code/curl/src/curl --ech hard --doh-url https://one.one.one.one/dns-query https://www.opengl.org --ipv4
+```
+
 ## Flags
 
 Put flags to the **BINARY**, not an init script. If you are on OpenWRT you should put the flags inside the script: open `/etc/init.d/youtubeUnblock` with any text editor, like vi or nano and put your flags after `procd_set_param command /usr/bin/youtubeUnblock` line.
@@ -248,16 +253,19 @@ Flags that do not scoped to a specific section, used over all the youtubeUnblock
 
 - `--fake-custom-payload-file=<binary file containing TLS message>` Same as `--fake-custom-payload` but binary file instead of hex. The file should contain raw binary TLS message (TCP payload).
 
-- `--faking-strategy={randseq|ttl|tcp_check|pastseq|md5sum}` This flag determines the strategy of fake packets invalidation. Defaults to `randseq`
+- `--faking-strategy={randseq|ttl|tcp_check|pastseq|md5sum|timestamp}` This flag determines the strategy of fake packets invalidation. The user can specify multiple faking options, so multiple techniques will be applied to the fake packet. Defaults to `tcp_check,timestamp`.
   - `randseq` specifies that random sequence/acknowledgment random will be set. This option may be handled by provider which uses *conntrack* with drop on invalid *conntrack* state firewall rule enabled. 
   - `ttl` specifies that packet will be invalidated after `--faking-ttl=n` hops. `ttl` is better but may cause issues if unconfigured. 
   - `pastseq` is like `randseq` but sequence number is not random but references the packet sent in the past (before current).
   - `tcp_check` will invalidate faking packet with invalid checksum. May be handled and dropped by some providers/TSPUs.
   - `md5sum` will invalidate faking packet with invalid TCP md5sum. md5sum is a TCP option which is handled by the destination server but may be skipped by TSPU.
+  - `timestamp` utilizes TCP Timestamp option. Timestamp TSVal is decreased by `--faking-timestamp-decrease=n` parameter, so it is being rejected by the server.
 
 - `--faking-ttl=<ttl>` Tunes the time to live (TTL) of fake SNI messages. TTL is specified like that the packet will go through the DPI system and captured by it, but will not reach the destination server. Defaults to **8**.
 
 - `--fake-seq-offset` Tunes the offset from original sequence number for fake packets. Used by randseq faking strategy. Defaults to 10000. If 0, random sequence number will be set.
+
+- `--faking-timestamp-decrease=<val>` Decreases TSVal parameter of Timestamp option in fake packet by this value. The default is 600000. According to research made in zapret project, this parameter may work in range between 100 and 0x80000000.
 
 - `--frag={tcp,ip,none}` Specifies the fragmentation strategy for the packet. tcp is used by default. Ip fragmentation may be blocked by DPI system. None specifies no fragmentation. Probably this won't work, but may be will work for some fake sni strategies.
 
