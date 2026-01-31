@@ -341,9 +341,11 @@ Because of this, ECH and tons of protocols are unavailable. Tons of various cust
 
 An example: Hypixel Minecraft server relies on Cloudflare and works up on custom Minecraft protocol on port 25565. TSPU can't determine this protocol, so it blocks the connection after 16 KB transferred, so server does not work.
 
+Note, that the faking here is a key to bypass the TSPU.
+
 An example of the solution:
 ```sh
-sudo ./build/youtubeUnblock --use-conntrack --tls=disabled --tcp-match-connpackets=4 --tcp-dport-filter=25565 --frag-sni-pos=1
+sudo ./build/youtubeUnblock --use-conntrack --tls=disabled --tcp-match-connpackets=4 --tcp-dport-filter=25565 --frag-sni-pos=1 --fake-sni=1 --faking-strategy=tcp_check,timestamp
 ```
 
 Also do not forget to add the iptables rule on the custom port:
