@@ -22,6 +22,12 @@
 #define TYPES_H
 #include <asm/byteorder.h>
 
+#ifndef KERNEL_SPACE
+#include <assert.h>
+#else
+#define assert(...) ;
+#endif
+
 #ifdef KERNEL_SPACE
 #include <linux/errno.h> // IWYU pragma: export
 #include <linux/string.h> // IWYU pragma: export
