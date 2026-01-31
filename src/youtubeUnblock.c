@@ -225,7 +225,7 @@ static int send_raw_ipv4(const uint8_t *pkt, size_t pktlen) {
 		pthread_mutex_lock(&rawsocket_lock);
 
 	int sent = sendto(rawsocket, 
-	    pkt, pktlen, MSG_DONTWAIT, 
+	    pkt, pktlen, 0, 
 	    (struct sockaddr *)&daddr, sizeof(daddr));
 
 	if (cur_config->threads != 1)
@@ -260,7 +260,7 @@ static int send_raw_ipv6(const uint8_t *pkt, size_t pktlen) {
 		pthread_mutex_lock(&rawsocket_lock);
 
 	int sent = sendto(raw6socket, 
-	    pkt, pktlen, MSG_DONTWAIT, 
+	    pkt, pktlen, 0, 
 	    (struct sockaddr *)&daddr, sizeof(daddr));
 
 	lgtrace_addp("rawsocket sent %d", sent);
