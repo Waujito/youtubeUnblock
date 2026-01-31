@@ -165,7 +165,7 @@ out:
 int send_tcp_frags(const struct section_config_t *section, const uint8_t *packet, size_t pktlen, const size_t *poses, size_t poses_sz, size_t dvs) {
 	if (poses_sz == 0) {
 		lgtrace_addp("raw send packet of %zu bytes with %zu dvs", pktlen, dvs);
-		if (section->seg2_delay && ((dvs > 0) ^ section->frag_sni_reverse)) {
+		if (section->seg2_delay) {// && ((dvs > 0) ^ section->frag_sni_reverse)) {
 			return instance_config.send_delayed_packet(
 				packet, pktlen, section->seg2_delay);
 		} else {
