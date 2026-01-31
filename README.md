@@ -10,6 +10,7 @@
   - [Check it](#check-it)
   - [Flags](#flags)
   - [UDP/QUIC](#udpquic)
+  - [Cloudflare](#cloudflare)
   - [Troubleshooting](#troubleshooting)
     - [TV](#tv)
     - [Troubleshooting EPERMS (Operation not permitted)](#troubleshooting-eperms-operation-not-permitted)
@@ -243,6 +244,10 @@ Flags that do not scoped to a specific section, used over all the youtubeUnblock
 
 - `--tls={enabled|disabled}` Set it if you want not to process TLS traffic in current section. May be used if you want to set only UDP-based section. (Here section is a unit between `--fbegin` and `--fend` flags).
 
+- `--tcp-dport-filter=<5,6,200-500>` Filter the TCP destination ports. Defaults to no ports. Specifie the ports you want to be handled by youtubeUnblock. By default, youtubeUnblock will filter only 443 TLS port. This may disabled by `--no-dport-filter`.
+
+- `--tcp-match-connpackets` Use this with `--use-conntrack` set. Instead of matching by TLS domains will match packets by OS conntrack connpackets variable (e. g. number of packets sent while connection is alive (SYN is included in the connpackets counter, but anyways will be skipped by youtubeUnblock). You should not set too high number for matching. I recommend something like 4 or 5. If matching happens, youtubeUnblock will send fake and fragement the packet according to fragmentation and faking settings.
+
 - `--fake-sni={0|1}` This flag enables fake-sni which forces **youtubeUnblock** to send at least three packets instead of one with TLS *ClientHello*: Fake *ClientHello*, 1st part of original *ClientHello*, 2nd part of original *ClientHello*. This flag may be related to some Operation not permitted error messages, so before open an issue refer to [Troubleshooting for EPERMS](#troubleshooting-eperms-operation-not-permitted). Defaults to **1**.
 
 - `--fake-sni-seq-len=<length>` This flag specifies **youtubeUnblock** to build a complicated construction of fake client hello packets. length determines how much fakes will be sent. Defaults to **1**.
@@ -326,6 +331,27 @@ QUIC is enabled with `--udp-filter-quic` flag. The flag supports two modes: `all
 **I recommend to use** `--udp-mode=drop --udp-filter-quic=parse`.
 
 For **other UDP protocols** I recommend to configure UDP support in the separate section from TCP, like `--fbegin --udp-dport-filter=50000-50099 --tls=disabled`. **You should not pass `--quic-drop` here unless you are sure what you are doing**
+
+## Cloudflare
+
+In Russia, Cloudflare technologies takes special care by RKN.
+This was caused primarily by ECH technology which allows to easily bypass the TSPU. RKN blocks ECH but alongside with it blocks a lot of harmless network protocols. Currently, the only TLS (and may be HTTP) protocols are allowed on the Cloudflare network. If TSPU could not determine the protocol and Server Name (SNI for TLS), it will drop the connection after 16 KB transferred. This affects not only 443 or 80 ports, but every port on Cloudflare network.
+
+Because of this, ECH and tons of protocols are unavailable. Tons of various custom servers/utilites/games are down, since custom protocols are being blocked.
+
+An example: Hypixel Minecraft server relies on Cloudflare and works up on custom Minecraft protocol on port 25565. TSPU can't determine this protocol, so it blocks the connection after 16 KB transferred, so server does not work.
+
+An example of the solution:
+```sh
+sudo ./build/youtubeUnblock --use-conntrack --tls=disabled --tcp-match-connpackets=4 --tcp-dport-filter=25565 --frag-sni-pos=1
+```
+
+Also do not forget to add the iptables rule on the custom port:
+
+```sh
+sudo iptables -t mangle -A YOUTUBEUNBLOCK -p tcp --dport 25565 -m connbytes --connbytes-dir original --connbytes-mode packets --connbytes 0:19 -j NFQUEUE --queue-num 537 --queue-bypass
+```
+
 
 ## Troubleshooting
 
