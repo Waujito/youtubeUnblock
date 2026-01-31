@@ -111,9 +111,6 @@ free((item));			\
 
 #ifndef KERNEL_SPACE
 
-
-#define CHECK_BITFIELD(value, field) (((value) & (field)) == (field))
-
 #define max(a,b)__extension__\
 ({                           \
     __typeof__ (a) _a = (a); \
@@ -129,6 +126,8 @@ free((item));			\
 })
 
 #endif /* not a KERNEL_SPACE */
+
+#define CHECK_BITFIELD(value, field) (((value) & (field)) == (field))
 
 static inline int randint(void) {
 	int rnd;
