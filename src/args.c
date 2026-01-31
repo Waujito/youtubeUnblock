@@ -226,7 +226,7 @@ static int parse_dport_range(char *str, struct dport_range **udpr, int *udpr_len
 	
 #ifdef KERNEL_SPACE
 	struct dport_range *dport_ranges = kmalloc(
-		seclen * sizeof(struct port_range), GFP_KERNEL);
+		seclen * sizeof(struct dport_range), GFP_KERNEL);
 
 #else
 	struct dport_range *dport_ranges = malloc(

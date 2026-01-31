@@ -39,7 +39,7 @@
 
 #include "mangle.h"
 
-int log_packet(const struct parsed_packet *pkt);
+void log_packet(const struct parsed_packet *pkt);
 
 #define MAX_FRAGMENTATION_PTS 16
 
@@ -224,8 +224,8 @@ int process_tcp_packet(const struct section_config_t *section, const struct pars
 
 	if (!is_matched && section->tcp_match_connpkts && pkt->yct.orig_packets) {
 		if (pkt->yct.orig_packets <= section->tcp_match_connpkts) {
-			lgtrace_addp("connpackets match: %lu <= %d",
-				pkt->yct.orig_packets, section->tcp_match_connpkts);
+			lgtrace_addp("connpackets match: %u <= %d",
+				(uint32_t) pkt->yct.orig_packets, section->tcp_match_connpkts);
 			is_matched = 1;
 
 			frag_pts.used_points = 0;
@@ -453,7 +453,7 @@ drop:
 	return PKT_DROP;
 }
 	
-int log_packet(const struct parsed_packet *pkt) {
+void log_packet(const struct parsed_packet *pkt) {
 	int ret = 0;
 
 	const char *bpt = inet_ntop(
