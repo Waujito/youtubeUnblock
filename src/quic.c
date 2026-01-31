@@ -579,7 +579,7 @@ int detect_udp_filtered(const struct section_config_t *section,
 match_port:
 
 	for (int i = 0; i < section->udp_dport_range_len; i++) {
-		struct udp_dport_range crange = section->udp_dport_range[i];
+		struct dport_range crange = section->udp_dport_range[i];
 		if (udp_dport >= crange.start && udp_dport <= crange.end) {
 			lgtrace_addp("matched to %d-%d", crange.start, crange.end);
 			goto approve;

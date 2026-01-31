@@ -215,7 +215,7 @@ static int parse_faking_strategy(char *optarg, int *faking_strategy) {
 	return 0;
 }
 
-static int parse_udp_dport_range(char *str, struct udp_dport_range **udpr, int *udpr_len) {
+static int parse_dport_range(char *str, struct dport_range **udpr, int *udpr_len) {
 	int seclen = 1;
 	const char *p = str;
 	while (*p != '\0') {
@@ -225,14 +225,14 @@ static int parse_udp_dport_range(char *str, struct udp_dport_range **udpr, int *
 	}
 	
 #ifdef KERNEL_SPACE
-	struct udp_dport_range *udp_dport_ranges = kmalloc(
-		seclen * sizeof(struct udp_dport_range), GFP_KERNEL);
+	struct dport_range *dport_ranges = kmalloc(
+		seclen * sizeof(struct port_range), GFP_KERNEL);
 
 #else
-	struct udp_dport_range *udp_dport_ranges = malloc(
-		seclen * sizeof(struct udp_dport_range));
+	struct dport_range *dport_ranges = malloc(
+		seclen * sizeof(struct dport_range));
 #endif
-	if (udp_dport_ranges == NULL) {
+	if (dport_ranges == NULL) {
 		return -ENOMEM;
 	}
 
@@ -279,7 +279,7 @@ static int parse_udp_dport_range(char *str, struct udp_dport_range **udpr, int *
 			) 
 				goto erret;
 				
-			udp_dport_ranges[i] = (struct udp_dport_range){
+			dport_ranges[i] = (struct dport_range){
 				.start = num1,
 				.end = num2
 			};
@@ -297,15 +297,15 @@ static int parse_udp_dport_range(char *str, struct udp_dport_range **udpr, int *
 	}
 
 	if (i == 0) {
-		free(udp_dport_ranges);
+		free(dport_ranges);
 	}
 
-	*udpr = udp_dport_ranges;
+	*udpr = dport_ranges;
 	*udpr_len = i;
 	return 0;
 
 erret:
-	free(udp_dport_ranges);
+	free(dport_ranges);
 
 	return -1;
 }
@@ -350,6 +350,7 @@ enum {
 	OPT_EXCLUDE_DOMAINS,
 	OPT_SNI_DOMAINS_FILE,
 	OPT_EXCLUDE_DOMAINS_FILE,
+	OPT_TCP_DPORT_FILTER,
 	OPT_FAKE_SNI,
 	OPT_FAKING_TTL,
 	OPT_FAKING_STRATEGY,
@@ -397,6 +398,7 @@ enum {
 	OPT_HELP,
 	OPT_VERSION,
 	OPT_CONNBYTES_LIMIT,
+	OPT_TCP_M_CONNPKTS,
 };
 
 static struct option long_opt[] = {
@@ -410,6 +412,7 @@ static struct option long_opt[] = {
 	{"synfake",		1, 0, OPT_SYNFAKE},
 	{"synfake-len",		1, 0, OPT_SYNFAKE_LEN},
 	{"tls",			1, 0, OPT_TLS_ENABLED},
+	{"tcp-dport-filter",	1, 0, OPT_TCP_DPORT_FILTER},
 	{"fake-sni-seq-len",	1, 0, OPT_FAKE_SNI_SEQ_LEN},
 	{"fake-sni-type",	1, 0, OPT_FAKE_SNI_TYPE},
 	{"fake-custom-payload", 1, 0, OPT_FAKE_CUSTOM_PAYLOAD},
@@ -435,6 +438,7 @@ static struct option long_opt[] = {
 	{"udp-stun-filter",	0, 0, OPT_UDP_STUN_FILTER},
 	{"udp-filter-quic",	1, 0, OPT_UDP_FILTER_QUIC},
 	{"no-dport-filter",	0, 0, OPT_NO_DPORT_FILTER},
+	{"tcp-match-connpackets", 1, 0, OPT_TCP_M_CONNPKTS},
 	{"threads",		1, 0, OPT_THREADS},
 	{"silent",		0, 0, OPT_SILENT},
 	{"trace",		0, 0, OPT_TRACE},
@@ -476,6 +480,7 @@ void print_usage(const char *argv0) {
 	printf("\t--sni-domains-file=<file contains comma or new-line separated list>\n");
 	printf("\t--exclude-domains-file=<file contains comma or new-line separated list>\n");
 	printf("\t--tls={enabled|disabled}\n");
+	printf("\t--tcp-dport-filter=<5,6,200-500>\n");
 	printf("\t--fake-sni={1|0}\n");
 	printf("\t--fake-sni-seq-len=<length>\n");
 	printf("\t--fake-sni-type={default|random|custom}\n");
@@ -507,6 +512,7 @@ void print_usage(const char *argv0) {
 	printf("\t--threads=<threads number>\n");
 	printf("\t--packet-mark=<mark>\n");
 	printf("\t--connbytes-limit=<pkts>\n");
+	printf("\t--tcp-match-connpackets=<n of packets in connection>\n");
 	printf("\t--silent\n");
 	printf("\t--trace\n");
 	printf("\t--instaflush\n");
@@ -788,6 +794,23 @@ int yparse_args(struct config_t *config, int argc, char *argv[]) {
 
 			sect_config->frag_sni_pos = num;
 			break;
+		case OPT_TCP_DPORT_FILTER: 
+		{
+			SFREE(sect_config->tcp_dport_range);
+			if (parse_dport_range(optarg, &sect_config->tcp_dport_range, &sect_config->tcp_dport_range_len) < 0) {
+				goto invalid_opt;
+			}
+			break;
+		}
+		case OPT_TCP_M_CONNPKTS:
+			num = parse_numeric_option(optarg);
+			if (errno != 0 || num < 0) {
+				goto invalid_opt;
+			}
+
+			sect_config->tcp_match_connpkts = num;
+			break;
+
 		case OPT_FAKING_STRATEGY:
 			if (parse_faking_strategy(
 					optarg, &sect_config->faking_strategy) < 0) {
@@ -982,7 +1005,7 @@ int yparse_args(struct config_t *config, int argc, char *argv[]) {
 		case OPT_UDP_DPORT_FILTER: 
 		{
 			SFREE(sect_config->udp_dport_range);
-			if (parse_udp_dport_range(optarg, &sect_config->udp_dport_range, &sect_config->udp_dport_range_len) < 0) {
+			if (parse_dport_range(optarg, &sect_config->udp_dport_range, &sect_config->udp_dport_range_len) < 0) {
 				goto invalid_opt;
 			}
 			break;
@@ -1055,8 +1078,26 @@ static size_t print_config_section(const struct section_config_t *section, char 
 	size_t buf_sz = buffer_size;
 	size_t sz;
 
-	if (section->tls_enabled) {
-		print_cnf_buf("--tls=enabled");	
+	if (section->tcp_dport_range_len != 0) {
+		print_cnf_raw("--tcp-dport-filter=");
+		for (int i = 0; i < section->tcp_dport_range_len; i++) {
+			struct dport_range range = section->tcp_dport_range[i];
+			print_cnf_raw("%d-%d,", range.start, range.end);
+		}
+		print_cnf_raw(" ");
+
+	}
+
+	if (section->tcp_match_connpkts) {
+		print_cnf_buf("--tcp-match-connpackets=%d",
+			section->tcp_match_connpkts);
+	}
+
+	if (section->tls_enabled || section->tcp_dport_range_len != 0) {
+		if (section->tls_enabled) {
+			print_cnf_buf("--tls=enabled");	
+		}
+
 
 		switch(section->fragmentation_strategy) {
 		case FRAG_STRAT_IP:
@@ -1205,7 +1246,7 @@ static size_t print_config_section(const struct section_config_t *section, char 
 
 		print_cnf_raw("--udp-dport-filter=");
 		for (int i = 0; i < section->udp_dport_range_len; i++) {
-			struct udp_dport_range range = section->udp_dport_range[i];
+			struct dport_range range = section->udp_dport_range[i];
 			print_cnf_raw("%d-%d,", range.start, range.end);
 		}
 		print_cnf_raw(" ");
@@ -1362,6 +1403,10 @@ int init_config(struct config_t *config) {
 void free_config_section(struct section_config_t *section) {
 	if (section->udp_dport_range_len != 0) {
 		SFREE(section->udp_dport_range);
+	}
+
+	if (section->tcp_dport_range_len != 0) {
+		SFREE(section->tcp_dport_range);
 	}
 
 	free_sni_domains(&section->sni_domains);

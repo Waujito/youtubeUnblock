@@ -48,7 +48,7 @@ struct logging_config_t {
 };
 extern struct logging_config_t logging_conf;
 
-struct udp_dport_range {
+struct dport_range {
 	uint16_t start;
 	uint16_t end;
 };
@@ -63,6 +63,11 @@ struct section_config_t {
 	unsigned int all_domains;
 
 	int tls_enabled;
+
+	struct dport_range *tcp_dport_range;
+	int tcp_dport_range_len;
+
+	int tcp_match_connpkts;
 
 	int fragmentation_strategy;
 	int frag_sni_reverse;
@@ -106,7 +111,7 @@ struct section_config_t {
 	unsigned int udp_fake_len;
 	int udp_faking_strategy;
 
-	struct udp_dport_range *udp_dport_range;
+	struct dport_range *udp_dport_range;
 	int udp_dport_range_len;
 	int udp_stun_filter;
 	int udp_filter_quic;
@@ -238,6 +243,9 @@ enum {
 	.sni_domains = {0},					\
 	.exclude_sni_domains = {0},				\
 	.all_domains = 0,					\
+	.tcp_dport_range = NULL,				\
+	.tcp_dport_range_len = 0,				\
+	.tcp_match_connpkts = 0,				\
 	.tls_enabled = 1,					\
 	.frag_sni_reverse = 1,                                  \
 	.frag_sni_faked = 0,                                    \
