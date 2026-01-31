@@ -1,0 +1,31 @@
+#!/usr/bin/make -f
+
+# See debhelper(7) (uncomment to enable).
+# Output every command that modifies files on the build system.
+export DH_VERBOSE = 1
+
+# See FEATURE AREAS in dpkg-buildflags(1).
+export DEB_BUILD_MAINT_OPTIONS = hardening=+all
+
+# See ENVIRONMENT in dpkg-buildflags(1).
+# Package maintainers to append CFLAGS.
+export DEB_CFLAGS_MAINT_APPEND  = -Wall -pedantic
+# Package maintainers to append LDFLAGS.
+export DEB_LDFLAGS_MAINT_APPEND = -Wl,--as-needed -L$(PWD)/build/deps/lib/
+
+BASE=debian/youtubeunblock
+
+%:
+		dh $@ --parralel
+
+override_dh_auto_build:
+		$(MAKE) -f Makefile PREFIX=/usr DESTDIR=${PREFIX}/bin TARGET=youtubeunblock USE_SYS_LIBS=yes -Ideps/cyclone/include
+
+override_dh_auto_install:
+	install -p -D -m 0755 build/youtubeUnblock $(BASE)/usr/bin/youtubeunblock
+
+override_dh_install:
+	install -p -D -m 0644 debian/youtubeunblock.conf $(BASE)/etc/youtubeunblock.conf
+
+dh_installsystemd:
+
