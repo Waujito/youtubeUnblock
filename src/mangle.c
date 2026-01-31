@@ -315,7 +315,6 @@ int process_tcp_packet(const struct section_config_t *section, const uint8_t *ra
 			set_tcp_checksum(tcph, iph, iph_len);
 		}
 
-/*
 		if (0) {
 			int delta = 2;
 			ret = seqovl_packet(payload, &payload_len, delta);
@@ -326,14 +325,28 @@ int process_tcp_packet(const struct section_config_t *section, const uint8_t *ra
 				lgerror(ret, "seqovl_packet delta %d", delta);
 			}
 		}
-*/
 		
 		if (dlen > AVAILABLE_MTU) {
 			lgdebug("WARNING! Client Hello packet is too big and may cause issues!");
 		}
 
 		if (section->fake_sni) {
-			post_fake_sni(args_default_fake_type(section), iph, iph_len, tcph, tcph_len);
+			struct fake_type f_type = args_default_fake_type(section);
+
+			// f_type.strategy.strategy = FAKE_STRAT_RAND_SEQ;
+			// f_type.strategy.randseq_offset = f_type.fake_len - 1;
+			// f_type.fake_data = "\x16";
+			// f_type.fake_len = 1;
+			//
+			// post_fake_sni(f_type, iph, iph_len, tcph, tcph_len);
+			//
+			// f_type = args_default_fake_type(section);
+			// // f_type.strategy.strategy = FAKE_STRAT_RAND_SEQ;
+			// // f_type.strategy.randseq_offset = 0;
+			// f_type.fake_data += 1;
+			// f_type.fake_len -= 1;	
+
+			post_fake_sni(f_type, iph, iph_len, tcph, tcph_len);
 		}
 
 		size_t ipd_offset;
@@ -653,6 +666,7 @@ send_fake:
 			struct tcphdr *tcph;
 			ret = tcp_payload_split(frag2, f2len, &iph, &iphfl, &tcph, &tcphfl, NULL, NULL);
 			struct fake_type f_type = args_default_fake_type(section);
+
 			if ((f_type.strategy.strategy & FAKE_STRAT_PAST_SEQ) == FAKE_STRAT_PAST_SEQ) {
 				f_type.strategy.strategy ^= FAKE_STRAT_PAST_SEQ;
 				f_type.strategy.strategy |= FAKE_STRAT_RAND_SEQ;
@@ -704,71 +718,68 @@ int post_fake_sni(struct fake_type f_type,
 	void *fsiph = (void *)rfsiph;
 	struct tcphdr *fstcph = (void *)rfstcph;
 
-	ITER_FAKE_STRAT(f_type.strategy.strategy, strategy) {
-		struct fake_type fake_seq_type = f_type;
-		fake_seq_type.strategy.strategy = strategy;
+	struct fake_type fake_seq_type = f_type;
 
-		// one goes for default fake
-		for (int i = 0; i < fake_seq_type.sequence_len; i++) {
-			uint8_t *fake_sni;
-			size_t fake_sni_len;
-						
-			ret = gen_fake_sni(
-				fake_seq_type,
-				fsiph, iph_len, fstcph, tcph_len, 
-				&fake_sni, &fake_sni_len);
-			if (ret < 0) {
-				lgerror(ret, "gen_fake_sni");
-				return ret;
-			}
-
-			lgtrace_addp("post fake sni #%d", i + 1);
-
-			if (f_type.seg2delay) {
-				ret = instance_config.send_delayed_packet(fake_sni, fake_sni_len, f_type.seg2delay);
-			} else {
-				ret = instance_config.send_raw_packet(fake_sni, fake_sni_len);
-			}
-			if (ret < 0) {
-				lgerror(ret, "send fake sni");
-				goto erret_lc;
-			}
-			size_t iph_len;
-			size_t tcph_len;
-			size_t plen;
-			ret = tcp_payload_split(
-				fake_sni, fake_sni_len, 
-				&fsiph, &iph_len,
-				&fstcph, &tcph_len,
-				NULL, &plen);
-
-			if (ret < 0) {
-				lgtrace_addp("continue fake seq");
-				goto erret_lc;
-			}
-
-
-			if (!(strategy == FAKE_STRAT_PAST_SEQ ||
-				strategy == FAKE_STRAT_RAND_SEQ)) {
-				fstcph->seq = htonl(ntohl(fstcph->seq) + plen);
-			}
-
-			if (ipxv == IP4VERSION) {
-				((struct iphdr *)fsiph)->id = htons(ntohs(((struct iphdr *)fsiph)->id) + 1);
-			}
-
-			memcpy(rfsiph, fsiph, iph_len);
-
-			memcpy(rfstcph, fstcph, tcph_len);
-			fsiph = (void *)rfsiph;
-			fstcph = (void *)rfstcph;
-			
-			free(fake_sni);
-			continue;
-erret_lc:
-			free(fake_sni);
+	// one goes for default fake
+	for (int i = 0; i < fake_seq_type.sequence_len; i++) {
+		uint8_t *fake_sni;
+		size_t fake_sni_len;
+					
+		ret = gen_fake_sni(
+			fake_seq_type,
+			fsiph, iph_len, fstcph, tcph_len, 
+			&fake_sni, &fake_sni_len);
+		if (ret < 0) {
+			lgerror(ret, "gen_fake_sni");
 			return ret;
 		}
+
+		lgtrace_addp("post fake sni #%d", i + 1);
+
+		if (f_type.seg2delay) {
+			ret = instance_config.send_delayed_packet(fake_sni, fake_sni_len, f_type.seg2delay);
+		} else {
+			ret = instance_config.send_raw_packet(fake_sni, fake_sni_len);
+		}
+		if (ret < 0) {
+			lgerror(ret, "send fake sni");
+			goto erret_lc;
+		}
+		size_t iph_len;
+		size_t tcph_len;
+		size_t plen;
+		ret = tcp_payload_split(
+			fake_sni, fake_sni_len, 
+			&fsiph, &iph_len,
+			&fstcph, &tcph_len,
+			NULL, &plen);
+
+		if (ret < 0) {
+			lgtrace_addp("continue fake seq");
+			goto erret_lc;
+		}
+
+
+		if (!(CHECK_BITFIELD(f_type.strategy.strategy, FAKE_STRAT_PAST_SEQ) ||
+			CHECK_BITFIELD(f_type.strategy.strategy, FAKE_STRAT_RAND_SEQ))) {
+			fstcph->seq = htonl(ntohl(fstcph->seq) + plen);
+		}
+
+		if (ipxv == IP4VERSION) {
+			((struct iphdr *)fsiph)->id = htons(ntohs(((struct iphdr *)fsiph)->id) + 1);
+		}
+
+		memcpy(rfsiph, fsiph, iph_len);
+
+		memcpy(rfstcph, fstcph, tcph_len);
+		fsiph = (void *)rfsiph;
+		fstcph = (void *)rfstcph;
+		
+		free(fake_sni);
+		continue;
+erret_lc:
+		free(fake_sni);
+		return ret;
 	}
 
 	return 0;

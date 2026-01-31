@@ -71,6 +71,7 @@ struct section_config_t {
 	int frag_middle_sni;
 	int frag_sni_pos;
 	unsigned char faking_ttl;
+	unsigned int faking_timestamp_decrease;
 	int fake_sni;
 	unsigned int fake_sni_seq_len;
 
@@ -176,6 +177,7 @@ for (struct section_config_t *section = (config)->last_section; section != NULL;
 #endif
 
 #define FAKE_TTL 8
+#define FAKING_TIMESTAMP_DECREASE_TTL 600000
 
 #define FAKE_STRAT_NONE		0
 // Will invalidate fake packets by out-of-ack_seq out-of-seq request
@@ -187,6 +189,7 @@ for (struct section_config_t *section = (config)->last_section; section != NULL;
 #define FAKE_STRAT_TCP_CHECK	(1 << 3)
 #define FAKE_STRAT_TCP_MD5SUM	(1 << 4)
 #define FAKE_STRAT_UDP_CHECK	(1 << 5)
+#define FAKE_STRAT_TCP_TS	(1 << 6)
 
 #define FAKE_STRAT_COUNT	6
 
@@ -199,7 +202,7 @@ for (int strategy = 1; strategy <= (1 << FAKE_STRAT_COUNT); strategy <<= 1) \
 if ((fake_bitmask) & strategy) 
 
 #ifndef FAKING_STRATEGY
-#define FAKING_STRATEGY FAKE_STRAT_PAST_SEQ
+#define FAKING_STRATEGY FAKE_STRAT_TCP_CHECK | FAKE_STRAT_TCP_TS
 #endif
 
 #define MAX_FAKE_SIZE 1300
@@ -241,7 +244,8 @@ enum {
 	.fragmentation_strategy = FRAGMENTATION_STRATEGY,       \
 	.faking_strategy = FAKING_STRATEGY,                     \
 	.faking_ttl = FAKE_TTL,                                 \
-	.fake_sni = 0,                                          \
+	.faking_timestamp_decrease = FAKING_TIMESTAMP_DECREASE_TTL,                    \
+	.fake_sni = 1,                                          \
 	.fake_sni_seq_len = 1,                                  \
 	.fake_sni_type = FAKE_PAYLOAD_DEFAULT,                  \
 	.fake_custom_pkt = NULL,				\
