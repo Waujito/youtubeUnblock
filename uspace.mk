@@ -1,5 +1,5 @@
 #Check for using system libs
-USE_SYS_LIBS := no
+USE_SYS_LIBS ?= no
 
 #Userspace app makes here
 BUILD_DIR := $(CURDIR)/build

@@ -1,0 +1,5 @@
+youtubeunblock (1.1.1-1) UNRELEASED; urgency=medium
+  * use system libraries instead bundled libs
+  * Initial release.
+
+ -- Andrew Clark <andrewclarkii@gmail.com>  Sat, 03 Jan 2026 19:05:52 +0000
