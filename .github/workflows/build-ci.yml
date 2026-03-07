@@ -283,20 +283,39 @@ jobs:
           SHA: ${{ needs.prepare.outputs.sha }}
         working-directory: /builder
         run: |
+          rm -rf feeds/*
+          for i in 1 2 3; do
+            ./scripts/feeds update -a && break
+            echo "Feeds update failed (attempt $i/3), retrying in 10 seconds..."
+            sleep 10
+          done         
+          ./scripts/feeds install -a
           echo "src-link youtubeUnblock $GITHUB_WORKSPACE" >> feeds.conf
           cat feeds.conf
           ./scripts/feeds update youtubeUnblock
           ./scripts/feeds install -a -p youtubeUnblock
+          
           make defconfig
           make package/luci-app-youtubeUnblock/compile V=s
-          mv $(find ./bin -type f -name 'luci-app-youtubeUnblock*.ipk') ./luci-app-youtubeUnblock-$VERSION-$RELEASE-$SHA.ipk
+          
+          MAIN_PKG=$(find ./bin -type f -name 'luci-app-youtubeUnblock*.ipk' | grep -v i18n | head -1)
+          if [ -n "$MAIN_PKG" ]; then
+            mv "$MAIN_PKG" "./luci-app-youtubeUnblock-$VERSION-$RELEASE-$SHA.ipk"
+          fi
+          
+          for pkg in $(find ./bin -type f -name 'luci-i18n-youtubeUnblock*.ipk'); do
+            lang=$(basename "$pkg" | sed -E 's/luci-i18n-youtubeUnblock-([a-z]+)_.*/\1/')
+            mv "$pkg" "./luci-i18n-youtubeUnblock-$lang-$VERSION-$RELEASE-$SHA.ipk"
+          done
 
       - name: Upload packages
         if: steps.build.outcome == 'success'
         uses: actions/upload-artifact@v4
         with:
           name: luci-app-youtubeUnblock
-          path: /builder/luci-app-youtubeUnblock*.ipk
+          path: |
+             /builder/luci-app-youtubeUnblock*.ipk
+             /builder/luci-i18n-youtubeUnblock*.ipk
           if-no-files-found: error
 
   build-entware:
