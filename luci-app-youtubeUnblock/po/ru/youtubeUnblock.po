@@ -1,0 +1,528 @@
+msgid ""
+msgstr "Content-Type: text/plain; charset=UTF-8"
+
+msgid "Anything you pass here will be passed to youtubeUnblock as raw args"
+msgstr "Все указанные аргументы будут переданы как есть."
+
+msgid "Autostart"
+msgstr "Автозапуск"
+
+msgid ""
+"Bypasses Deep Packet Inspection (DPI) systems that rely on SNI. <br /> Check "
+"the README for more details <a href=\"https://github.com/Waujito/"
+"youtubeUnblock\">https://github.com/Waujito/youtubeUnblock</a>"
+msgstr ""
+"Обходит системы глубокого анализа пакетов (DPI), использующие SNI. <br /> Прочтите "
+"файл README, чтобы узнать подробности <a href=\"https://github.com/Waujito/"
+"youtubeUnblock\">https://github.com/Waujito/youtubeUnblock</a>"
+
+msgid ""
+"Check the README for more details <a href=\"https://github.com/Waujito/"
+"youtubeUnblock\">https://github.com/Waujito/youtubeUnblock</a>"
+msgstr ""
+"Прочтите файл README, чтобы узнать подробности <a href=\"https://github.com/Waujito/"
+"youtubeUnblock\">https://github.com/Waujito/youtubeUnblock</a>"
+
+msgid "Configuration"
+msgstr "Настройки"
+
+msgid "Configuration strategy"
+msgstr "Способ настройки"
+
+msgid "Disable"
+msgstr "Отключить"
+
+msgid "Disable ipv6"
+msgstr "IPv6"
+
+msgid ""
+"Disable this flag if you want not to process TLS traffic in current section. "
+"May be used if you want to set only UDP-based policy."
+msgstr ""
+"Отключает TLS-трафик в этом разделе. "
+"Может использоваться для настройки политики только на основе UDP."
+
+msgid ""
+"Disables support for Google Chrome fat packets which uses GSO. This feature "
+"is well tested now, so this flag probably won't fix anything."
+msgstr ""
+"Отключает поддержку пакетов расширения Google Chrome, использующих GSO. "
+"Эта функция хорошо протестирована, поэтому этот флаг, вероятно, ничего не исправит."
+
+msgid ""
+"Disables support for ipv6. May be useful if you don't want for ipv6 socket "
+"to be opened."
+msgstr "Отключает поддержку IPv6. Может быть полезно, если Вы не хотите, чтобы открывался сокет IPv6."
+
+msgid "Disables verbose mode"
+msgstr "Отключает подробный режим журнала."
+
+msgid "Domains"
+msgstr "Домены"
+
+# В тексте 3 строки, а в веб-интерфейсе отображается только одна!
+msgid ""
+"Drop all QUIC packets which goes to youtubeUnblock. Won't affect any other "
+"UDP packets. Please note, because of <code>--udp-mode=drop</code> it may "
+"conflict with other filter options. Make sure to use multiple sections."
+msgstr ""
+"Отключает обработку всех QUIC-пакетов, направляемых в youtubeUnblock. "
+"Это не повлияет на остальные UDP-пакеты. Может конфликовать с другими параметрами "
+"фильтрации, если в «UDP» установлено <code>drop</code>. Используйте несколько разделов."
+
+msgid "Enable"
+msgstr "Включить"
+
+msgid "Enabled"
+msgstr "Включено"
+
+# В этой строке нужно обернуть disabled и all!
+msgid ""
+"Enables QUIC filtering for UDP handler. If disabled, quic won't be "
+"processed, if all, all quic initial packets will be handled."
+msgstr ""
+"Включает фильтрацию QUIC для обработчика UDP. "
+"<code>disabled</code> - не обрабатывать все начальные пакеты QUIC, <code>all</code> - обрабатывать."
+
+msgid "Excluded domains"
+msgstr "Исключения"
+
+msgid "Fake custom payload"
+msgstr "Пользовательское значение полезной нагрузки"
+
+msgid "Fake seq offset"
+msgstr "Смещение SEQ-номера"
+
+msgid "Fake sni"
+msgstr "Поддельные SNI-пакеты"
+
+msgid "Fake sni seq len"
+msgstr "Количество поддельных SNI-пакетов"
+
+msgid "Fake sni type"
+msgstr "Тип полезной нагрузки"
+
+msgid "Faking strategy"
+msgstr "Стратегия"
+
+msgid ""
+"Faking strategy for udp. <code>checksum</code> will fake UDP checksum, "
+"<code>ttl</code> won't fake but will make UDP content relatively small, "
+"<code>none</code> is no faking."
+msgstr ""
+"Стратегия подделки для UDP. <code>checksum</code> подделает контрольную сумму UDP, "
+"<code>ttl</code> сделает содержимое UDP относительно небольшим, "
+"<code>none</code> - не подделывать."
+
+msgid "Faking ttl"
+msgstr "TTL поддельных пакетов"
+
+msgid ""
+"Filter all the UDP STUN request packets. Very useful for voice chats. Please "
+"note, it may conflict with <code>--quic-drop</code> since it setts <code>--"
+"udp-mode</code> to drop globally. So, make sure to handle it in a different "
+"config section."
+msgstr ""
+"Фильтрация всех UDP STUN-запросов. Очень полезно для голосовых чатов. Может конфликтовать "
+"с параметром «QUIC», если тот отключен, поскольку он устанавливает «UDP» "
+"в режим глобального отбрасывания. Поэтому убедитесь, что Вы обрабатываете это в отдельном разделе."
+
+# Текст в веб-интерфейсе отображается не весь!
+msgid ""
+"Filter the UDP destination ports. Specify the ports you want to be handled "
+"by youtubeUnblock. Valid inputs are port number or port range (e.g. "
+"200-500). Please note, it may conflict with <code>--quic-drop</code> since "
+"it setts <code>--udp-mode</code> to drop globally. So, make sure to handle "
+"it in a different config section."
+msgstr ""
+"Фильтрует порты назначения UDP. Укажите порты для обработки. "
+"Допустимые значения: номер порта или их диапазон (например, 200-500)."
+
+msgid "Firewall reload"
+msgstr "Перезагрузить межсетевой экран"
+
+msgid "Frag middle sni"
+msgstr "Фрагментация в середине SNI"
+
+msgid "Frag sni faked"
+msgstr "Поддельные фрагменты"
+
+msgid "Frag sni pos"
+msgstr "Позиция фрагмента SNI"
+
+msgid "Frag sni reverse"
+msgstr "Обратный порядок фрагментов"
+
+msgid "Fragmentation strategy"
+msgstr "Стратегия фрагментации"
+
+msgid "Fragmentation winsize"
+msgstr "Размер окна фрагментации"
+
+msgid "General"
+msgstr "Основные"
+
+msgid "Grant UCI access for luci-app-youtubeUnblock"
+msgstr "Предоставить UCI доступ к luci-app-youtubeUnblock"
+
+msgid ""
+"If 1, syn payload will be sent before each request. The idea is taken from "
+"syndata from zapret project. Syn payload will normally be discarded by "
+"endpoint but may be handled by TSPU. This option sends normal fake in that "
+"payload. Please note, that the option works for all the sites, so --sni-"
+"domains won't change anything."
+msgstr ""
+"Отправлять полезную нагрузку SYN перед каждым запросом. "
+"Эта опция работает для всех сайтов, поэтому параметр «Все домены» ничего не изменит."
+
+msgid ""
+"If you want to scroll logs, disable refreshing by clicking the button in the "
+"upper right corner of the screen"
+msgstr ""
+msgstr "Для пролистывания отключите обновление, нажав кнопку в правом верхнем углу экрана."
+
+msgid "Information"
+msgstr "Информация"
+
+msgid "List of domains to be excluded from targeting."
+msgstr "Список доменов, которые следует исключить из обработки."
+
+msgid "List of domains you want to be handled by SNI."
+msgstr "Список доменов для обработки."
+
+msgid "Logs"
+msgstr "Журнал"
+
+msgid "Maximum verbosity for debug purposes"
+msgstr "Увеличивает уровень детализации журнала для отладки."
+
+msgid "Name"
+msgstr "Название"
+
+msgid "No gso"
+msgstr "GSO"
+
+msgid "No related logs yet!"
+msgstr "Журнал пуст!"
+
+msgid ""
+"Note that sections will be executed in reverse order: from last section to "
+"first. After section handles the packet, it stops processing in the next "
+"sections"
+msgstr ""
+"Разделы обрабатываются в обратном порядке: от последнего к первому. После успешной "
+"обработки пакета в разделе дальнейшая обработка прекращается."
+
+msgid "Packet mark"
+msgstr "Метка пакета"
+
+msgid "Pass your list of arguments here."
+msgstr "Введите список аргументов."
+
+msgid "Post args"
+msgstr "Дополнительные аргументы"
+
+msgid "QUIC drop"
+msgstr "QUIC"
+
+msgid "Reset configuration"
+msgstr "Сбросить настройки"
+
+msgid "Restart"
+msgstr "Перезапустить"
+
+msgid "SNI detection"
+msgstr "Метод обнаружения SNI"
+
+msgid "Section configs"
+msgstr "Настройка разделов"
+
+msgid "Section post args"
+msgstr "Дополнительные аргументы"
+
+msgid "Section-specific post arguments"
+msgstr "Дополнительные аргументы для этого раздела."
+
+msgid ""
+"Select to configure youtubeUnblock with plain arguments or with interactive "
+"flags"
+msgstr "Настроить с помощью аргументов или интерактивных флагов."
+
+msgid "Service Status"
+msgstr "Статус службы"
+
+msgid "Silent"
+msgstr "Тихий режим"
+
+msgid "Size of udp fake payload (typically payload is zeroes)."
+msgstr "Размер поддельной полезной нагрузки UDP (обычно полезная нагрузка равна нулю)."
+
+msgid "Sni domains"
+msgstr "Список доменов"
+
+msgid "Specifies how much faking packets will be sent over the network."
+msgstr "Указывает, сколько поддельных пакетов будет отправлено по сети."
+
+msgid ""
+"Specifies how to detect SNI. Parse will normally detect it by parsing the "
+"Client Hello message. Brute will go through the entire message and check "
+"possibility of SNI occurrence. Please note, that when --sni-domains option "
+"is not all brute will be O(nm) time complexity where n stands for length of "
+"the message and m is number of domains."
+msgstr ""
+"Устанавливает метод обнаружения SNI: <code>parse</code> — анализирует сообщения Client Hello, "
+"<code>brute</code> — перебирает всё содержимое."
+
+msgid ""
+"Specifies the fragmentation strategy for the packet. Tcp is used by default. "
+"Ip fragmentation may be blocked by DPI system. None specifies no "
+"fragmentation. Probably this won't work, but may be will work for some fake "
+"sni strategies."
+msgstr ""
+msgstr ""
+"Устанавливает стратегию фрагментации пакета. "
+"По умолчанию используется <code>TCP</code>. "
+"<code>IP</code>-фрагментация может быть заблокирована системой DPI. "
+"<code>none</code> - не фрагментировать. Вероятно, это не сработает, "
+"но может сработать для некоторых стратегий с поддельными SNI."
+
+msgid ""
+"Specifies window size for the fragmented TCP packet. Applicable if you want "
+"for response to be fragmented. May slowdown connection initialization. Pass "
+"0 if you don't want this."
+msgstr ""
+"Указывает размер окна для фрагментированных TCP-пакетов. "
+"Может замедлить установку соединения."
+
+msgid ""
+"Specifies youtubeUnblock to send ClientHello fragments in the reverse order."
+msgstr "Отправлять фрагменты ClientHello в обратном порядке."
+
+msgid ""
+"Specifies youtubeUnblock to send fake packets near ClientHello (fills "
+"payload with zeroes)."
+msgstr ""
+"Отправлять поддельные пакеты рядом с ClientHello (заполняет "
+"полезную нагрузку нулями)."
+
+msgid "Start"
+msgstr "Запустить"
+
+msgid "Status"
+msgstr "Статус"
+
+msgid "Stop"
+msgstr "Остановить"
+
+msgid "Synfake"
+msgstr "Полезная нагрузка SYN"
+
+msgid "TLS enabled"
+msgstr "TLS"
+
+msgid "Target all domains"
+msgstr "Все домены"
+
+msgid ""
+"The fake packet sent in synfake may be too large. If you experience issues, "
+"lower up synfake-len. where len stands for how much bytes should be sent as "
+"syndata. Pass 0 if you want to send an entire fake packet."
+msgstr ""
+"Устанавливает объём данных, отправляемых в полезную нагрузку SYN. "
+"При возникновении проблем уменьшите это значение. "
+"По умолчанию данные отправляются целиком."
+
+msgid "This flag determines the strategy of fake packets invalidation."
+msgstr "Определяет стратегию аннулирования поддельных пакетов."
+
+msgid ""
+"This flag enables fake-sni which forces youtubeUnblock to send at least "
+"three packets instead of one with TLS ClientHello: Fake ClientHello, 1st "
+"part of original ClientHello, 2nd part of original ClientHello. This flag "
+"may be related to some Operation not permitted error messages, so before "
+"open an issue refer to Troubleshooting for EPERMS."
+msgstr ""
+msgstr ""
+"Включает отправку как минимум из трёх пакетов вместо "
+"одного с TLS ClientHello: поддельный ClientHello, обе "
+"части оригинального ClientHello. Этот флаг может быть "
+"связан с некоторыми сообщениями об ошибке «Операция запрещена», "
+"поэтому, прежде чем создавать тему, обратитесь к разделу «Устранение неполадок для EPERMS»."
+
+msgid ""
+"This flag forces youtubeUnblock to wait a little bit before send the 2nd "
+"part of the split packet."
+msgstr ""
+msgstr "Задержка перед отправкой второй части разделённого пакета."
+
+msgid ""
+"This flag specifies udp handling strategy. If <code>drop</code> udp packets "
+"will be dropped (useful for quic when browser can fallback to tcp), if "
+"<code>fake</code> udp will be faked."
+msgstr ""
+"Определяет стратегию обработки UDP-пакетов. <code>drop</code> - обрабатывать поддельные UDP-пакеты "
+"(полезно для quic, когда браузер может переключиться на TCP), <code>fake</code> - не обрабатывать."
+
+msgid ""
+"This flag specifies which faking message type should be used for fake "
+"packets. For random, the message of the random length and with random "
+"payload will be sent. For default the default payload (sni=www.google.com) "
+"is used. And for the custom option, the payload from --fake-custom-payload "
+"section utilized. Defaults to <code>default</code>."
+msgstr ""
+"Определяет, какой тип фальшивого сообщения следует использовать для фальшивых пакетов."
+"<code>default</code> — стандартная нагрузка (sni=www.google.com),"
+"<code>random</code> — случайная длина и содержимое,"
+"<code>custom</code> — пользовательское значение из «Пользовательского значения полезной нагрузки»."
+
+msgid ""
+"This flag specifies youtubeUnblock to build a complicated construction of "
+"fake client hello packets. length determines how much fakes will be sent."
+msgstr ""
+"Создавать цепочку поддельных пакетов ClientHello. "
+"Длина определяет количество пакетов."
+
+msgid "Trace"
+msgstr "Трассировка"
+
+msgid ""
+"Tunes the offset from original sequence number for fake packets. Used by "
+"randseq faking strategy. If 0, random sequence number will be set."
+msgstr ""
+"Смещение SEQ-номера для поддельных пакетов (стратегия randseq). 0 — случайное значение."
+
+msgid ""
+"Tunes the time to live (TTL) of fake SNI messages. TTL is specified like "
+"that the packet will go through the DPI system and captured by it, but will "
+"not reach the destination server."
+msgstr ""
+"TTL для поддельных SNI-сообщений. Пакет проходит через DPI, но не достигает сервера."
+
+msgid "UDP"
+msgstr "UDP"
+
+msgid "UDP QUIC filter"
+msgstr "Фильтрация QUIC"
+
+msgid "UDP dport filter"
+msgstr "Фильтрация портов"
+
+msgid "UDP fake length"
+msgstr "Размер поддельного UDP-пакета"
+
+msgid "UDP fake seq length"
+msgstr "Длина последовательности поддельных UDP-пакетов"
+
+msgid "UDP faking strategy"
+msgstr "Стратегия"
+
+msgid "UDP mode"
+msgstr "UDP"
+
+msgid "UDP stun filter"
+msgstr "Фильтрация STUN"
+
+msgid "UI Flags configuration"
+msgstr "Интерактивные флаги"
+
+msgid "Unnamed section"
+msgstr "Новый раздел"
+
+msgid "Use this option if you want for every ClientHello to be handled"
+msgstr "Обрабатывать каждый ClientHello."
+
+msgid ""
+"Use this option if youtubeUnblock conflicts with other systems rely on "
+"packet mark. Note that you may want to change accept rule for iptables to "
+"follow the mark."
+msgstr ""
+"Используйте при конфликте с другими системами, использующими метки пакетов. "
+"Возможно, потребуется изменить правила межсетевого экрана."
+
+msgid ""
+"Useful with --fake-sni-type=custom. You should specify the payload for fake "
+"message manually. Use hex format: --fake-custom-payload=0001020304 mean that "
+"5 bytes sequence: 0x00, 0x01, 0x02, 0x03, 0x04 used as fake."
+msgstr ""
+"Для <code>custom</code>. Укажите нагрузку вручную в hex-формате. Пример: "
+"0001020304 (последовательность 5 байт: 0x00, 0x01, 0x02, 0x03, 0x04)."
+
+msgid "Version"
+msgstr "Версия"
+
+msgid ""
+"With this option youtubeUnblock will split the packet at the position pos."
+msgstr ""
+msgstr "Разделить пакет в указанной позиции."
+
+msgid ""
+"With this options youtubeUnblock will split the packet in the middle of SNI "
+"data."
+msgstr ""
+msgstr "Разделить пакет посередине SNI-данных."
+
+msgid "args"
+msgstr "Аргументы"
+
+msgid "disabled"
+msgstr "отключено"
+
+msgid "enabled"
+msgstr "включено"
+
+msgid "inactive"
+msgstr "остановлено"
+
+msgid ""
+"is like randseq but sequence number is not random but references the packet "
+"sent in the past (before current)."
+msgstr ""
+"как randseq, но номер последовательности ссылается на ранее "
+"отправленный пакет."
+
+msgid "running"
+msgstr "запущено"
+
+msgid "seg2delay"
+msgstr "Задержка"
+
+msgid ""
+"specifies that packet will be invalidated after --faking-ttl=n hops. ttl is "
+"better but may cause issues if unconfigured."
+msgstr ""
+"указывает, что пакет будет аннулирован после «n» переходов. <code>ttl</code> "
+"лучше, но может вызвать проблемы, если не настроен."
+
+msgid ""
+"specifies that random sequence/acknowledgment random will be set. This "
+"option may be handled by provider which uses conntrack with drop on invalid "
+"conntrack state firewall rule enabled."
+msgstr ""
+"указывает ​​случайную последовательность/подтверждение. Может не работать "
+"у провайдеров с правилами conntrack, отбрасывающими невалидные состояния. "
+
+msgid "synfake len"
+msgstr "Размер полезной нагрузки SYN"
+
+msgid "ui_flags"
+msgstr "Флаги"
+
+msgid ""
+"will invalidate faking packet with invalid TCP md5sum. md5sum is a TCP "
+"option which is handled by the destination server but may be skipped by TSPU."
+msgstr ""
+"аннулирует поддельный пакет с недействительной контрольной суммой MD5 TCP. Контрольная сумма MD5 — "
+"это опция TCP, которая обрабатывается целевым сервером, но может быть пропущена ТСПУ."
+
+msgid ""
+"will invalidate faking packet with invalid checksum. May be handled and "
+"dropped by some providers/TSPUs."
+msgstr ""
+"аннулирует пакет с некорректной контрольной суммой. "
+"Может обрабатываться и отбрасываться провайдером/ТСПУ."
+
+msgid "youtubeUnblock"
+msgstr "youtubeUnblock"
+
+msgid "youtubeUnblock - Configuration"
+msgstr "youtubeUnblock - Конфигурация"
