@@ -74,7 +74,7 @@ return view.extend({
 		let m, s, o;
 "youtubeUnblock", "youtubeUnblock", "Bypasses Deep Packet Inspection (DPI) systems that rely on SNI"
 		m = new form.Map('youtubeUnblock', 'youtubeUnblock', _("Bypasses Deep Packet Inspection (DPI) systems that rely on SNI. <br />	Check the README for more details <a href=\"https://github.com/Waujito/youtubeUnblock\">https://github.com/Waujito/youtubeUnblock</a>"));
-
+		
 		/*
 			poll runtime information
 		*/
@@ -89,7 +89,14 @@ return view.extend({
 
 				status.classList.remove("spinning");
 				res = res.trim();
-				status.textContent = res;
+
+				// Translate status strings while preserving original case
+				if (res === "running")
+					status.textContent = _('running');
+				else if (res === "inactive")
+					status.textContent = _('inactive');
+				else
+					status.textContent = res;
 
 				if (res != "inactive" && res != "running") {
 					return;
@@ -103,10 +110,10 @@ return view.extend({
 
 
 				if (res == "running") {
-					btn_status.textContent = "Stop";
+					btn_status.textContent = _('Stop');
 					btn_status.classList.add("cbi-button-negative");
 				} else {
-					btn_status.textContent = "Start";
+					btn_status.textContent = _('Start');
 					btn_status.classList.add("cbi-button-positive");
 				}
 			});
@@ -140,12 +147,12 @@ return view.extend({
 				btn_autostart.classList.remove("disabled");
 
 				if (res.code == 0) {
-					autostart.textContent = "enabled";
-					btn_autostart.textContent = "Disable";
+					autostart.textContent = _('enabled');
+					btn_autostart.textContent = _('Disable');
 					btn_autostart.classList.add("cbi-button-negative");
 				} else {
-					autostart.textContent = "disabled";
-					btn_autostart.textContent = "Enable";
+					autostart.textContent = _('disabled');
+					btn_autostart.textContent = _('Enable');
 					btn_autostart.classList.add("cbi-button-positive");
 				}
 			});
@@ -251,4 +258,3 @@ return view.extend({
 	handleSaveApply: null,
 	handleSave: null,
 });
-
