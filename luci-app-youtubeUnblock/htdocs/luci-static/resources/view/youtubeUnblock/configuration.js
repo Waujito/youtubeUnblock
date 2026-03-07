@@ -31,15 +31,15 @@ return view.extend({
 		o.default = o.disabled;
 		o.rmempty = false;
 
-		o = s.option(form.ListValue, "faking_strategy", _("Faking strategy"), `
-			This flag determines the strategy of fake packets invalidation. 
-			<ul style="list-style: disc">
-			<li><code>randseq</code> specifies that random sequence/acknowledgment random will be set. This option may be handled by provider which uses conntrack with drop on invalid conntrack state firewall rule enabled. </li>
-			<li><code>ttl</code> specifies that packet will be invalidated after --faking-ttl=n hops. ttl is better but may cause issues if unconfigured. </li>
-			<li><code>pastseq</code> is like randseq but sequence number is not random but references the packet sent in the past (before current). </li>
-			<li><code>tcp_check</code> will invalidate faking packet with invalid checksum. May be handled and dropped by some providers/TSPUs.</li>
-			<li><code>md5sum</code> will invalidate faking packet with invalid TCP md5sum. md5sum is a TCP option which is handled by the destination server but may be skipped by TSPU.</li>
-			</ul>`
+		o = s.option(form.ListValue, "faking_strategy", _("Faking strategy"), 
+			_("This flag determines the strategy of fake packets invalidation.") + 
+			'<ul style="list-style: disc">' +
+			'<li><code>randseq</code> ' + _("specifies that random sequence/acknowledgment random will be set. This option may be handled by provider which uses conntrack with drop on invalid conntrack state firewall rule enabled.") + '</li>' +
+			'<li><code>ttl</code> ' + _("specifies that packet will be invalidated after --faking-ttl=n hops. ttl is better but may cause issues if unconfigured.") + '</li>' +
+			'<li><code>pastseq</code> ' + _("is like randseq but sequence number is not random but references the packet sent in the past (before current).") + '</li>' +
+			'<li><code>tcp_check</code> ' + _("will invalidate faking packet with invalid checksum. May be handled and dropped by some providers/TSPUs.") + '</li>' +
+			'<li><code>md5sum</code> ' + _("will invalidate faking packet with invalid TCP md5sum. md5sum is a TCP option which is handled by the destination server but may be skipped by TSPU.") + '</li>' +
+			'</ul>'
 		);
 		o.depends("fake_sni", '1');
 		o.widget="radio";
@@ -245,12 +245,12 @@ return view.extend({
 		const general_section = m.section(form.NamedSection, "youtubeUnblock", "youtubeUnblock");
 		o = general_section.option(form.ListValue, "conf_strat", _("Configuration strategy"), _("Select to configure youtubeUnblock with plain arguments or with interactive flags"));
 		o.widget = "radio";
-		o.value("args");
-		o.value("ui_flags");
+		o.value("args", _("args"));
+		o.value("ui_flags", _("ui_flags"));
 		o.default = "ui_flags";
 		o.rmempty = false; 
 
-		o = general_section.option(form.TextValue, "args", "args", "Pass your list of arguments here.");
+		o = general_section.option(form.TextValue, "args", _("args"), _("Pass your list of arguments here."));
 		o.depends("conf_strat", "args");
 
 		o = general_section.option(form.SectionValue, "_flags_section", 
