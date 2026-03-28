@@ -48,7 +48,7 @@ struct logging_config_t {
 };
 extern struct logging_config_t logging_conf;
 
-struct udp_dport_range {
+struct dport_range {
 	uint16_t start;
 	uint16_t end;
 };
@@ -64,13 +64,21 @@ struct section_config_t {
 
 	int tls_enabled;
 
+	struct dport_range *tcp_dport_range;
+	int tcp_dport_range_len;
+
+	int tcp_match_connpkts;
+	int tcp_match_all;
+
 	int fragmentation_strategy;
 	int frag_sni_reverse;
 	int frag_sni_faked;
+	int frag_origin_retries;
 	int faking_strategy;
 	int frag_middle_sni;
 	int frag_sni_pos;
 	unsigned char faking_ttl;
+	unsigned int faking_timestamp_decrease;
 	int fake_sni;
 	unsigned int fake_sni_seq_len;
 
@@ -105,7 +113,7 @@ struct section_config_t {
 	unsigned int udp_fake_len;
 	int udp_faking_strategy;
 
-	struct udp_dport_range *udp_dport_range;
+	struct dport_range *udp_dport_range;
 	int udp_dport_range_len;
 	int udp_stun_filter;
 	int udp_filter_quic;
@@ -176,6 +184,7 @@ for (struct section_config_t *section = (config)->last_section; section != NULL;
 #endif
 
 #define FAKE_TTL 8
+#define FAKING_TIMESTAMP_DECREASE_TTL 600000
 
 #define FAKE_STRAT_NONE		0
 // Will invalidate fake packets by out-of-ack_seq out-of-seq request
@@ -187,6 +196,7 @@ for (struct section_config_t *section = (config)->last_section; section != NULL;
 #define FAKE_STRAT_TCP_CHECK	(1 << 3)
 #define FAKE_STRAT_TCP_MD5SUM	(1 << 4)
 #define FAKE_STRAT_UDP_CHECK	(1 << 5)
+#define FAKE_STRAT_TCP_TS	(1 << 6)
 
 #define FAKE_STRAT_COUNT	6
 
@@ -199,7 +209,7 @@ for (int strategy = 1; strategy <= (1 << FAKE_STRAT_COUNT); strategy <<= 1) \
 if ((fake_bitmask) & strategy) 
 
 #ifndef FAKING_STRATEGY
-#define FAKING_STRATEGY FAKE_STRAT_PAST_SEQ
+#define FAKING_STRATEGY FAKE_STRAT_TCP_CHECK | FAKE_STRAT_TCP_TS
 #endif
 
 #define MAX_FAKE_SIZE 1300
@@ -235,13 +245,19 @@ enum {
 	.sni_domains = {0},					\
 	.exclude_sni_domains = {0},				\
 	.all_domains = 0,					\
+	.tcp_dport_range = NULL,				\
+	.tcp_dport_range_len = 0,				\
+	.tcp_match_connpkts = 0,				\
+	.tcp_match_all = 0,					\
 	.tls_enabled = 1,					\
 	.frag_sni_reverse = 1,                                  \
 	.frag_sni_faked = 0,                                    \
+	.frag_origin_retries = 0,                               \
 	.fragmentation_strategy = FRAGMENTATION_STRATEGY,       \
 	.faking_strategy = FAKING_STRATEGY,                     \
 	.faking_ttl = FAKE_TTL,                                 \
-	.fake_sni = 0,                                          \
+	.faking_timestamp_decrease = FAKING_TIMESTAMP_DECREASE_TTL,                    \
+	.fake_sni = 1,                                          \
 	.fake_sni_seq_len = 1,                                  \
 	.fake_sni_type = FAKE_PAYLOAD_DEFAULT,                  \
 	.fake_custom_pkt = NULL,				\

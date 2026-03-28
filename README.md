@@ -10,6 +10,7 @@
   - [Check it](#check-it)
   - [Flags](#flags)
   - [UDP/QUIC](#udpquic)
+  - [Cloudflare](#cloudflare)
   - [Troubleshooting](#troubleshooting)
     - [TV](#tv)
     - [Troubleshooting EPERMS (Operation not permitted)](#troubleshooting-eperms-operation-not-permitted)
@@ -198,6 +199,11 @@ It should return low speed without **youtubeUnblock** and faster with it. With *
 curl -o/dev/null -k --connect-to ::google.com -k -L -H Host:\ mirror.gcr.io https://mirror.gcr.io/v2/cimg/android/blobs/sha256:6fd8bdac3da660bde7bd0b6f2b6a46e1b686afb74b9a4614def32532b73f5eaa
 ```
 
+For ECH check it comes out to be more complicated, since it is still an experimental feature in CURL. If you want to test it, first of all, you should compile curl with ECH support. You can follow [this guide](https://github.com/curl/curl/blob/master/docs/ECH.md). Next, you can check it with
+```sh
+LD_LIBRARY_PATH=$HOME/code/openssl $HOME/code/curl/src/curl --ech hard --doh-url https://one.one.one.one/dns-query https://www.opengl.org --ipv4
+```
+
 ## Flags
 
 Put flags to the **BINARY**, not an init script. If you are on OpenWRT you should put the flags inside the script: open `/etc/init.d/youtubeUnblock` with any text editor, like vi or nano and put your flags after `procd_set_param command /usr/bin/youtubeUnblock` line.
@@ -238,6 +244,12 @@ Flags that do not scoped to a specific section, used over all the youtubeUnblock
 
 - `--tls={enabled|disabled}` Set it if you want not to process TLS traffic in current section. May be used if you want to set only UDP-based section. (Here section is a unit between `--fbegin` and `--fend` flags).
 
+- `--tcp-dport-filter=<5,6,200-500>` Filter the TCP destination ports. Defaults to no ports. Specifie the ports you want to be handled by youtubeUnblock. By default, youtubeUnblock will filter only 443 TLS port. This may disabled by `--no-dport-filter`.
+
+- `--tcp-match-connpackets` Use this with `--use-conntrack` set. Instead of matching by TLS domains will match packets by OS conntrack connpackets variable (e. g. number of packets sent while connection is alive (SYN is included in the connpackets counter, but anyways will be skipped by youtubeUnblock). You should not set too high number for matching. I recommend something like 4 or 5. If matching happens, youtubeUnblock will send fake and fragement the packet according to fragmentation and faking settings.
+
+- `--tcp-match-all` Matches every packet caught by youtubeUnblock. More strict rules may be applied via tcp-dport-filter.
+
 - `--fake-sni={0|1}` This flag enables fake-sni which forces **youtubeUnblock** to send at least three packets instead of one with TLS *ClientHello*: Fake *ClientHello*, 1st part of original *ClientHello*, 2nd part of original *ClientHello*. This flag may be related to some Operation not permitted error messages, so before open an issue refer to [Troubleshooting for EPERMS](#troubleshooting-eperms-operation-not-permitted). Defaults to **1**.
 
 - `--fake-sni-seq-len=<length>` This flag specifies **youtubeUnblock** to build a complicated construction of fake client hello packets. length determines how much fakes will be sent. Defaults to **1**.
@@ -248,16 +260,19 @@ Flags that do not scoped to a specific section, used over all the youtubeUnblock
 
 - `--fake-custom-payload-file=<binary file containing TLS message>` Same as `--fake-custom-payload` but binary file instead of hex. The file should contain raw binary TLS message (TCP payload).
 
-- `--faking-strategy={randseq|ttl|tcp_check|pastseq|md5sum}` This flag determines the strategy of fake packets invalidation. Defaults to `randseq`
+- `--faking-strategy={randseq|ttl|tcp_check|pastseq|md5sum|timestamp}` This flag determines the strategy of fake packets invalidation. The user can specify multiple faking options, so multiple techniques will be applied to the fake packet. Defaults to `tcp_check,timestamp`.
   - `randseq` specifies that random sequence/acknowledgment random will be set. This option may be handled by provider which uses *conntrack* with drop on invalid *conntrack* state firewall rule enabled. 
   - `ttl` specifies that packet will be invalidated after `--faking-ttl=n` hops. `ttl` is better but may cause issues if unconfigured. 
   - `pastseq` is like `randseq` but sequence number is not random but references the packet sent in the past (before current).
   - `tcp_check` will invalidate faking packet with invalid checksum. May be handled and dropped by some providers/TSPUs.
   - `md5sum` will invalidate faking packet with invalid TCP md5sum. md5sum is a TCP option which is handled by the destination server but may be skipped by TSPU.
+  - `timestamp` utilizes TCP Timestamp option. Timestamp TSVal is decreased by `--faking-timestamp-decrease=n` parameter, so it is being rejected by the server.
 
 - `--faking-ttl=<ttl>` Tunes the time to live (TTL) of fake SNI messages. TTL is specified like that the packet will go through the DPI system and captured by it, but will not reach the destination server. Defaults to **8**.
 
 - `--fake-seq-offset` Tunes the offset from original sequence number for fake packets. Used by randseq faking strategy. Defaults to 10000. If 0, random sequence number will be set.
+
+- `--faking-timestamp-decrease=<val>` Decreases TSVal parameter of Timestamp option in fake packet by this value. The default is 600000. According to research made in zapret project, this parameter may work in range between 100 and 0x80000000.
 
 - `--frag={tcp,ip,none}` Specifies the fragmentation strategy for the packet. tcp is used by default. Ip fragmentation may be blocked by DPI system. None specifies no fragmentation. Probably this won't work, but may be will work for some fake sni strategies.
 
@@ -268,6 +283,7 @@ Flags that do not scoped to a specific section, used over all the youtubeUnblock
 - `--frag-middle-sni={0|1}` With this options **youtubeUnblock** will split the packet in the middle of SNI data. Defaults to 1.
 
 - `--frag-sni-pos=<pos>` With this option **youtubeUnblock** will split the packet at the position pos. Defaults to 1.
+- `--frag-origin-retries=<ntries>` If set, youtubeUnblock will send n + 1 packets with original contents to the socket. Any additional fragmentation does not applied.
 
 - `--fk-winsize=<winsize>` Specifies window size for the fragmented TCP packet. Applicable if you want for response to be fragmented. May slowdown connection initialization.
 
@@ -318,6 +334,29 @@ QUIC is enabled with `--udp-filter-quic` flag. The flag supports two modes: `all
 **I recommend to use** `--udp-mode=drop --udp-filter-quic=parse`.
 
 For **other UDP protocols** I recommend to configure UDP support in the separate section from TCP, like `--fbegin --udp-dport-filter=50000-50099 --tls=disabled`. **You should not pass `--quic-drop` here unless you are sure what you are doing**
+
+## Cloudflare
+
+In Russia, Cloudflare technologies takes special care by RKN.
+This was caused primarily by ECH technology which allows to easily bypass the TSPU. RKN blocks ECH but alongside with it blocks a lot of harmless network protocols. Currently, the only TLS (and may be HTTP) protocols are allowed on the Cloudflare network. If TSPU could not determine the protocol and Server Name (SNI for TLS), it will drop the connection after 16 KB transferred. This affects not only 443 or 80 ports, but every port on Cloudflare network.
+
+Because of this, ECH and tons of protocols are unavailable. Tons of various custom servers/utilites/games are down, since custom protocols are being blocked.
+
+An example: Hypixel Minecraft server relies on Cloudflare and works up on custom Minecraft protocol on port 25565. TSPU can't determine this protocol, so it blocks the connection after 16 KB transferred, so server does not work.
+
+Note, that the faking here is a key to bypass the TSPU.
+
+An example of the solution:
+```sh
+sudo ./build/youtubeUnblock --use-conntrack --tls=disabled --tcp-match-connpackets=4 --tcp-dport-filter=25565 --frag-sni-pos=1 --fake-sni=1 --faking-strategy=tcp_check,timestamp
+```
+
+Also do not forget to add the iptables rule on the custom port:
+
+```sh
+sudo iptables -t mangle -A YOUTUBEUNBLOCK -p tcp --dport 25565 -m connbytes --connbytes-dir original --connbytes-mode packets --connbytes 0:19 -j NFQUEUE --queue-num 537 --queue-bypass
+```
+
 
 ## Troubleshooting
 

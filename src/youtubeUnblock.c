@@ -49,7 +49,7 @@
 #include <signal.h>
 
 #include "config.h"
-#include "mangle.h"
+#include "dpi.h"
 #include "args.h"
 #include "utils.h"
 #include "logging.h"
@@ -63,8 +63,9 @@ int raw6socket = -2;
 static struct config_t *cur_config = NULL;
 
 static int open_socket(struct mnl_socket **_nl) {
-	struct mnl_socket *nl = NULL;
-	nl = mnl_socket_open(NETLINK_NETFILTER);
+	assert (_nl);
+
+	struct mnl_socket *nl = mnl_socket_open(NETLINK_NETFILTER);
 
 	if (nl == NULL) {
 		lgerror(-errno, "mnl_socket_open");
@@ -83,15 +84,15 @@ static int open_socket(struct mnl_socket **_nl) {
 }
 
 
-static int close_socket(struct mnl_socket **_nl) {
-	struct mnl_socket *nl = *_nl;
-	if (nl == NULL) return 1;
-	if (mnl_socket_close(nl) < 0) {
+static int close_socket(struct mnl_socket **nl) {
+	assert (nl);
+
+	if (*nl && mnl_socket_close(*nl) < 0) {
 		lgerror(-errno, "mnl_socket_close");
 		return -1;
 	}
 
-	*_nl = NULL;
+	*nl = NULL;
 
 	return 0;
 }
@@ -196,231 +197,6 @@ static int close_raw6_socket(void) {
 	pthread_mutex_destroy(&raw6socket_lock);
 
 	raw6socket = -2;
-	return 0;
-}
-
-/*
- * libnetfilter_conntrack
- * (C) 2005-2012 by Pablo Neira Ayuso <pablo@netfilter.org>
- *
- * This program is free software; you can redistribute it and/or modify it
- * under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 2 of the License, or
- * (at your option) any later version.
- *
- * This code has been sponsored by Vyatta Inc. <http://www.vyatta.com>
- */
-
-enum ctattr_counters {
-	CTA_COUNTERS_UNSPEC,
-	CTA_COUNTERS_PACKETS,		/* 64bit counters */
-	CTA_COUNTERS_BYTES,		/* 64bit counters */
-	CTA_COUNTERS32_PACKETS,		/* old 32bit counters, unused */
-	CTA_COUNTERS32_BYTES,		/* old 32bit counters, unused */
-	CTA_COUNTERS_PAD,
-	__CTA_COUNTERS_MAX
-};
-#define CTA_COUNTERS_MAX (__CTA_COUNTERS_MAX - 1)
-
-enum ctattr_type {
-	CTA_UNSPEC,
-	CTA_TUPLE_ORIG,
-	CTA_TUPLE_REPLY,
-	CTA_STATUS,
-	CTA_PROTOINFO,
-	CTA_HELP,
-	CTA_NAT_SRC,
-#define CTA_NAT	CTA_NAT_SRC	/* backwards compatibility */
-	CTA_TIMEOUT,
-	CTA_MARK,
-	CTA_COUNTERS_ORIG,
-	CTA_COUNTERS_REPLY,
-	CTA_USE,
-	CTA_ID,
-	CTA_NAT_DST,
-	CTA_TUPLE_MASTER,
-	CTA_SEQ_ADJ_ORIG,
-	CTA_NAT_SEQ_ADJ_ORIG	= CTA_SEQ_ADJ_ORIG,
-	CTA_SEQ_ADJ_REPLY,
-	CTA_NAT_SEQ_ADJ_REPLY	= CTA_SEQ_ADJ_REPLY,
-	CTA_SECMARK,		/* obsolete */
-	CTA_ZONE,
-	CTA_SECCTX,
-	CTA_TIMESTAMP,
-	CTA_MARK_MASK,
-	CTA_LABELS,
-	CTA_LABELS_MASK,
-	CTA_SYNPROXY,
-	CTA_FILTER,
-	CTA_STATUS_MASK,
-	__CTA_MAX
-};
-#define CTA_MAX (__CTA_MAX - 1)
-
-enum {
-	__DIR_ORIG,
-	__DIR_REPL
-};
-
-static int 
-yct_parse_counters_attr_cb(const struct nlattr *attr, void *data)
-{
-	const struct nlattr **tb = data;
-	int type = mnl_attr_get_type(attr);
-
-	if (mnl_attr_type_valid(attr, CTA_COUNTERS_MAX) < 0)
-		return MNL_CB_OK;
-
-	switch(type) {
-	case CTA_COUNTERS_PACKETS:
-	case CTA_COUNTERS_BYTES:
-		if (mnl_attr_validate(attr, MNL_TYPE_U64) < 0)
-			return MNL_CB_ERROR;
-		break;
-	case CTA_COUNTERS32_PACKETS:
-	case CTA_COUNTERS32_BYTES:
-		if (mnl_attr_validate(attr, MNL_TYPE_U32) < 0)
-			return MNL_CB_ERROR;
-		break;
-	}
-	tb[type] = attr;
-	return MNL_CB_OK;
-}
-
-static int
-yct_parse_counters(const struct nlattr *attr, struct ytb_conntrack *yct,
-		   int dir)
-{
-	struct nlattr *tb[CTA_COUNTERS_MAX+1] = {0};
-
-	if (mnl_attr_parse_nested(attr, yct_parse_counters_attr_cb, tb) < 0)
-		return -1;
-
-	if (tb[CTA_COUNTERS_PACKETS] || tb[CTA_COUNTERS32_PACKETS]) {
-		uint64_t packets_counter;
-		if (tb[CTA_COUNTERS32_PACKETS]) {
-			packets_counter =
-			ntohl(mnl_attr_get_u32(tb[CTA_COUNTERS32_PACKETS]));
-		}
-		if (tb[CTA_COUNTERS_PACKETS]) {
-			packets_counter =
-			be64toh(mnl_attr_get_u64(tb[CTA_COUNTERS_PACKETS]));
-		}
-		switch(dir) {
-		case __DIR_ORIG:
-			yct->orig_packets = packets_counter;
-			yct_set_mask_attr(YCTATTR_ORIG_PACKETS, yct);
-			break;
-		case __DIR_REPL:
-			yct->repl_packets = packets_counter;
-			yct_set_mask_attr(YCTATTR_REPL_PACKETS, yct);
-			break;
-		}
-	}
-	if (tb[CTA_COUNTERS_BYTES] || tb[CTA_COUNTERS32_BYTES]) {
-		uint64_t bytes_counter;
-		if (tb[CTA_COUNTERS32_BYTES]) {
-			bytes_counter =
-			ntohl(mnl_attr_get_u32(tb[CTA_COUNTERS32_BYTES]));
-		}
-		if (tb[CTA_COUNTERS_BYTES]) {
-			bytes_counter =
-			be64toh(mnl_attr_get_u64(tb[CTA_COUNTERS_BYTES]));
-		}
-
-		switch(dir) {
-		case __DIR_ORIG:
-			yct->orig_bytes = bytes_counter;
-			yct_set_mask_attr(YCTATTR_ORIG_BYTES, yct);
-			break;
-		case __DIR_REPL:
-			yct->repl_bytes = bytes_counter;
-			yct_set_mask_attr(YCTATTR_REPL_BYTES, yct);
-			break;
-		}
-	}
-
-	return 0;
-}
-
-static int 
-yct_parse_conntrack_attr_cb(const struct nlattr *attr, void *data){
-	const struct nlattr **tb = data;
-	int type = mnl_attr_get_type(attr);
-
-	if (mnl_attr_type_valid(attr, CTA_MAX) < 0)
-		return MNL_CB_OK;
-
-	switch(type) {
-	case CTA_TUPLE_ORIG:
-	case CTA_TUPLE_REPLY:
-	case CTA_TUPLE_MASTER:
-	case CTA_NAT_SEQ_ADJ_ORIG:
-	case CTA_NAT_SEQ_ADJ_REPLY:
-	case CTA_PROTOINFO:
-	case CTA_COUNTERS_ORIG:
-	case CTA_COUNTERS_REPLY:
-	case CTA_HELP:
-	case CTA_SECCTX:
-	case CTA_TIMESTAMP:
-		if (mnl_attr_validate(attr, MNL_TYPE_NESTED) < 0)
-			return MNL_CB_ERROR;
-		break;
-	case CTA_STATUS:
-	case CTA_TIMEOUT:
-	case CTA_MARK:
-	case CTA_SECMARK:
-	case CTA_USE:
-	case CTA_ID:
-		if (mnl_attr_validate(attr, MNL_TYPE_U32) < 0)
-			return MNL_CB_ERROR;
-		break;
-	case CTA_ZONE:
-		if (mnl_attr_validate(attr, MNL_TYPE_U16) < 0)
-			return MNL_CB_ERROR;
-		break;
-	case CTA_NAT_SRC:
-	case CTA_NAT_DST:
-		/* deprecated */
-		break;
-	}
-	tb[type] = attr;
-	return MNL_CB_OK;
-}
-
-static int 
-yct_payload_parse(const void *payload, size_t payload_len,
-		   uint16_t l3num, struct ytb_conntrack *yct)
-{
-	struct nlattr *tb[CTA_MAX+1] = {0};
-
-	if (mnl_attr_parse_payload(payload, payload_len,
-				   yct_parse_conntrack_attr_cb, tb) < 0)
-		return -1;
-
-	if (tb[CTA_MARK]) {
-		yct->connmark = ntohl(mnl_attr_get_u32(tb[CTA_MARK]));
-		yct_set_mask_attr(YCTATTR_CONNMARK, yct);
-	}
-
-
-	if (tb[CTA_COUNTERS_ORIG]) {
-		if (yct_parse_counters(tb[CTA_COUNTERS_ORIG],
-					yct, __DIR_ORIG) < 0)
-			return -1;
-	}
-
-	if (tb[CTA_ID]) {
-		yct->id = ntohl(mnl_attr_get_u32(tb[CTA_ID]));
-		yct_set_mask_attr(YCTATTR_CONNID, yct);
-	}
-
-	if (tb[CTA_COUNTERS_REPLY]) {
-		if (yct_parse_counters(tb[CTA_COUNTERS_REPLY],
-					yct, __DIR_REPL) < 0)
-			return -1;
-	}
-
 	return 0;
 }
 
@@ -563,6 +339,227 @@ erret_lc:
 	return ret;
 }
 
+/*
+ * libnetfilter_conntrack
+ * (C) 2005-2012 by Pablo Neira Ayuso <pablo@netfilter.org>
+ *
+ * This program is free software; you can redistribute it and/or modify it
+ * under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
+ *
+ * This code has been sponsored by Vyatta Inc. <http://www.vyatta.com>
+ */
+
+enum ctattr_counters {
+	CTA_COUNTERS_UNSPEC,
+	CTA_COUNTERS_PACKETS,		/* 64bit counters */
+	CTA_COUNTERS_BYTES,		/* 64bit counters */
+	CTA_COUNTERS32_PACKETS,		/* old 32bit counters, unused */
+	CTA_COUNTERS32_BYTES,		/* old 32bit counters, unused */
+	CTA_COUNTERS_PAD,
+	__CTA_COUNTERS_MAX
+};
+#define CTA_COUNTERS_MAX (__CTA_COUNTERS_MAX - 1)
+
+enum ctattr_type {
+	CTA_UNSPEC,
+	CTA_TUPLE_ORIG,
+	CTA_TUPLE_REPLY,
+	CTA_STATUS,
+	CTA_PROTOINFO,
+	CTA_HELP,
+	CTA_NAT_SRC,
+#define CTA_NAT	CTA_NAT_SRC	/* backwards compatibility */
+	CTA_TIMEOUT,
+	CTA_MARK,
+	CTA_COUNTERS_ORIG,
+	CTA_COUNTERS_REPLY,
+	CTA_USE,
+	CTA_ID,
+	CTA_NAT_DST,
+	CTA_TUPLE_MASTER,
+	CTA_SEQ_ADJ_ORIG,
+	CTA_NAT_SEQ_ADJ_ORIG	= CTA_SEQ_ADJ_ORIG,
+	CTA_SEQ_ADJ_REPLY,
+	CTA_NAT_SEQ_ADJ_REPLY	= CTA_SEQ_ADJ_REPLY,
+	CTA_SECMARK,		/* obsolete */
+	CTA_ZONE,
+	CTA_SECCTX,
+	CTA_TIMESTAMP,
+	CTA_MARK_MASK,
+	CTA_LABELS,
+	CTA_LABELS_MASK,
+	CTA_SYNPROXY,
+	CTA_FILTER,
+	CTA_STATUS_MASK,
+	__CTA_MAX
+};
+#define CTA_MAX (__CTA_MAX - 1)
+
+enum {
+	__DIR_ORIG,
+	__DIR_REPL
+};
+
+static int yct_parse_counters_attr_cb(const struct nlattr *attr,
+				      void *data) {
+	const struct nlattr **tb = data;
+	int type = mnl_attr_get_type(attr);
+
+	if (mnl_attr_type_valid(attr, CTA_COUNTERS_MAX) < 0)
+		return MNL_CB_OK;
+
+	switch(type) {
+	case CTA_COUNTERS_PACKETS:
+	case CTA_COUNTERS_BYTES:
+		if (mnl_attr_validate(attr, MNL_TYPE_U64) < 0)
+			return MNL_CB_ERROR;
+		break;
+	case CTA_COUNTERS32_PACKETS:
+	case CTA_COUNTERS32_BYTES:
+		if (mnl_attr_validate(attr, MNL_TYPE_U32) < 0)
+			return MNL_CB_ERROR;
+		break;
+	}
+	tb[type] = attr;
+	return MNL_CB_OK;
+}
+
+static int yct_parse_counters(const struct nlattr *attr,
+			      struct ytb_conntrack *yct, int dir) {
+	struct nlattr *tb[CTA_COUNTERS_MAX+1] = {0};
+
+	if (mnl_attr_parse_nested(attr, yct_parse_counters_attr_cb, tb) < 0)
+		return -1;
+
+	if (tb[CTA_COUNTERS_PACKETS] || tb[CTA_COUNTERS32_PACKETS]) {
+		uint64_t packets_counter;
+		if (tb[CTA_COUNTERS32_PACKETS]) {
+			packets_counter =
+			ntohl(mnl_attr_get_u32(tb[CTA_COUNTERS32_PACKETS]));
+		}
+		if (tb[CTA_COUNTERS_PACKETS]) {
+			packets_counter =
+			be64toh(mnl_attr_get_u64(tb[CTA_COUNTERS_PACKETS]));
+		}
+		switch(dir) {
+		case __DIR_ORIG:
+			yct->orig_packets = packets_counter;
+			yct_set_mask_attr(YCTATTR_ORIG_PACKETS, yct);
+			break;
+		case __DIR_REPL:
+			yct->repl_packets = packets_counter;
+			yct_set_mask_attr(YCTATTR_REPL_PACKETS, yct);
+			break;
+		}
+	}
+	if (tb[CTA_COUNTERS_BYTES] || tb[CTA_COUNTERS32_BYTES]) {
+		uint64_t bytes_counter;
+		if (tb[CTA_COUNTERS32_BYTES]) {
+			bytes_counter =
+			ntohl(mnl_attr_get_u32(tb[CTA_COUNTERS32_BYTES]));
+		}
+		if (tb[CTA_COUNTERS_BYTES]) {
+			bytes_counter =
+			be64toh(mnl_attr_get_u64(tb[CTA_COUNTERS_BYTES]));
+		}
+
+		switch(dir) {
+		case __DIR_ORIG:
+			yct->orig_bytes = bytes_counter;
+			yct_set_mask_attr(YCTATTR_ORIG_BYTES, yct);
+			break;
+		case __DIR_REPL:
+			yct->repl_bytes = bytes_counter;
+			yct_set_mask_attr(YCTATTR_REPL_BYTES, yct);
+			break;
+		}
+	}
+
+	return 0;
+}
+
+static int yct_parse_conntrack_attr_cb(const struct nlattr *attr,
+				       void *data) {
+	const struct nlattr **tb = data;
+	int type = mnl_attr_get_type(attr);
+
+	if (mnl_attr_type_valid(attr, CTA_MAX) < 0)
+		return MNL_CB_OK;
+
+	switch(type) {
+	case CTA_TUPLE_ORIG:
+	case CTA_TUPLE_REPLY:
+	case CTA_TUPLE_MASTER:
+	case CTA_NAT_SEQ_ADJ_ORIG:
+	case CTA_NAT_SEQ_ADJ_REPLY:
+	case CTA_PROTOINFO:
+	case CTA_COUNTERS_ORIG:
+	case CTA_COUNTERS_REPLY:
+	case CTA_HELP:
+	case CTA_SECCTX:
+	case CTA_TIMESTAMP:
+		if (mnl_attr_validate(attr, MNL_TYPE_NESTED) < 0)
+			return MNL_CB_ERROR;
+		break;
+	case CTA_STATUS:
+	case CTA_TIMEOUT:
+	case CTA_MARK:
+	case CTA_SECMARK:
+	case CTA_USE:
+	case CTA_ID:
+		if (mnl_attr_validate(attr, MNL_TYPE_U32) < 0)
+			return MNL_CB_ERROR;
+		break;
+	case CTA_ZONE:
+		if (mnl_attr_validate(attr, MNL_TYPE_U16) < 0)
+			return MNL_CB_ERROR;
+		break;
+	case CTA_NAT_SRC:
+	case CTA_NAT_DST:
+		/* deprecated */
+		break;
+	}
+	tb[type] = attr;
+	return MNL_CB_OK;
+}
+
+static int yct_payload_parse(const void *payload,
+			     size_t payload_len, uint16_t l3num,
+			     struct ytb_conntrack *yct) {
+	struct nlattr *tb[CTA_MAX+1] = {0};
+
+	if (mnl_attr_parse_payload(payload, payload_len,
+				   yct_parse_conntrack_attr_cb, tb) < 0)
+		return -1;
+
+	if (tb[CTA_MARK]) {
+		yct->connmark = ntohl(mnl_attr_get_u32(tb[CTA_MARK]));
+		yct_set_mask_attr(YCTATTR_CONNMARK, yct);
+	}
+
+
+	if (tb[CTA_COUNTERS_ORIG]) {
+		if (yct_parse_counters(tb[CTA_COUNTERS_ORIG],
+					yct, __DIR_ORIG) < 0)
+			return -1;
+	}
+
+	if (tb[CTA_ID]) {
+		yct->id = ntohl(mnl_attr_get_u32(tb[CTA_ID]));
+		yct_set_mask_attr(YCTATTR_CONNID, yct);
+	}
+
+	if (tb[CTA_COUNTERS_REPLY]) {
+		if (yct_parse_counters(tb[CTA_COUNTERS_REPLY],
+					yct, __DIR_REPL) < 0)
+			return -1;
+	}
+
+	return 0;
+}
+
 
 // Per-queue data. Passed to queue_cb.
 struct queue_data {
@@ -684,15 +681,16 @@ static int queue_cb(const struct nlmsghdr *nlh, void *data) {
         packet.payload_len = mnl_attr_get_payload_len(attr[NFQA_PAYLOAD]);
         packet.payload = mnl_attr_get_payload(attr[NFQA_PAYLOAD]);
 
-	if (attr[NFQA_CAP_LEN] != NULL && ntohl(mnl_attr_get_u32(attr[NFQA_CAP_LEN])) != packet.payload_len) {
+	if (attr[NFQA_CAP_LEN] != NULL &&
+		ntohl(mnl_attr_get_u32(attr[NFQA_CAP_LEN])) != packet.payload_len) {
 		lgerr("The packet was truncated! Skip!");
 		return fallback_accept_packet(id, *qdata);
 	}
 
 	if (attr[NFQA_MARK] != NULL) {
 		// Skip packets sent by rawsocket to escape infinity loop.
-		if ((ntohl(mnl_attr_get_u32(attr[NFQA_MARK])) & cur_config->mark) == 
-			cur_config->mark) {
+		if (CHECK_BITFIELD(ntohl(mnl_attr_get_u32(attr[NFQA_MARK])),
+				cur_config->mark)) {
 			return fallback_accept_packet(id, *qdata);
 		}
 	}

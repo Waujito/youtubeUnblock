@@ -167,7 +167,7 @@ jobs:
     strategy:
       matrix:
         branch:
-          - openwrt-23.05
+          - openwrt-24.10
         arch:
           - aarch64_cortex-a53
           - aarch64_cortex-a72
@@ -184,7 +184,6 @@ jobs:
           - arm_cortex-a9_neon
           - arm_cortex-a9_vfpv3-d16
           - arm_fa526
-          - arm_mpcore
           - arm_xscale
           - mips64_octeonplus
           - mips_24kc
@@ -250,7 +249,7 @@ jobs:
     needs: prepare
     runs-on: ubuntu-latest
     container:
-      image: openwrt/sdk:x86_64-openwrt-23.05
+      image: openwrt/sdk:x86_64-openwrt-24.10
       options: --user root
     steps:
       - name: Checkout

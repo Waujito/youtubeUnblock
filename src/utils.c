@@ -616,6 +616,15 @@ struct tcp_md5sig_opt {
 // Real length of the option, with NOOP fillers
 #define TCP_MD5SIG_OPT_RLEN 20
 
+#define TCP_TS_OPT_KIND 0x08
+struct tcp_ts_opt {
+	uint8_t kind;
+	uint8_t len;
+	uint32_t ts_val;
+	uint32_t ts_echo;
+} __attribute__((packed));
+
+
 int fail_packet(struct failing_strategy strategy, uint8_t *payload, size_t *plen, size_t avail_buflen) {
 	void *iph;
 	size_t iph_len;
@@ -636,18 +645,22 @@ int fail_packet(struct failing_strategy strategy, uint8_t *payload, size_t *plen
 	}
 
 
-	if (strategy.strategy == FAKE_STRAT_RAND_SEQ) {
+	if (CHECK_BITFIELD(strategy.strategy, FAKE_STRAT_RAND_SEQ)) {
 		lgtrace_wr("fake seq: %u -> ", ntohl(tcph->seq));
 
 		tcph->seq = htonl(ntohl(tcph->seq) - (strategy.randseq_offset + dlen));
 
 		lgtrace_addp("%u", ntohl(tcph->seq));
-	} else if (strategy.strategy == FAKE_STRAT_PAST_SEQ) {
+	}
+
+	if (CHECK_BITFIELD(strategy.strategy, FAKE_STRAT_PAST_SEQ)) {
 		lgtrace_wr("fake seq: %u -> ", ntohl(tcph->seq));
 		tcph->seq = htonl(ntohl(tcph->seq) - dlen);
 		lgtrace_addp("%u", ntohl(tcph->seq));
 
-	} else if (strategy.strategy == FAKE_STRAT_TTL) {
+	}
+
+	if (CHECK_BITFIELD(strategy.strategy, FAKE_STRAT_TTL)) {
 		lgtrace_addp("set fake ttl to %d", strategy.faking_ttl);
 
 		if (ipxv == IP4VERSION) {
@@ -658,7 +671,9 @@ int fail_packet(struct failing_strategy strategy, uint8_t *payload, size_t *plen
 			lgerror(-EINVAL, "fail_packet: IP version is unsupported");
 			return -EINVAL;
 		}
-	} else if (strategy.strategy == FAKE_STRAT_TCP_MD5SUM) {
+	}
+
+	if (CHECK_BITFIELD(strategy.strategy, FAKE_STRAT_TCP_MD5SUM)) {
 		int optp_len = tcph_len - sizeof(struct tcphdr);
 		int delta = TCP_MD5SIG_OPT_RLEN - optp_len;
 		lgtrace_addp("Incr delta %d: %d -> %d", delta, optp_len, optp_len + delta);
@@ -673,9 +688,11 @@ int fail_packet(struct failing_strategy strategy, uint8_t *payload, size_t *plen
 			tcph_len = tcph_len + delta;
 			tcph->doff = tcph_len >> 2;
 			if (ipxv == IP4VERSION) {
-				((struct iphdr *)iph)->tot_len = htons(ntohs(((struct iphdr *)iph)->tot_len) + delta);
+				((struct iphdr *)iph)->tot_len = 
+					htons(ntohs(((struct iphdr *)iph)->tot_len) + delta);
 			} else if (ipxv == IP6VERSION) {
-				((struct ip6_hdr *)iph)->ip6_plen = htons(ntohs(((struct ip6_hdr *)iph)->ip6_plen) + delta);
+				((struct ip6_hdr *)iph)->ip6_plen = 
+					htons(ntohs(((struct ip6_hdr *)iph)->ip6_plen) + delta);
 			} else {
 				lgerror(-EINVAL, "fail_packet: IP version is unsupported");
 				return -EINVAL;
@@ -697,6 +714,53 @@ int fail_packet(struct failing_strategy strategy, uint8_t *payload, size_t *plen
 		}
 	}
 
+	if (CHECK_BITFIELD(strategy.strategy, FAKE_STRAT_TCP_TS)) {
+		int optp_len = tcph_len - sizeof(struct tcphdr);
+		uint8_t *optp = (uint8_t *)tcph + sizeof(struct tcphdr);
+
+		uint8_t *tcp_ts = NULL;
+
+		while (optp_len && *optp != 0x00) {
+			if (*optp == 0x01) {
+				optp_len--;
+				optp++;
+				continue;
+			}
+
+			if (optp_len < 2) {
+				lgerr("Tcp option parsing failed");
+				break;
+			}
+
+			uint8_t len = optp[1];
+			if (len > optp_len) {
+				lgerr("Tcp option parsing failed");
+				break;
+			}
+
+			if (*optp == 0x08) {
+				tcp_ts = optp;
+				break;
+			}
+
+			optp_len -= len;
+			optp += len;
+		}
+
+		if (tcp_ts) {
+			struct tcp_ts_opt *ts_opt = (void *)tcp_ts;
+			uint32_t old_ts = ntohl(ts_opt->ts_val);
+			ts_opt->ts_val = htonl(ntohl(ts_opt->ts_val) - 
+						strategy.faking_timestamp_decrease);
+			uint32_t new_ts = ntohl(ts_opt->ts_val);
+
+		lgtrace_addp(	"Fake TCP TimeStamp %u -> %u", old_ts, new_ts);
+		} else {
+			lgtrace_addp(	"Fake TCP TimeStamp was not fullfilled: "
+					"the option does not present");
+		}
+	}
+
 	if (ipxv == IP4VERSION) {
 		((struct iphdr *)iph)->frag_off = 0;
 	}
@@ -705,7 +769,7 @@ int fail_packet(struct failing_strategy strategy, uint8_t *payload, size_t *plen
 	set_ip_checksum(iph, iph_len);
 	set_tcp_checksum(tcph, iph, iph_len);
 
-	if (strategy.strategy == FAKE_STRAT_TCP_CHECK) {
+	if (CHECK_BITFIELD(strategy.strategy, FAKE_STRAT_TCP_CHECK)) {
 		lgtrace_addp("break fake tcp checksum");
 		tcph->check += 1;
 	}

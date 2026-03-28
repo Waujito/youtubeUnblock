@@ -133,6 +133,7 @@ void shift_data(uint8_t *data, size_t dlen, size_t delta);
 struct failing_strategy {
 	unsigned int strategy;
 	uint8_t faking_ttl;
+	uint32_t faking_timestamp_decrease;
 	size_t randseq_offset;
 };
 
@@ -197,7 +198,8 @@ static inline struct failing_strategy args_default_failing_strategy(const struct
 	struct failing_strategy fl_strat = {
 		.strategy = (unsigned int)section->faking_strategy,
 		.faking_ttl = section->faking_ttl,
-		.randseq_offset = (size_t)section->fakeseq_offset
+		.faking_timestamp_decrease = section->faking_timestamp_decrease,
+		.randseq_offset = (size_t)section->fakeseq_offset,
 	};
 	return fl_strat;
 }

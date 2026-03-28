@@ -22,6 +22,12 @@
 #define TYPES_H
 #include <asm/byteorder.h>
 
+#ifndef KERNEL_SPACE
+#include <assert.h>
+#else
+#define assert(...) ;
+#endif
+
 #ifdef KERNEL_SPACE
 #include <linux/errno.h> // IWYU pragma: export
 #include <linux/string.h> // IWYU pragma: export
@@ -126,6 +132,8 @@ free((item));			\
 })
 
 #endif /* not a KERNEL_SPACE */
+
+#define CHECK_BITFIELD(value, field) (((value) & (field)) == (field))
 
 static inline int randint(void) {
 	int rnd;
