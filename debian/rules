@@ -11,7 +11,7 @@ export DEB_BUILD_MAINT_OPTIONS = hardening=+all
 # Package maintainers to append CFLAGS.
 export DEB_CFLAGS_MAINT_APPEND  = -Wall -pedantic
 # Package maintainers to append LDFLAGS.
-export DEB_LDFLAGS_MAINT_APPEND = -Wl,--as-needed -L$(PWD)/build/deps/lib/
+export DEB_LDFLAGS_MAINT_APPEND = -Wl,--as-needed -L$(CURDIR)/build/deps/lib/
 
 BASE=debian/youtubeunblock
 
@@ -19,6 +19,7 @@ BASE=debian/youtubeunblock
 		dh $@ --parralel
 
 override_dh_auto_build:
+
 		$(MAKE) -f Makefile PREFIX=/usr DESTDIR=${PREFIX}/bin TARGET=youtubeunblock USE_SYS_LIBS=yes -Ideps/cyclone/include
 
 override_dh_auto_install:
@@ -26,6 +27,7 @@ override_dh_auto_install:
 
 override_dh_install:
 	install -p -D -m 0644 debian/youtubeunblock.conf $(BASE)/etc/youtubeunblock.conf
+	#install -p -D -m 0644 debian/youtubeunblock.service $(BASE)/usr/lib/systemd/system/youtubeunblock.service
 
 dh_installsystemd:
 

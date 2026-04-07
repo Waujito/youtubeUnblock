@@ -16,5 +16,5 @@ PrivateTmp=true
 ProtectSystem=full
 
 [Install]
-WantedBy=multi-user.target
+WantedBy=default.target
 
