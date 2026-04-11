@@ -1,0 +1,13 @@
+From: Andrew Clark <andrewclarkii@gmail.com>
+Date: Tue, 6 Jan 2026 12:14:32 +0300
+Subject: use system libraries
+
+--- a/uspace.mk	2026-01-05 20:55:02.400644376 +0000
++++ b/uspace.mk	2026-01-05 20:55:43.005805981 +0000
+@@ -1,5 +1,5 @@
+ #Check for using system libs
+-USE_SYS_LIBS := no
++USE_SYS_LIBS := yes
+ 
+ #Userspace app makes here
+ BUILD_DIR := $(CURDIR)/build

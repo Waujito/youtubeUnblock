@@ -8,13 +8,13 @@ After=network-online.target nss-lookup.target
 NoNewPrivileges=yes
 StandardOutput=journal
 StandardError=journal
-EnvironmentFile=-/etc/youtubeunblock.conf
-EnvironmentFile=-%h/.config/youtubeunblock.conf
+EnvironmentFile=-/etc/youtubeunblock-%i.conf
+EnvironmentFile=-%h/.config/youtubeunblock-%i.conf
 ExecStart=youtubeunblock $YOUTUBEUNBLOCK_OPTIONS
 TimeoutStopSec=5s
 PrivateTmp=true
 ProtectSystem=full
 
 [Install]
-WantedBy=multi-user.target
+WantedBy=default.target
 
