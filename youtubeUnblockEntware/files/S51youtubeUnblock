@@ -45,7 +45,7 @@ start() {
 	kernel_modules_load
 
 	if [ $IPV6 -eq 0 ]; then
-		ARGS="$ARGS --no-ipv6"
+		ARGS="--no-ipv6 $ARGS"
 	fi
 	
 	$PROCS $ARGS --daemonize
