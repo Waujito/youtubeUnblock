@@ -186,11 +186,12 @@ return view.extend({
 		o.default = o.disabled;
 		o.rmempty = false;
 
-		o = s.option(form.ListValue, "udp_filter_quic", _("UDP QUIC filter"), _("Enables QUIC filtering for UDP handler. If disabled, quic won't be processed, if all, all quic initial packets will be handled."));
+		o = s.option(form.ListValue, "udp_filter_quic", _("UDP QUIC filter"), _("Enables QUIC filtering for UDP handler. If disabled, quic won't be processed, if all, all quic initial packets will be handled, if parse, quic initial packets will be decrypted and matched against sni-domains."));
 		o.widget = "radio"
 		o.depends("quic_drop", "0");
 		o.value("disabled", "disabled");
 		o.value("all", "all");
+		o.value("parse", "parse");
 		o.default = "disabled";
 		o.rmempty = false;
 
